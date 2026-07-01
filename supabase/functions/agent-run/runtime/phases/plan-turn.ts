@@ -226,7 +226,7 @@ async function returnRecoverablePlanChunk(input: {
     content: input.prompt ?? text,
   });
   // Use wrapper: it emits the prose + persistFinal (central AC1), then returns chunk.
-  const chunk = await input.deps.returnResumableWithUserMessage(input.step, input.toolsUsed, undefined, text);
+  const chunk = await (input.deps.returnResumableWithUserMessage || input.deps.returnResumableChunk)(input.step, input.toolsUsed, undefined, text);
   return {
     ok: false,
     summary: text,
@@ -458,7 +458,7 @@ export async function runPlanModeAgentTurn(
 
   for (let step = 0; step < MAX_PLAN_EXPLORE; step++) {
     if (deps.loopBudgetExceeded()) {
-      return deps.returnResumableWithUserMessage(step, toolsUsed, undefined, undefined);
+      return (deps.returnResumableWithUserMessage || deps.returnResumableChunk)(step, toolsUsed, undefined, undefined);
     }
 
     const compressed = await deps.compressMessages(deps.state.messages);

@@ -55,8 +55,8 @@ async function returnRecoverableChatChunk(
 ): Promise<PlanTurnRunResult> {
   const message = summary.trim() || "Erro no modo Chat.";
   const err = (error ?? message).trim() || message;
-  deps.emit("assistant_text", { text: message, final: true });
-  const chunk = await deps.returnResumableChunk(0, new Set<string>());
+  // Use wrapper (or fallback) to centralize prose+persistFinal for AC1.
+  const chunk = await (deps as any).returnResumableWithUserMessage?.(0, new Set<string>(), undefined, message) || await deps.returnResumableChunk(0, new Set<string>());
   return { ...chunk, summary: message, error: err };
 }
 

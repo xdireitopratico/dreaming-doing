@@ -170,8 +170,7 @@ export function resolveTerminalDisplayText(opts: {
   if (sum) return sum;
   if (thinking.trim()) return thinking.trim().slice(0, 8000);
   if (lastStreamError) return lastStreamError;
-  if (err) return err;
-  return "A execução terminou sem resposta gravada.";
+  return err || "";
 }
 
 function buildTerminalMessageMeta(opts: {

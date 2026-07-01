@@ -35,6 +35,7 @@ import {
 } from "./phases/persist.ts";
 import { finishClarify } from "./phases/plan-turn.ts";
 import type { RunInfraDeps } from "./infra.ts";
+import { returnResumableChunk, returnResumableWithUserMessage as infraReturnResumableWithUserMessage } from "./infra.ts";
 import type { AgentPersistDeps, PersistFinalOpts } from "./phases/persist.ts";
 import type { BuildExecuteDeps } from "./phases/execute.ts";
 import type {
@@ -377,6 +378,7 @@ export function buildExecuteDeps(
     emit: ctx.emit,
     loopBudgetExceeded: ctx.loopBudgetExceeded,
     returnResumableChunk: ctx.returnResumableChunk,
+    returnResumableWithUserMessage: ctx.returnResumableWithUserMessage,
     runDesignPreflightIfNeeded: ctx.runDesignPreflightIfNeeded as BuildExecuteDeps["runDesignPreflightIfNeeded"],
     requiresFinalBuildGate: ctx.requiresFinalBuildGate,
     enabledApprovedPlanSteps: ctx.enabledApprovedPlanSteps,
@@ -422,6 +424,7 @@ export function buildPlanTurnDeps(
     compressMessages: ctx.compressMessages,
     loopBudgetExceeded: ctx.loopBudgetExceeded,
     returnResumableChunk: ctx.returnResumableChunk,
+    returnResumableWithUserMessage: ctx.returnResumableWithUserMessage,
     saveCheckpoint: (phase) => ctx.saveCheckpoint(phase),
     attemptGracefulClosing: (reason) => ctx.attemptGracefulClosing(reason),
     executeTool: ctx.executeTool,
@@ -525,6 +528,12 @@ export type LoopBindings = {
     toolsUsed: Set<string>,
     options?: { buildFix?: boolean },
   ) => Promise<ResumableChunkResult>;
+  returnResumableWithUserMessage: (
+    steps: number,
+    toolsUsed: Set<string>,
+    options?: { buildFix?: boolean },
+    prose?: string,
+  ) => Promise<ResumableChunkResult>;
   buildExecute: (
     toolsUsed: Set<string>,
     executionModel: LLMProvider,
@@ -550,6 +559,8 @@ export function createLoopBindings(
     touchHeartbeat: () => touchHeartbeat(infraDeps()),
     returnResumableChunk: (steps, used, options) =>
       returnResumableChunk(infraDeps(), steps, used, options),
+    returnResumableWithUserMessage: (steps, used, options, prose) =>
+      infraReturnResumableWithUserMessage(infraDeps(), (s, o) => persistFinal(persistDeps(), s, o), steps, used, options, prose),
     buildExecute: (toolsUsed, model, designReadPathsDone) =>
       buildExecuteDeps(deps(), toolsUsed, model, designReadPathsDone),
     buildPlanTurn: (skillPrompt) => buildPlanTurnDeps(deps(), skillPrompt),

@@ -417,7 +417,7 @@ export async function runBuildExecutePhase(
           touchedPaths: [...deps.touchedPaths],
           userRequest: deps.originalUserRequest,
         }).catch(() => "");
-        return deps.returnResumableWithUserMessage(loopStep, deps.toolsUsed, undefined, prose || undefined);
+        return (deps.returnResumableWithUserMessage || deps.returnResumableChunk)(loopStep, deps.toolsUsed, undefined, prose || undefined);
       }
 
       if (await deps.isCanceled()) {
@@ -531,7 +531,7 @@ export async function runBuildExecutePhase(
         }
         await deps.saveCheckpoint(LoopPhaseEnum.ERROR, true);
         deps.notifyLoopStatus({ kind: "model_error", errorDetail: friendly });
-        return deps.returnResumableWithUserMessage(loopStep, deps.toolsUsed, undefined, undefined);
+        return (deps.returnResumableWithUserMessage || deps.returnResumableChunk)(loopStep, deps.toolsUsed, undefined, undefined);
       }
 
       if (!response) break;
@@ -1043,7 +1043,7 @@ export async function runBuildExecutePhase(
 
       if (loopStep >= deps.maxStepsLimit && !agentTextComplete) {
         await deps.saveCheckpoint(LoopPhaseEnum.DECIDE_NEXT, true);
-        return deps.returnResumableWithUserMessage(loopStep, deps.toolsUsed, { buildFix: deps.requiresFinalBuildGate() }, undefined);
+        return (deps.returnResumableWithUserMessage || deps.returnResumableChunk)(loopStep, deps.toolsUsed, { buildFix: deps.requiresFinalBuildGate() }, undefined);
       }
 
     if (!deps.requiresFinalBuildGate()) {
@@ -1123,7 +1123,7 @@ export async function runBuildExecutePhase(
     }
 
     if (deps.loopBudgetExceeded()) {
-      return deps.returnResumableWithUserMessage(loopStep, deps.toolsUsed, { buildFix: true }, undefined);
+      return (deps.returnResumableWithUserMessage || deps.returnResumableChunk)(loopStep, deps.toolsUsed, { buildFix: true }, undefined);
     }
 
     deps.state.messages.push({

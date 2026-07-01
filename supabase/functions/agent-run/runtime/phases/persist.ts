@@ -34,6 +34,7 @@ export type PersistFinalOpts = {
     multiple?: boolean;
     choices: Array<{ id: string; label: string; description?: string }>;
   }>;
+  finished?: boolean;  // allow resumable/early terminal messages to not force finished:true on card (AC1 + resumable semantics)
 };
 
 export type AgentPersistDeps = {
@@ -273,10 +274,11 @@ export async function persistFinal(
   const closing = summary.trim();
   const text = conversational ? closing : closing;
   const lastFinishOk = opts?.lastFinishOk ?? true;
+  const finished = opts?.finished ?? true;
   const cardSnapshot = cardSnapshotForPersist(deps, {
     streamText: text,
     deliveryFiles,
-    finished: true,
+    finished,
     lastFinishOk,
     awaiting: opts?.awaiting,
     awaitingKind: opts?.awaitingKind,
@@ -290,7 +292,7 @@ export async function persistFinal(
     conversational: conversational || undefined,
     deliveryFiles,
     executionLog: deps.state.executionLog,
-    finishedAt: new Date().toISOString(),
+    finishedAt: finished ? new Date().toISOString() : undefined,
     currentStep: deps.state.currentStepIndex,
     totalSteps: deps.getMaxStepsLimit(),
     lastFinishOk,

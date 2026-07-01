@@ -152,3 +152,23 @@ export async function returnResumableChunk(
     toolsUsed: [...toolsUsed],
   };
 }
+
+/**
+ * Wrapper (choke point): always emit user prose + persistFinal (with finished:false for resumable semantics),
+ * then delegate to returnResumableChunk. Callers in phases MUST use this instead of bare returnResumableChunk.
+ */
+export async function returnResumableWithUserMessage(
+  infraDeps: RunInfraDeps,
+  persistFinalFn: ((summary: string, opts?: any) => Promise<void>) | undefined,
+  steps: number,
+  toolsUsed: Set<string>,
+  options?: { buildFix?: boolean },
+  explicitProse?: string,
+): Promise<ResumableChunkResult> {
+  const prose = (explicitProse && explicitProse.trim()) || "Retomando o trabalho solicitado.";
+  infraDeps.emit("assistant_text", { text: prose, final: true, append: false });
+  if (persistFinalFn) {
+    await persistFinalFn(prose, { lastFinishOk: false, finished: false });
+  }
+  return returnResumableChunk(infraDeps, steps, toolsUsed, options);
+}
