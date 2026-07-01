@@ -1,162 +1,97 @@
 /**
- * browser-cdp-tools — Reusable typed CDP tools for the browser agent.
+ * browser-cdp-tools — CDP tools backed by a WebSocket connection to Chrome DevTools.
  *
- * Controls Chrome in an E2B sandbox via the E2B envd CDP relay.
- * Exports: cdpSend, evaluateJs, takeScreenshot, navigateTo, scrollPage,
- *          analyzeElement, getUrl, clickElement, typeText.
+ * Connects to wss://9222-<sandboxId>.e2b.app/ (E2B Chromium sandbox) and uses real
+ * CDP events like Page.loadEventFired instead of polling.
  */
 
+import { errorMessage } from "@/lib/error-utils";
+import {
+  CdpWebSocketClient,
+  getGlobalCdpClient,
+} from "./browser-cdp-websocket";
+
 const E2B_DOMAIN =
-  (typeof Deno !== "undefined" ? Deno.env.get("E2B_DOMAIN") : undefined) ||
   (typeof process !== "undefined" ? process.env.E2B_DOMAIN : undefined) ||
   "e2b.app";
 const CDP_PORT = 9222;
+const COMMAND_TIMEOUT_MS = 60_000;
+const NAVIGATE_TIMEOUT_MS = 60_000;
 
-export type CdpRelayFn = (
+export type CdpClient = CdpWebSocketClient;
+
+function getClient(
   sandboxId: string,
   accessToken: string | null,
-  method: string,
-  params?: Record<string, unknown>,
-) => Promise<unknown>;
-
-export type EvaluateJsFn = (
-  sandboxId: string,
-  accessToken: string | null,
-  expression: string,
-) => Promise<{ result?: unknown; error?: string }>;
-
-/** Execute a CDP command via the E2B envd relay. */
-export async function cdpSend(
-  sandboxId: string,
-  accessToken: string | null,
-  method: string,
-  params?: Record<string, unknown>,
-): Promise<unknown> {
-  const url = `https://sandbox.${E2B_DOMAIN}/cdp`;
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    "E2b-Sandbox-Id": sandboxId,
-    "E2b-Sandbox-Port": String(CDP_PORT),
-  };
-  if (accessToken) headers["X-Access-Token"] = accessToken;
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ id: 1, method, params: params ?? {} }),
-    signal: AbortSignal.timeout(15000),
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`CDP relay ${res.status}: ${text.slice(0, 200)}`);
-  }
-
-  const response = await res.json();
-  if (response && typeof response === "object" && "error" in response) {
-    throw new Error(
-      `CDP error ${(response.error as { code: number; message: string }).code}: ${(response.error as { code: number; message: string }).message}`,
-    );
-  }
-
-  return response;
+): CdpClient {
+  return getGlobalCdpClient(sandboxId, accessToken);
 }
 
-/** Execute JavaScript in the browser page and return a serializable value. */
-export async function evaluateJs(
-  sandboxId: string,
-  accessToken: string | null,
-  expression: string,
-): Promise<{ result?: unknown; error?: string }> {
-  const response = await cdpSend(sandboxId, accessToken, "Runtime.evaluate", {
-    expression,
-    returnByValue: true,
-    awaitPromise: true,
-  }) as { result?: { result?: { value?: unknown }; exceptionDetails?: { text?: string } } };
-
-  if (response.result?.exceptionDetails) {
-    return { error: response.result.exceptionDetails.text ?? "JS evaluation error" };
-  }
-  return { result: response.result?.result?.value };
+async function ensurePageEnabled(client: CdpClient): Promise<void> {
+  await client.send("Page.enable", {});
 }
 
-/** Capture a screenshot as base64 PNG. */
+async function ensureRuntimeEnabled(client: CdpClient): Promise<void> {
+  await client.send("Runtime.enable", {});
+}
+
 export async function takeScreenshot(
   sandboxId: string,
   accessToken: string | null,
   fullPage = false,
-  deps: { cdpSend?: CdpRelayFn } = {},
 ): Promise<{ base64: string; error?: string }> {
-  const send = deps.cdpSend ?? cdpSend;
+  const client = getClient(sandboxId, accessToken);
   try {
-    const response = await send(sandboxId, accessToken, "Page.captureScreenshot", {
+    await ensurePageEnabled(client);
+    const response = (await client.send("Page.captureScreenshot", {
       format: "png",
       captureBeyondViewport: fullPage,
-    }) as { result?: { data?: string } };
-    const data = response.result?.data;
-    if (!data) {
-      return { base64: "", error: "Screenshot data missing" };
-    }
-    return { base64: data };
+    })) as { data?: string };
+    return { base64: response.data ?? "", error: response.data ? undefined : "Screenshot data missing" };
   } catch (err) {
-    return { base64: "", error: (err as Error).message };
+    return { base64: "", error: errorMessage(err) };
   }
 }
 
-/** Navigate the browser to a URL and wait for the load event. */
 export async function navigateTo(
   sandboxId: string,
   accessToken: string | null,
   url: string,
-  deps: { cdpSend?: CdpRelayFn; evaluateJs?: EvaluateJsFn } = {},
 ): Promise<{ success: boolean; error?: string }> {
-  const send = deps.cdpSend ?? cdpSend;
-  const run = deps.evaluateJs ?? evaluateJs;
+  const client = getClient(sandboxId, accessToken);
   try {
-    await send(sandboxId, accessToken, "Page.navigate", { url });
+    await ensurePageEnabled(client);
 
-    const start = Date.now();
-    const maxWait = 10000;
-    const interval = 300;
-    while (Date.now() - start < maxWait) {
-      const ready = await run(
-        sandboxId,
-        accessToken,
-        "document.readyState === 'complete'",
-      );
-      if (ready.result === true) {
-        return { success: true };
-      }
-      await new Promise((resolve) => setTimeout(resolve, interval));
-    }
-    return { success: false, error: "Navigation readyState polling timed out" };
+    // Wait for the next Page.loadEventFired *before* sending navigate so we
+    // don't miss the event for fast loads.
+    const loadEventPromise = client.once("Page.loadEventFired", NAVIGATE_TIMEOUT_MS);
+
+    await client.send("Page.navigate", { url });
+
+    await loadEventPromise;
+    return { success: true };
   } catch (err) {
-    return { success: false, error: (err as Error).message };
+    return { success: false, error: errorMessage(err) };
   }
 }
 
-/** Scroll the page to a vertical offset. */
 export async function scrollPage(
   sandboxId: string,
   accessToken: string | null,
   y: number,
-  deps: { evaluateJs?: EvaluateJsFn } = {},
 ): Promise<{ success: boolean; error?: string }> {
-  const run = deps.evaluateJs ?? evaluateJs;
-  try {
-    await run(sandboxId, accessToken, `window.scrollTo(0, ${y}); "scrolled"`);
-    return { success: true };
-  } catch (err) {
-    return { success: false, error: (err as Error).message };
-  }
+  return runJs(
+    sandboxId,
+    accessToken,
+    `window.scrollTo(0, ${y}); "scrolled"`,
+    "scroll",
+  );
 }
 
-/** Extract element metadata for a CSS selector. */
 export async function analyzeElement(
   sandboxId: string,
   accessToken: string | null,
   selector: string,
-  deps: { evaluateJs?: EvaluateJsFn } = {},
 ): Promise<{
   tagName?: string;
   text?: string;
@@ -165,7 +100,6 @@ export async function analyzeElement(
   styles?: Record<string, string>;
   error?: string;
 }> {
-  const run = deps.evaluateJs ?? evaluateJs;
   const js = `
     (function() {
       const el = document.querySelector(${JSON.stringify(selector)});
@@ -184,7 +118,8 @@ export async function analyzeElement(
       };
     })()
   `;
-  const res = await run(sandboxId, accessToken, js);
+  const res = await runJs(sandboxId, accessToken, js, "analyze");
+  if (res.error) return { error: res.error };
   return (res.result as {
     tagName?: string;
     text?: string;
@@ -192,69 +127,117 @@ export async function analyzeElement(
     rect?: Record<string, unknown>;
     styles?: Record<string, string>;
     error?: string;
-  }) ?? { error: res.error ?? "Unknown evaluation error" };
+  }) ?? { error: "Unknown evaluation error" };
 }
 
-/** Return the current page URL. */
 export async function getUrl(
   sandboxId: string,
   accessToken: string | null,
-  deps: { evaluateJs?: EvaluateJsFn } = {},
 ): Promise<{ url: string; error?: string }> {
-  const run = deps.evaluateJs ?? evaluateJs;
-  try {
-    const res = await run(sandboxId, accessToken, "window.location.href");
-    return { url: String(res.result ?? "") };
-  } catch (err) {
-    return { url: "", error: (err as Error).message };
-  }
+  const res = await runJs(sandboxId, accessToken, "window.location.href", "get_url");
+  return { url: String(res.result ?? ""), error: res.error };
 }
 
-/** Click the first element matching a CSS selector. */
 export async function clickElement(
   sandboxId: string,
   accessToken: string | null,
   selector: string,
-  deps: { evaluateJs?: EvaluateJsFn } = {},
 ): Promise<{ success: boolean; error?: string }> {
-  const run = deps.evaluateJs ?? evaluateJs;
-  try {
-    const res = await run(sandboxId, accessToken, `
-      (function() {
-        const el = document.querySelector(${JSON.stringify(selector)});
-        if (!el) return { success: false, error: "Element not found" };
-        el.click();
-        return { success: true };
-      })()
-    `);
-    const outcome = res.result as { success: boolean; error?: string } | undefined;
-    if (outcome && typeof outcome === "object" && outcome.success === false) {
-      return { success: false, error: outcome.error ?? "Element not found" };
-    }
-    return { success: true };
-  } catch (err) {
-    return { success: false, error: (err as Error).message };
+  const js = `
+    (function() {
+      const el = document.querySelector(${JSON.stringify(selector)});
+      if (!el) return { success: false, error: "Element not found" };
+      el.click();
+      return { success: true };
+    })()
+  `;
+  const res = await runJs(sandboxId, accessToken, js, "click");
+  if (res.error) return { success: false, error: res.error };
+  const outcome = res.result as { success: boolean; error?: string } | undefined;
+  if (outcome && outcome.success === false) {
+    return { success: false, error: outcome.error ?? "Element not found" };
   }
+  return { success: true };
 }
 
-/** Type text into the first input matching a CSS selector. */
 export async function typeText(
   sandboxId: string,
   accessToken: string | null,
   selector: string,
   text: string,
-  deps: { evaluateJs?: EvaluateJsFn } = {},
 ): Promise<{ success: boolean; error?: string }> {
-  const run = deps.evaluateJs ?? evaluateJs;
+  const js = `
+    const value = ${JSON.stringify(text)};
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (el) { el.focus(); el.value = value; el.dispatchEvent(new Event('input', { bubbles: true })); }
+    "typed"
+  `;
+  const res = await runJs(sandboxId, accessToken, js, "type");
+  return { success: !res.error, error: res.error };
+}
+
+export async function evaluateJs(
+  sandboxId: string,
+  accessToken: string | null,
+  expression: string,
+): Promise<{ result?: unknown; error?: string }> {
+  return runJs(sandboxId, accessToken, expression, "evaluate");
+}
+
+async function runJs(
+  sandboxId: string,
+  accessToken: string | null,
+  expression: string,
+  label: string,
+): Promise<{ result?: unknown; error?: string }> {
+  const client = getClient(sandboxId, accessToken);
   try {
-    await run(sandboxId, accessToken, `
-      const value = ${JSON.stringify(text)};
-      const el = document.querySelector(${JSON.stringify(selector)});
-      if (el) { el.focus(); el.value = value; el.dispatchEvent(new Event('input', { bubbles: true })); }
-      "typed"
-    `);
-    return { success: true };
+    await ensureRuntimeEnabled(client);
+    const response = (await client.send("Runtime.evaluate", {
+      expression,
+      returnByValue: true,
+      awaitPromise: true,
+    })) as {
+      result?: { value?: unknown };
+      exceptionDetails?: { text?: string; exception?: { description?: string } };
+    };
+
+    if (response.exceptionDetails) {
+      return {
+        error:
+          response.exceptionDetails.exception?.description ??
+          response.exceptionDetails.text ??
+          `${label} JS evaluation error`,
+      };
+    }
+    return { result: response.result?.value };
   } catch (err) {
-    return { success: false, error: (err as Error).message };
+    return { error: errorMessage(err) };
   }
+}
+
+export function createDefaultCdpTools() {
+  return {
+    takeScreenshot,
+    navigateTo,
+    scrollPage,
+    analyzeElement,
+    getUrl,
+    clickElement,
+    typeText,
+    evaluateJs,
+  };
+}
+
+export type CdpTools = ReturnType<typeof createDefaultCdpTools>;
+
+/** Public preview URL for the E2B Chromium sandbox. */
+export function sandboxPreviewUrl(sandboxId: string): string {
+  return `https://${CDP_PORT}-${sandboxId}.${E2B_DOMAIN}`;
+}
+
+export function closeCdpSession(sandboxId: string): void {
+  // The global client will be replaced on next getClient call; explicitly
+  // closing is optional because the global getter closes stale clients.
+  getGlobalCdpClient(sandboxId, null).close();
 }

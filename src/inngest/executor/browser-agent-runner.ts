@@ -113,6 +113,26 @@ async function executeAction(
   }
 }
 
+const STEP_TIMEOUT_MS = 90_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`Step timeout (${ms}ms): ${label}`)),
+      ms,
+    );
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
 export async function runBrowserAgent(
   initialCtx: BrowserAgentContext,
   supabase: SupabaseClient,
@@ -128,17 +148,29 @@ export async function runBrowserAgent(
 
   try {
     for (let stepNumber = 1; stepNumber <= ctx.maxSteps; stepNumber++) {
-      const instructions = await fetchInstructions(ctx.jobId);
+      const instructions = await withTimeout(
+        fetchInstructions(ctx.jobId),
+        STEP_TIMEOUT_MS,
+        "fetchInstructions",
+      );
       if (instructions.length > 0) {
         ctx = { ...ctx, instructions };
-        await markConsumed(ctx.jobId);
+        await withTimeout(markConsumed(ctx.jobId), STEP_TIMEOUT_MS, "markConsumed");
       }
 
       // Capture screenshot for planner vision
-      const shot = await tools.takeScreenshot(ctx.sandboxId, ctx.sandboxAccessToken, false).catch(() => ({ base64: "" }));
-      const screenshotBase64 = shot.base64 ? `data:image/png;base64,${shot.base64}` : undefined;
+      const shot = await tools
+        .takeScreenshot(ctx.sandboxId, ctx.sandboxAccessToken, false)
+        .catch(() => ({ base64: "" }));
+      const screenshotBase64 = shot.base64
+        ? `data:image/png;base64,${shot.base64}`
+        : undefined;
 
-      const plan = await planner(ctx, screenshotBase64);
+      const plan = await withTimeout(
+        planner(ctx, screenshotBase64),
+        STEP_TIMEOUT_MS,
+        "planner",
+      );
 
       await appendJobEvent(supabase, ctx.jobId, "agent_thought", {
         step: stepNumber,
@@ -149,7 +181,11 @@ export async function runBrowserAgent(
         action: plan.action,
       });
 
-      const observation = await executeAction(ctx, plan.action, tools);
+      const observation = await withTimeout(
+        executeAction(ctx, plan.action, tools),
+        STEP_TIMEOUT_MS,
+        `executeAction:${plan.action.type}`,
+      );
 
       await appendJobEvent(supabase, ctx.jobId, "agent_observation", {
         step: stepNumber,
@@ -175,8 +211,14 @@ export async function runBrowserAgent(
       }
     }
 
-    const dna = await synthesizer(ctx.steps, ctx.url, ctx.categories);
-    await appendJobEvent(supabase, ctx.jobId, "agent_done", { dnaSummary: dna.name });
+    const dna = await withTimeout(
+      synthesizer(ctx.steps, ctx.url, ctx.categories),
+      STEP_TIMEOUT_MS,
+      "synthesizer",
+    );
+    await appendJobEvent(supabase, ctx.jobId, "agent_done", {
+      dnaSummary: dna.name,
+    });
 
     return { ok: true, dna, steps: ctx.steps };
   } catch (err) {
