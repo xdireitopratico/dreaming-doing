@@ -380,11 +380,11 @@ export function ChatComposer({
                 "forge-composer-visual-edits",
                 visualEditsActive && "forge-composer-visual-edits--active",
               )}
+              aria-label="Visual edits"
               title="Visual edits"
               onClick={onVisualEdits}
             >
               <MousePointer2 className="size-3.5 shrink-0" />
-              <span>Visual edits</span>
             </button>
           )}
         </div>
