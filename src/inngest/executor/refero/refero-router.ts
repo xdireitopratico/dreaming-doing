@@ -245,7 +245,17 @@ async function executeE2BFullRender(
         screenshots = (agentResult.screenshots as string[]) ?? [];
         screenshotBase64 = (agentResult.screenshot_base64 as string) ?? "";
         screenshotFullBase64 = (agentResult.screenshot_full_base64 as string) ?? "";
-        cssData = (agentResult.css_data as ReferoScrapeResult["cssData"]) ?? cssData;
+        // Deep merge: agent fields may be partial — merge into defaults
+        const rawCssData = agentResult.css_data as Record<string, unknown> | undefined;
+        if (rawCssData && typeof rawCssData === "object") {
+          cssData = {
+            byTag: (rawCssData.byTag as ReferoScrapeResult["cssData"]["byTag"]) ?? cssData.byTag,
+            gridSystems: (rawCssData.gridSystems as ReferoScrapeResult["cssData"]["gridSystems"]) ?? cssData.gridSystems,
+            flexPatterns: (rawCssData.flexPatterns as ReferoScrapeResult["cssData"]["flexPatterns"]) ?? cssData.flexPatterns,
+            designTokens: (rawCssData.designTokens as ReferoScrapeResult["cssData"]["designTokens"]) ?? cssData.designTokens,
+            colorPalette: (rawCssData.colorPalette as ReferoScrapeResult["cssData"]["colorPalette"]) ?? cssData.colorPalette,
+          };
+        }
         sections = (agentResult.sections as ReferoScrapeResult["sections"]) ?? [];
         components = (agentResult.dom_components as ReferoScrapeResult["components"]) ?? [];
         fontFaces = (agentResult.font_faces as ReferoScrapeResult["fontFaces"]) ?? [];

@@ -931,6 +931,23 @@ export async function extractDesignDnaForUrl(
       hasSandbox,
     );
 
+    // Normalize: ensure all array/object fields exist (strategy returns may be partial)
+    scrapeResult.cssData = {
+      byTag: scrapeResult.cssData?.byTag ?? {},
+      gridSystems: scrapeResult.cssData?.gridSystems ?? [],
+      flexPatterns: scrapeResult.cssData?.flexPatterns ?? [],
+      designTokens: scrapeResult.cssData?.designTokens ?? {},
+      colorPalette: scrapeResult.cssData?.colorPalette ?? [],
+    };
+    scrapeResult.viewports = scrapeResult.viewports ?? [];
+    scrapeResult.sections = scrapeResult.sections ?? [];
+    scrapeResult.components = scrapeResult.components ?? [];
+    scrapeResult.fontFaces = scrapeResult.fontFaces ?? [];
+    scrapeResult.animations = scrapeResult.animations ?? [];
+    scrapeResult.screenshots = scrapeResult.screenshots ?? [];
+    scrapeResult.customProperties = scrapeResult.customProperties ?? {};
+    scrapeResult.trace = scrapeResult.trace ?? [];
+
     // Add refero trace to provider trace
     for (const t of scrapeResult.trace) {
       providerTrace.push(`refero:${t}`);
