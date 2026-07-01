@@ -32,9 +32,8 @@ describe("ChatJobTasksCard", () => {
     expect(html).toBe("");
   });
 
-  it("mostra skeleton apenas nas fases de materialização de tarefas", () => {
+  it("não mostra skeleton de preparing tasks em build sem tarefas reais", () => {
     const html = render(baseData(), "build");
-    expect(html).toContain("Preparing tasks…");
-    expect(html).toContain("forge-job-tasks-dock");
+    expect(html).toBe("");
   });
 });

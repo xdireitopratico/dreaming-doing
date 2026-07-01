@@ -34,17 +34,14 @@ function taskTitle(task: { label: string; criteria?: string }): string {
 
 export function ChatJobTasksCard({ data, isFocused, phase }: ChatJobTasksCardProps) {
   const tasks = data.tasks ?? [];
-  const isLive = data.status === "working" || data.status === "thinking";
   const [tasksExpanded, setTasksExpanded] = useState(false);
   if (phase === "plan" || phase === "preflight") return null;
-  const materializingTasksPhase = phase === "build" || phase === "execute";
-  const showSkeleton = isLive && materializingTasksPhase && tasks.length === 0;
   const TASKS_PREVIEW = 4;
   const visibleTasks = tasksExpanded ? tasks : tasks.slice(0, TASKS_PREVIEW);
   const hasMoreTasks = tasks.length > TASKS_PREVIEW;
   const hiddenTasksCount = tasks.length - TASKS_PREVIEW;
 
-  if (!showSkeleton && tasks.length === 0) return null;
+  if (tasks.length === 0) return null;
 
   return (
     <div
@@ -52,73 +49,58 @@ export function ChatJobTasksCard({ data, isFocused, phase }: ChatJobTasksCardPro
       data-testid="chat-job-tasks-card"
     >
       <div
-        className={cn(
-          "forge-plan-dock-shell",
-          showSkeleton ? "forge-job-tasks-shell--skeleton" : "forge-job-tasks-shell--ready",
-        )}
+        className={cn("forge-plan-dock-shell", "forge-job-tasks-shell--ready")}
       >
-        {showSkeleton ? (
-          <>
-            <div className="forge-plan-dock-shimmer-lines" aria-hidden>
-              <div className="forge-plan-dock-shimmer-line" style={{ width: "42%" }} />
-              <div className="forge-plan-dock-shimmer-line" style={{ width: "78%" }} />
-              <div className="forge-plan-dock-shimmer-line" style={{ width: "58%" }} />
-              <div className="forge-plan-dock-shimmer-line" style={{ width: "36%" }} />
-            </div>
-            <p className="forge-plan-dock-creating-label">Preparing tasks…</p>
-          </>
-        ) : (
-          <>
-            <div className="forge-job-tasks-header">
-              <p className="forge-plan-dock-label forge-plan-dock-label--icon">
-                <Circle className="size-3" aria-hidden />
-                Tasks
-              </p>
-              <span className="forge-plan-dock-step-count">
-                {tasks.length} {tasks.length === 1 ? "task" : "tasks"}
-              </span>
-            </div>
+        <>
+          <div className="forge-job-tasks-header">
+            <p className="forge-plan-dock-label forge-plan-dock-label--icon">
+              <Circle className="size-3" aria-hidden />
+              Tasks
+            </p>
+            <span className="forge-plan-dock-step-count">
+              {tasks.length} {tasks.length === 1 ? "task" : "tasks"}
+            </span>
+          </div>
 
-            <ul className="forge-job-tasks-list" data-testid="chat-job-tasks-list">
-              {visibleTasks.map((task, idx) => (
-                <li
-                  key={task.id || idx}
-                  className={cn(
-                    "forge-mini-card-task-item",
-                    `forge-mini-card-task-item--${task.status}`,
-                  )}
-                  data-status={task.status}
-                >
-                  <span className="forge-mini-card-task-status" aria-hidden>
-                    {taskStatusIcon(task.status)}
+          <ul className="forge-job-tasks-list" data-testid="chat-job-tasks-list">
+            {visibleTasks.map((task, idx) => (
+              <li
+                key={task.id || idx}
+                className={cn(
+                  "forge-mini-card-task-item",
+                  `forge-mini-card-task-item--${task.status}`,
+                )}
+                data-status={task.status}
+              >
+                <span className="forge-mini-card-task-status" aria-hidden>
+                  {taskStatusIcon(task.status)}
+                </span>
+                <span className="forge-mini-card-task-body">
+                  <span className="forge-mini-card-task-label" title={taskTitle(task)}>
+                    {compactTaskText({ label: task.label })}
                   </span>
-                  <span className="forge-mini-card-task-body">
-                    <span className="forge-mini-card-task-label" title={taskTitle(task)}>
-                      {compactTaskText({ label: task.label })}
+                  {task.criteria?.trim() ? (
+                    <span className="forge-mini-card-task-criteria" title={task.criteria.trim()}>
+                      {compactTaskText({ label: task.criteria }, 140)}
                     </span>
-                    {task.criteria?.trim() ? (
-                      <span className="forge-mini-card-task-criteria" title={task.criteria.trim()}>
-                        {compactTaskText({ label: task.criteria }, 140)}
-                      </span>
-                    ) : null}
-                  </span>
-                </li>
-              ))}
-              {hasMoreTasks && (
-                <li>
-                  <button
-                    type="button"
-                    className="forge-mini-card-task-toggle"
-                    onClick={() => setTasksExpanded((v) => !v)}
-                    data-testid="chat-job-tasks-toggle"
-                  >
-                    {tasksExpanded ? "Ver menos" : `+${hiddenTasksCount} tarefas`}
-                  </button>
-                </li>
-              )}
-            </ul>
-          </>
-        )}
+                  ) : null}
+                </span>
+              </li>
+            ))}
+            {hasMoreTasks && (
+              <li>
+                <button
+                  type="button"
+                  className="forge-mini-card-task-toggle"
+                  onClick={() => setTasksExpanded((v) => !v)}
+                  data-testid="chat-job-tasks-toggle"
+                >
+                  {tasksExpanded ? "Ver menos" : `+${hiddenTasksCount} tarefas`}
+                </button>
+              </li>
+            )}
+          </ul>
+        </>
       </div>
     </div>
   );
