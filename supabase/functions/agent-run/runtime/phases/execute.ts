@@ -5,6 +5,7 @@ import type { ModelRouter } from "../../router.ts";
 import { buildExecuteInstruction } from "../../run-context.ts";
 import { appendExecutionLogEntry } from "../../executionLogMeta.ts";
 import { hashToolBatch, isExecutionStuck } from "../../../_shared/agent-stuck.ts";
+import { logger } from "../../../_shared/logger.ts";
 import {
   assistantContentForHistory,
   decideToolProgress,
@@ -333,6 +334,14 @@ export async function runBuildExecutePhase(
   let finalGateOk = false;
   let agentTextComplete = false;
 
+  logger.event("agent.build_execute_entered", {
+    initialStep,
+    maxStepsLimit: deps.maxStepsLimit,
+    approvedPlanBuild: deps.approvedPlanBuild,
+    buildFixResume: deps.buildFixResume,
+    runId: deps.getBuildSession()?.runId ?? undefined,
+  });
+
   const initialSession = deps.getBuildSession();
   if (initialSession) {
     deps.setBuildSession(
@@ -425,6 +434,13 @@ export async function runBuildExecutePhase(
       deps.state.phase = LoopPhaseEnum.EXECUTE_STEP;
       await deps.touchHeartbeat();
 
+      logger.event("agent.build_step_start", {
+        loopStep,
+        approvedPlanBuild: deps.approvedPlanBuild,
+        buildFixResume: deps.buildFixResume,
+        maxStepsLimit: deps.maxStepsLimit,
+      });
+
       if (deps.approvedPlanBuild) {
         const enabled = deps.enabledApprovedPlanSteps();
         deps.state.totalSteps = enabled.length;
@@ -487,6 +503,11 @@ export async function runBuildExecutePhase(
         );
       } catch (err: unknown) {
         const friendly = friendlyLlmError(err, deps.robinActive);
+        logger.event("agent.build_llm_error", {
+          loopStep,
+          friendly,
+          failFast: shouldFailFastLlmError(err),
+        });
         if (shouldFailFastLlmError(err)) {
           const failMsg = `Erro: ${friendly}`;
           return emitClosingAndPersist(deps, loopStep, {
@@ -515,6 +536,15 @@ export async function runBuildExecutePhase(
 
       await deps.resetLlmRetries();
       deps.compression.recordUsage(response.usage);
+
+      logger.event("agent.build_llm_response", {
+        loopStep,
+        contentLength: (response.content ?? "").trim().length,
+        toolCount: response.tool_calls?.length ?? 0,
+        streamed: deps.getLlmResponseWasStreamed(),
+        forceTools,
+        narrationOnlyStep,
+      });
 
       const assistantText = (response.content ?? "").trim();
       const readOnlyUpdate = updateReadOnlyTracker(
@@ -671,6 +701,11 @@ export async function runBuildExecutePhase(
           }
           continue;
         }
+        logger.event("agent.build_step_complete", {
+          loopStep,
+          outcome: "text_only",
+          assistantTextLength: assistantText.length,
+        });
         deps.state.messages.push({
           role: "assistant",
           content: response.content ?? "",
@@ -690,6 +725,11 @@ export async function runBuildExecutePhase(
       deps.emit("phase", {
         phase: "execute",
         toolCount: response.tool_calls.length,
+      });
+      logger.event("agent.build_tool_batch_start", {
+        loopStep,
+        toolCount: response.tool_calls.length,
+        toolNames: response.tool_calls.map((tc) => tc.name),
       });
       await deps.saveCheckpoint(LoopPhaseEnum.EXECUTE_STEP);
 
@@ -819,6 +859,13 @@ export async function runBuildExecutePhase(
         });
       }
 
+      logger.event("agent.build_tool_batch_done", {
+        loopStep,
+        toolCount: response.tool_calls.length,
+        allOk: execResults.every(({ result }) => result.ok),
+        modifiedPaths,
+      });
+
       deps.state.messages.push({
         role: "assistant",
         content: response.content ?? "",
@@ -934,6 +981,12 @@ export async function runBuildExecutePhase(
         if (!observation.passed) {
           buildAttempts++;
           const failedMessage = observation.feedback?.slice(0, 500) ?? "validate failed";
+          logger.event("agent.build_validate_retry", {
+            loopStep,
+            attempt: buildAttempts,
+            checks: observation.checks.filter((c) => !c.ok).map((c) => c.name),
+            feedbackLength: (observation.feedback ?? "").length,
+          });
           const failingSession = deps.getBuildSession();
           if (failingSession) {
             deps.setBuildSession(
@@ -960,6 +1013,10 @@ export async function runBuildExecutePhase(
         buildAttempts = 0;
         deps.notifyLoopStatus({ kind: "build_ok" });
         deps.emit("validate_ok", { message: "Build OK" });
+        logger.event("agent.build_validate_passed", {
+          loopStep,
+          modifiedFiles,
+        });
         const passedSession = deps.getBuildSession();
         if (passedSession) {
           deps.setBuildSession(
@@ -1015,6 +1072,10 @@ export async function runBuildExecutePhase(
     if (finalObservation.passed) {
       deps.notifyLoopStatus({ kind: "build_ok" });
       deps.emit("validate_ok", { message: "Build OK (gate final)" });
+      logger.event("agent.build_final_gate_passed", {
+        loopStep,
+        finalGateAttempts,
+      });
       const passingSession = deps.getBuildSession();
       if (passingSession) {
         deps.setBuildSession(
@@ -1052,6 +1113,11 @@ export async function runBuildExecutePhase(
         `Build não passou após ${EXECUTE_MAX_RETRIES} tentativas.\n\n` +
         `${finalObservation.feedback?.slice(0, 2000) ?? "Erros de compilação no sandbox."}\n` +
         "Vou manter a sessão viva para nova correção.";
+      logger.event("agent.build_final_gate_failed_terminal", {
+        loopStep,
+        finalGateAttempts,
+        feedbackLength: (finalObservation.feedback ?? "").length,
+      });
       deps.notifyLoopStatus({ kind: "build_fix" });
       return emitTerminalBuildFailure(deps, loopStep, failMsg);
     }
