@@ -50,7 +50,7 @@ export type DesignDnaExtractionResult = {
   blockedReason: string | null;
 };
 
-type LLMConfig = {
+export type LLMConfig = {
   apiKey: string;
   baseUrl: string;
   model: string;
@@ -135,7 +135,7 @@ async function loadWebSecrets(supabase: SupabaseClient, userId: string): Promise
   return secrets;
 }
 
-type ResolvedLLM = LLMConfig & {
+export type ResolvedLLM = LLMConfig & {
   /** Caminho usado para resolver (auditoria + aviso de fallback). */
   resolvedFrom: "connectors" | "preferences.fixed" | "preferences.robin" | "preferences.fixed.custom" | "env";
 };
@@ -334,7 +334,7 @@ function buildLlmConfig(
  * NUNCA inventa combinação chave+endpoint. NUNCA usa outro modelo sem
  * conhecimento explícito do usuário. Se o LLM falhar, a operação falha.
  */
-async function resolveLLMConfig(
+export async function resolveLLMConfig(
   supabase: SupabaseClient,
   userId: string,
   complexity: "low" | "medium" | "high" = "medium",
