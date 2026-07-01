@@ -109,6 +109,7 @@ export type ThreadItem =
       isActive: boolean;
       streamText: string | null;
       phase?: RunPhase;
+      visualPhase?: RunPhase;
       narration?: string | null;
       miniCard?: MiniCardData | null;
       clarify?: ClarifyPrompt | null;

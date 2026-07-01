@@ -32,6 +32,20 @@ export type TurnContext = {
   focusedRunId?: string | null;
 };
 
+function resolveVisualPhase(
+  resolved: AgentProgress | null,
+  pendingPlan: PendingPlan | null | undefined,
+): RunPhase {
+  const rawPhase = (resolved?.phase as RunPhase) ?? null;
+  const awaitingPlanApproval = resolved?.awaitingKind === "plan_approval";
+  const hasPendingPlanSteps =
+    (pendingPlan?.steps?.length ?? resolved?.pendingPlan?.steps?.length ?? 0) > 0;
+
+  if (awaitingPlanApproval && hasPendingPlanSteps) return "plan";
+  if (resolved?.mode === "plan") return "plan";
+  return rawPhase;
+}
+
 function toMiniCard(runView: NonNullable<ReturnType<typeof buildAgentRunView>>): MiniCardData {
   const m = runView.miniCard;
   return {
@@ -290,6 +304,7 @@ export function mapAssistantTurn(
     isActive: slotActive,
     streamText,
     phase: (resolved?.phase as RunPhase) ?? null,
+    visualPhase: resolveVisualPhase(resolved, ctx.pendingPlan),
     narration,
     miniCard,
     clarify,

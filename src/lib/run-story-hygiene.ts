@@ -26,9 +26,11 @@ const INTERNAL_TEXT_PATTERNS = [
 ];
 
 const INTERNAL_EVENT_TYPES = new Set([
+  "assistant_text",
   "classify",
   "fsm_transition",
   "checkpoint_resume",
+  "chunk_resume",
   "delivery_checkpoint_silent",
   "start",
   "resume",

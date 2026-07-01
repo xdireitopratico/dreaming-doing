@@ -729,11 +729,10 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         data.planProposed === true && !data.planRejected ? parsePendingPlanFromPayload(data) : null;
       const pendingPlan = data.planRejected === true ? null : (prev.pendingPlan ?? planFromDone);
       const planAwaiting = data.planProposed === true && !!pendingPlan;
+      const planLifecycleEvent = data.planProposed === true || data.planRejected === true;
       const conversational = data.conversational === true;
       const materializedTerminal =
         conversational ||
-        data.planProposed === true ||
-        data.planRejected === true ||
         data.awaiting === true ||
         data.qualified === true;
       const totalInputTokens =
@@ -746,7 +745,7 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       return {
         ...prev,
         summary,
-        finished: materializedTerminal || prev.finished,
+        finished: (materializedTerminal && !planLifecycleEvent) || prev.finished,
         awaiting: conversational ? false : !!(data.awaiting || data.qualified) || planAwaiting,
         awaitingKind: conversational
           ? null

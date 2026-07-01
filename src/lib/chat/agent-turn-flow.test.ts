@@ -198,6 +198,89 @@ describe("S15 agent turn flow", () => {
       "Entendi: A\n\nEntendi: B\n\nEntendi: C\n\nBuild passou.";
     expect(collapseNarrationBuffer(wall)).toBe("Entendi: A\n\nBuild passou.");
   });
+
+  it("plan proposal não terminaliza a execução como build", () => {
+    const progress = reduce([
+      ev("start", {}),
+      ev("done", {
+        planProposed: true,
+        summary: "Plano proposto",
+        plan: {
+          planId: "plan-1",
+          summary: "Plano proposto",
+          runId: "run-plan",
+          projectId: "project-1",
+          proposedAt: new Date().toISOString(),
+          ttlMs: 60_000,
+          steps: [
+            {
+              id: "step-1",
+              type: "edit_file",
+              description: "Editar src/App.tsx",
+              enabled: true,
+            },
+          ],
+        },
+      }),
+    ]);
+
+    expect(progress.finished).toBe(false);
+    expect(progress.awaitingKind).toBe("plan_approval");
+    expect(progress.pendingPlan?.steps).toHaveLength(1);
+  });
+
+  it("turno visual mantém plan_approval como fase plan", () => {
+    const progress = {
+      ...initialAgentProgress,
+      mode: "build" as const,
+      phase: "build",
+      finished: false,
+      awaiting: true,
+      awaitingKind: "plan_approval" as const,
+      pendingPlan: {
+        planId: "plan-1",
+        summary: "Plano proposto",
+        runId: "run-plan",
+        projectId: "project-1",
+        proposedAt: Date.now(),
+        ttlMs: 60_000,
+        steps: [
+          {
+            id: "step-1",
+            type: "edit_file" as const,
+            description: "Editar src/App.tsx",
+            enabled: true,
+          },
+        ],
+      },
+    };
+
+    const thread = buildChatThread(
+      [
+        msg("u1", "user", "monta o plano"),
+        {
+          id: "a1",
+          role: "assistant",
+          content: "Plano proposto",
+          timestamp: 0,
+          runId: "run-plan",
+        },
+      ],
+      progress,
+      {
+        running: false,
+        activeRunId: "run-plan",
+        sessionProgress: progress,
+      },
+    );
+
+    const turn = thread[1];
+    expect(turn?.kind).toBe("assistant");
+    if (turn?.kind !== "assistant") return;
+
+    expect(turn.phase).toBe("build");
+    expect(turn.visualPhase).toBe("plan");
+  });
 });
 
 function msg(id: string, role: ChatMessage["role"], content: string): ChatMessage {

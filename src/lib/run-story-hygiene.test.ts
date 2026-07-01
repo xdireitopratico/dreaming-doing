@@ -3,7 +3,7 @@
 // mencionar "passo 3 de 4" no chat sem que isso seja jargão interno.
 
 import { describe, expect, it } from "vitest";
-import { isInternalRunText, sanitizeRunText } from "./run-story-hygiene";
+import { isInternalRunEvent, isInternalRunText, sanitizeRunText } from "./run-story-hygiene";
 
 describe("run-story-hygiene", () => {
   describe("internal text patterns", () => {
@@ -36,6 +36,13 @@ describe("run-story-hygiene", () => {
       const long = "a".repeat(200);
       const out = sanitizeRunText(long, 50);
       expect(out?.length).toBeLessThanOrEqual(50);
+    });
+  });
+
+  describe("internal event types", () => {
+    it("filters assistant_text e chunk_resume da timeline factual", () => {
+      expect(isInternalRunEvent("assistant_text", { text: "Pensando…" })).toBe(true);
+      expect(isInternalRunEvent("chunk_resume", { attempt: 2, reason: "budget" })).toBe(true);
     });
   });
 });

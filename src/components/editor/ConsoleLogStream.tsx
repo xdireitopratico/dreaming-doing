@@ -52,6 +52,7 @@ type LogLine = {
 
 function buildLines(timeline: SSEEvent[]): LogLine[] {
   const lines: LogLine[] = [];
+  let lastLineSig: string | null = null;
   for (const ev of timeline) {
     const ts = ev.timestamp;
     const data = ev.data ?? {};
@@ -70,14 +71,19 @@ function buildLines(timeline: SSEEvent[]): LogLine[] {
           icon: Brain,
           color: "text-[var(--forge-muted)]",
         };
-        lines.push({
+        const nextLine = {
           id: `${ev.type}-${ts}-${lines.length}`,
           kind: "phase",
           icon: meta.icon,
           text: meta.label,
           detail: detail ?? undefined,
           ts,
-        });
+        };
+        const sig = `${nextLine.kind}:${nextLine.text}:${nextLine.detail ?? ""}`;
+        if (sig !== lastLineSig) {
+          lines.push(nextLine);
+          lastLineSig = sig;
+        }
         break;
       }
       case "tool_start": {
@@ -91,42 +97,58 @@ function buildLines(timeline: SSEEvent[]): LogLine[] {
           else if (command) detail = command.length > 80 ? command.slice(0, 80) + "…" : command;
           else if (args.query) detail = String(args.query).slice(0, 80);
         }
-        lines.push({
+        const nextLine = {
           id: `${ev.type}-${ts}-${lines.length}`,
           kind: "tool_start",
           icon: Wrench,
           text: name,
           detail,
           ts,
-        });
+        };
+        const sig = `${nextLine.kind}:${nextLine.text}:${nextLine.detail ?? ""}`;
+        if (sig !== lastLineSig) {
+          lines.push(nextLine);
+          lastLineSig = sig;
+        }
         break;
       }
       case "tool_done": {
         const name = String(data.name ?? "?");
         const ok = data.ok === true;
-        lines.push({
+        const nextLine = {
           id: `${ev.type}-${ts}-${lines.length}`,
           kind: ok ? "ok" : "error",
           icon: ok ? Check : AlertCircle,
           text: name,
           detail: !ok && typeof data.error === "string" ? data.error : undefined,
           ts,
-        });
+        };
+        const sig = `${nextLine.kind}:${nextLine.text}:${nextLine.detail ?? ""}`;
+        if (sig !== lastLineSig) {
+          lines.push(nextLine);
+          lastLineSig = sig;
+        }
         break;
       }
-      case "validate_ok":
-        lines.push({
+      case "validate_ok": {
+        const okLine = {
           id: `${ev.type}-${ts}-${lines.length}`,
           kind: "ok",
           icon: Check,
           text: "Validação OK",
           detail: typeof data.message === "string" ? data.message : undefined,
           ts,
-        });
+        };
+        const sig = `${okLine.kind}:${okLine.text}:${okLine.detail ?? ""}`;
+        if (sig !== lastLineSig) {
+          lines.push(okLine);
+          lastLineSig = sig;
+        }
         break;
+      }
       case "validate_fail": {
         const isPreflight = data.preflight === true;
-        lines.push({
+        const nextLine = {
           id: `${ev.type}-${ts}-${lines.length}`,
           kind: isPreflight ? "info" : "fail",
           icon: isPreflight ? Loader2 : AlertCircle,
@@ -138,7 +160,12 @@ function buildLines(timeline: SSEEvent[]): LogLine[] {
                 ? data.message
                 : undefined,
           ts,
-        });
+        };
+        const sig = `${nextLine.kind}:${nextLine.text}:${nextLine.detail ?? ""}`;
+        if (sig !== lastLineSig) {
+          lines.push(nextLine);
+          lastLineSig = sig;
+        }
         break;
       }
       case "memory":
@@ -156,28 +183,39 @@ function buildLines(timeline: SSEEvent[]): LogLine[] {
             text,
             ts,
           });
+          lastLineSig = `${"info"}:${text}:`;
         }
         break;
       case "robin_rotate": {
-        lines.push({
+        const nextLine = {
           id: `${ev.type}-${ts}-${lines.length}`,
           kind: "info",
           icon: Loader2,
           text: "Alternando chave",
           ts,
-        });
+        };
+        const sig = `${nextLine.kind}:${nextLine.text}:`;
+        if (sig !== lastLineSig) {
+          lines.push(nextLine);
+          lastLineSig = sig;
+        }
         break;
       }
       case "skills": {
         const text = formatSkillInvocation(data);
         if (!text) break;
-        lines.push({
+        const nextLine = {
           id: `${ev.type}-${ts}-${lines.length}`,
           kind: "info",
           icon: ListChecks,
           text,
           ts,
-        });
+        };
+        const sig = `${nextLine.kind}:${nextLine.text}:`;
+        if (sig !== lastLineSig) {
+          lines.push(nextLine);
+          lastLineSig = sig;
+        }
         break;
       }
       case "classify":
@@ -186,13 +224,20 @@ function buildLines(timeline: SSEEvent[]): LogLine[] {
       case "delivery_checkpoint_silent":
         break;
       case "error":
-        lines.push({
+        {
+          const nextLine = {
           id: `${ev.type}-${ts}-${lines.length}`,
           kind: "error",
           icon: AlertCircle,
           text: typeof data.message === "string" ? data.message : "Erro",
           ts,
-        });
+          };
+          const sig = `${nextLine.kind}:${nextLine.text}:`;
+          if (sig !== lastLineSig) {
+            lines.push(nextLine);
+            lastLineSig = sig;
+          }
+        }
         break;
     }
   }

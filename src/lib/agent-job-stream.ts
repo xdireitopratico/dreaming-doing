@@ -199,10 +199,17 @@ export function buildJobStreamTree(
   const running = opts?.running ?? false;
   let lastResultTs = 0;
   let sawThinkingText = false;
+  let lastEventSig: string | null = null;
 
   for (const ev of timeline) {
     const ts = ev.timestamp ?? Date.now();
     const data = ev.data ?? {};
+    const eventSig = `${ev.type}:${JSON.stringify(data)}`;
+
+    if (eventSig === lastEventSig) {
+      continue;
+    }
+    lastEventSig = eventSig;
 
     if (ev.type === "thinking_text" && typeof data.text === "string") {
       sawThinkingText = true;
@@ -335,7 +342,7 @@ export function buildJobStreamTree(
         id: `result-${ts}`,
         ts,
         summary: isPreflight
-          ? "Preflight falhou — preparando ambiente"
+          ? "Preflight falhou"
           : "Build falhou — corrigindo antes de entregar",
         evidence: [feedback],
         status: "failed",
