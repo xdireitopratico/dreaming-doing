@@ -6,8 +6,14 @@ import {
   saveJobCheckpoint,
   type DesignDnaExecuteResponse,
 } from "../functions/_shared-design-dna";
-import { extractDesignDnaForUrl, ensurePythonAgentInSandbox } from "./design-dna-extraction.ts";
+import { extractDesignDnaForUrl, ensurePythonAgentInSandbox, type LLMConfig } from "./design-dna-extraction.ts";
 import { connectToSandbox, waitForEnvdReady, runInSandbox } from "./e2b-client";
+import { createAgentContext } from "./browser-agent-state";
+import { runBrowserAgent, createDefaultCdpTools } from "./browser-agent-runner";
+import { runAgentPlanningStep } from "./browser-agent-llm";
+import { synthesizeDesignDNA } from "./browser-agent-synthesis";
+import type { BrowserAgentContext, BrowserAgentStep } from "./browser-agent-state";
+import { resolveLLMConfig } from "./design-dna-extraction.ts";
 
 const E2B_API_BASE = process.env.E2B_API_BASE || "https://api.e2b.app";
 const E2B_DOMAIN = process.env.E2B_DOMAIN || "e2b.app";
@@ -279,14 +285,158 @@ export async function executeDesignDnaJob(
         sandboxId,
       });
 
-      const dnaResult = await extractDesignDnaForUrl(serviceClient, {
-        url,
-        depth,
-        categories: categories as string[],
-        userId,
-        sandboxId: isDeep ? sandboxId : undefined,
-        sandboxAccessToken: isDeep ? (sandboxAccessToken ?? undefined) : undefined,
-      });
+      let dnaResult;
+      if (isDeep) {
+        const agentCtx = createAgentContext({
+          jobId,
+          url,
+          categories: categories as string[],
+          depth: "deep",
+          userId,
+          sandboxId,
+          sandboxAccessToken,
+          maxSteps: 25,
+        });
+
+        const resolvedLlm = await resolveLLMConfig(serviceClient, userId, "high");
+        if (!resolvedLlm) {
+          throw new Error("No LLM configured for DEEP browser agent");
+        }
+        const llm: LLMConfig = {
+          apiKey: resolvedLlm.apiKey,
+          baseUrl: resolvedLlm.baseUrl,
+          model: resolvedLlm.model,
+          label: resolvedLlm.label,
+          protocol: resolvedLlm.protocol,
+        };
+
+        const tools = createDefaultCdpTools();
+
+        const planner = async (ctx: BrowserAgentContext, screenshotBase64?: string) => {
+          const callLlm = async (messages: Array<{ role: string; content: string }>) => {
+            const res = await fetch(`${llm.baseUrl}/chat/completions`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${llm.apiKey}`,
+              },
+              body: JSON.stringify({
+                model: llm.model,
+                messages,
+                max_tokens: 2048,
+                temperature: 0.3,
+                response_format: { type: "json_object" },
+              }),
+              signal: AbortSignal.timeout(120000),
+            });
+            if (!res.ok) {
+              const text = await res.text().catch(() => "");
+              throw new Error(`Agent planner LLM error: ${res.status} ${text.slice(0, 200)}`);
+            }
+            const data = await res.json();
+            return { content: data.choices?.[0]?.message?.content ?? "" };
+          };
+          return runAgentPlanningStep(ctx, callLlm, screenshotBase64);
+        };
+
+        const synthesizer = async (steps: BrowserAgentStep[], u: string, cats: string[]) => {
+          const callLlm = async (messages: Array<{ role: string; content: string }>) => {
+            const res = await fetch(`${llm.baseUrl}/chat/completions`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${llm.apiKey}`,
+              },
+              body: JSON.stringify({
+                model: llm.model,
+                messages,
+                max_tokens: 4096,
+                temperature: 0.3,
+                response_format: { type: "json_object" },
+              }),
+              signal: AbortSignal.timeout(120000),
+            });
+            if (!res.ok) {
+              const text = await res.text().catch(() => "");
+              throw new Error(`Agent synthesis LLM error: ${res.status} ${text.slice(0, 200)}`);
+            }
+            const data = await res.json();
+            return { content: data.choices?.[0]?.message?.content ?? "" };
+          };
+          return synthesizeDesignDNA(steps, u, cats, callLlm);
+        };
+
+        const fetchInstructions = async (id: string) => {
+          const { data } = await serviceClient
+            .from("design_dna_instructions")
+            .select("id, role, content, status, created_at")
+            .eq("job_id", id)
+            .eq("status", "pending")
+            .order("created_at", { ascending: true });
+          return (data ?? []).map((row: Record<string, unknown>) => ({
+            id: row.id as string,
+            role: row.role as "user" | "system",
+            content: row.content as string,
+            status: row.status as "pending" | "consumed" | "canceled",
+            createdAt: row.created_at as string,
+          }));
+        };
+
+        const markConsumed = async (id: string) => {
+          await serviceClient
+            .from("design_dna_instructions")
+            .update({ status: "consumed", consumed_at: new Date().toISOString() })
+            .eq("job_id", id)
+            .eq("status", "pending");
+        };
+
+        const agentResult = await runBrowserAgent(
+          agentCtx,
+          supabase,
+          tools,
+          planner,
+          synthesizer,
+          fetchInstructions,
+          markConsumed,
+        );
+
+        if (!agentResult.ok) {
+          throw new Error(agentResult.error);
+        }
+
+        const dna = agentResult.dna;
+        dnaResult = {
+          dna,
+          rawMarkdown: `Agent steps: ${agentResult.steps.length}`,
+          cleanMarkdown: "",
+          rawHtml: "",
+          cleanHtml: "",
+          contentHygiene: {
+            title: dna.name,
+            rootSelector: "",
+            rawMarkdownChars: 0,
+            cleanMarkdownChars: 0,
+            rawHtmlChars: 0,
+            cleanHtmlChars: 0,
+          },
+          screenshotUrl: "",
+          screenshotBase64: agentResult.steps.find((s) => s.observation.screenshot)?.observation.screenshot,
+          screenshots: agentResult.steps
+            .filter((s) => s.observation.screenshot)
+            .map((s) => s.observation.screenshot as string),
+          providerTrace: [`llm:${llm.label}`, "cdp:browser-agent"],
+          confidence: 90,
+          notes: [`Browser agent completed ${agentResult.steps.length} steps`, ...agentResult.steps.map((s) => `${s.action.type}: ${s.thought}`)],
+          blockedReason: null,
+        };
+      } else {
+        dnaResult = await extractDesignDnaForUrl(serviceClient, {
+          url,
+          depth,
+          categories: categories as string[],
+          userId,
+        });
+      }
 
       if (dnaResult.dna) {
         const dna = dnaResult.dna as Record<string, unknown>;
