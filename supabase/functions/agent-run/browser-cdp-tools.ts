@@ -49,7 +49,14 @@ export async function cdpSend(
     throw new Error(`CDP relay ${res.status}: ${text.slice(0, 200)}`);
   }
 
-  return await res.json();
+  const response = await res.json();
+  if (response && typeof response === "object" && "error" in response) {
+    throw new Error(
+      `CDP error ${(response.error as { code: number; message: string }).code}: ${(response.error as { code: number; message: string }).message}`,
+    );
+  }
+
+  return response;
 }
 
 /** Execute JavaScript in the browser page and return a serializable value. */
@@ -83,7 +90,11 @@ export async function takeScreenshot(
       format: "png",
       captureBeyondViewport: fullPage,
     }) as { result?: { data?: string } };
-    return { base64: response.result?.data ?? "" };
+    const data = response.result?.data;
+    if (!data) {
+      return { base64: "", error: "Screenshot data missing" };
+    }
+    return { base64: data };
   } catch (err) {
     return { base64: "", error: (err as Error).message };
   }
@@ -94,13 +105,28 @@ export async function navigateTo(
   sandboxId: string,
   accessToken: string | null,
   url: string,
-  deps: { cdpSend?: CdpRelayFn } = {},
+  deps: { cdpSend?: CdpRelayFn; evaluateJs?: EvaluateJsFn } = {},
 ): Promise<{ success: boolean; error?: string }> {
   const send = deps.cdpSend ?? cdpSend;
+  const run = deps.evaluateJs ?? evaluateJs;
   try {
     await send(sandboxId, accessToken, "Page.navigate", { url });
-    await send(sandboxId, accessToken, "Page.loadEventFired", {});
-    return { success: true };
+
+    const start = Date.now();
+    const maxWait = 10000;
+    const interval = 300;
+    while (Date.now() - start < maxWait) {
+      const ready = await run(
+        sandboxId,
+        accessToken,
+        "document.readyState === 'complete'",
+      );
+      if (ready.result === true) {
+        return { success: true };
+      }
+      await new Promise((resolve) => setTimeout(resolve, interval));
+    }
+    return { success: false, error: "Navigation readyState polling timed out" };
   } catch (err) {
     return { success: false, error: (err as Error).message };
   }
@@ -140,7 +166,7 @@ export async function analyzeElement(
   const js = `
     (function() {
       const el = document.querySelector(${JSON.stringify(selector)});
-      if (!el) return { error: 'Element not found: ${selector.replace(/'/g, "\'")}' };
+      if (!el) return { error: "Element not found: " + ${JSON.stringify(selector)} };
       return {
         tagName: el.tagName,
         text: el.textContent?.slice(0, 500) || '',
@@ -190,7 +216,18 @@ export async function clickElement(
 ): Promise<{ success: boolean; error?: string }> {
   const run = deps.evaluateJs ?? evaluateJs;
   try {
-    await run(sandboxId, accessToken, `document.querySelector(${JSON.stringify(selector)})?.click(); "clicked"`);
+    const res = await run(sandboxId, accessToken, `
+      (function() {
+        const el = document.querySelector(${JSON.stringify(selector)});
+        if (!el) return { success: false, error: "Element not found" };
+        el.click();
+        return { success: true };
+      })()
+    `);
+    const outcome = res.result as { success: boolean; error?: string } | undefined;
+    if (outcome && typeof outcome === "object" && outcome.success === false) {
+      return { success: false, error: outcome.error ?? "Element not found" };
+    }
     return { success: true };
   } catch (err) {
     return { success: false, error: (err as Error).message };
@@ -207,10 +244,10 @@ export async function typeText(
 ): Promise<{ success: boolean; error?: string }> {
   const run = deps.evaluateJs ?? evaluateJs;
   try {
-    const escaped = text.replace(/"/g, '\\"');
     await run(sandboxId, accessToken, `
+      const value = ${JSON.stringify(text)};
       const el = document.querySelector(${JSON.stringify(selector)});
-      if (el) { el.focus(); el.value = "${escaped}"; el.dispatchEvent(new Event('input', { bubbles: true })); }
+      if (el) { el.focus(); el.value = value; el.dispatchEvent(new Event('input', { bubbles: true })); }
       "typed"
     `);
     return { success: true };
