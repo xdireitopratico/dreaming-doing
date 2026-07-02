@@ -37,6 +37,16 @@ function readContextPrefs(prefs: AgentPreferences) {
   };
 }
 
+function formatTokenCount(value?: number) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "—";
+  if (value < 1000) return `${value}`;
+  if (value < 1_000_000) {
+    const rounded = Math.round(value / 100) / 10;
+    return `${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1)}k`;
+  }
+  return `${Math.round(value / 1_000_000)}M`;
+}
+
 export function ContextWindowIndicator({
   contextUsage,
   activeRunId,
@@ -58,6 +68,8 @@ export function ContextWindowIndicator({
     rawPrefs.userModelEntries,
   ).label;
   const usagePercent = contextUsage?.percent;
+  const usageTokens = contextUsage?.usageTokens;
+  const windowTokens = contextUsage?.windowTokens;
   const isServerCompacting = contextUsage?.compacting === true;
 
   const fillPercent = useMemo(() => {
@@ -76,6 +88,10 @@ export function ContextWindowIndicator({
 
   const isCompacting = contextUsage?.compacting === true || compactPending;
   const percentLabel = contextUsage || isCompacting ? `${Math.round(fillPercent)}%` : "—";
+  const usageLabel =
+    typeof usageTokens === "number" && typeof windowTokens === "number"
+      ? `${formatTokenCount(usageTokens)} / ${formatTokenCount(windowTokens)}`
+      : "—";
 
   const persistPrefs = useCallback(
     async (next: { mode: ContextWindowMode; windowTokens: string }) => {
@@ -162,6 +178,7 @@ export function ContextWindowIndicator({
         side="top"
         sideOffset={8}
         className="w-[152px] border border-[var(--border-forge)]/70 bg-transparent p-0 shadow-none"
+        onOpenAutoFocus={(event) => event.preventDefault()}
       >
         <div className="rounded-[11px] border border-[var(--forge-border-strong,rgba(237,239,242,0.14))] bg-[linear-gradient(135deg,#1a1e27,#0b0d12)] p-1 shadow-[0_12px_30px_rgba(0,0,0,0.38),0_0_0_1px_rgba(255,182,39,0.04)_inset] backdrop-blur-[18px] backdrop-saturate-[140%]">
           <div className="grid gap-[3px]">
@@ -217,9 +234,12 @@ export function ContextWindowIndicator({
               </div>
             </div>
 
-            <div className="flex items-center gap-1 rounded-md border border-[rgba(245,158,11,0.18)] bg-[rgba(245,158,11,0.08)] px-1.5 py-[3px]">
+            <div className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-1 rounded-md border border-[rgba(237,239,242,0.08)] bg-[rgba(255,255,255,0.03)] px-1.5 py-[2px]">
               <Brain className="size-2.5 shrink-0 text-[var(--text-accent)]" aria-hidden />
-              <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-[var(--bg-hover)]">
+              <span className="min-w-0 whitespace-nowrap font-mono text-[8px] tabular-nums text-[var(--text-secondary)]">
+                {usageLabel}
+              </span>
+              <div className="h-[5px] min-w-0 overflow-hidden rounded-full bg-[var(--bg-hover)]">
                 <div
                   className="h-full rounded-full"
                   style={{
@@ -244,7 +264,7 @@ export function ContextWindowIndicator({
               <button
                 type="button"
                 className="forge-composer-send min-w-[64px] px-1.5 text-[8px] font-semibold"
-                style={{ width: "auto", height: "18px", paddingInline: "7px", borderRadius: "7px" }}
+                style={{ width: "auto", height: "22px", paddingInline: "7px", borderRadius: "7px" }}
                 disabled={saving || isCompacting}
                 onClick={() => void handleCompactNow()}
               >
