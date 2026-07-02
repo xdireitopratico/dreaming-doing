@@ -74,17 +74,9 @@ function mutableAccessors(mutable: AgentLoopMutableState) {
     setConsecutiveNoContentReadSteps: (value: number) => {
       mutable.consecutiveNoContentReadSteps = value;
     },
-    getBuildToolPhase: () => mutable.buildToolPhase,
-    setBuildToolPhase: (phase: AgentLoopMutableState["buildToolPhase"]) => {
-      mutable.buildToolPhase = phase;
-    },
     getReadGateBlockCount: () => mutable.readGateBlockCount,
     setReadGateBlockCount: (count: number) => {
       mutable.readGateBlockCount = count;
-    },
-    getForceWriteAttempted: () => mutable.forceWriteAttempted,
-    setForceWriteAttempted: (value: boolean) => {
-      mutable.forceWriteAttempted = value;
     },
     getLlmResponseWasStreamed: () => mutable.llmResponseWasStreamed,
     getLastExecutePhaseMessage: () => mutable.lastExecutePhaseMessage,
@@ -203,12 +195,8 @@ export type AgentLoopDepsContext = {
   setToolsInvoked: (value: boolean) => void;
   getConsecutiveNoContentReadSteps: () => number;
   setConsecutiveNoContentReadSteps: (value: number) => void;
-  getBuildToolPhase: () => import("./loop-mutable-state.ts").BuildToolPhase;
-  setBuildToolPhase: (phase: import("./loop-mutable-state.ts").BuildToolPhase) => void;
   getReadGateBlockCount: () => number;
   setReadGateBlockCount: (count: number) => void;
-  getForceWriteAttempted: () => boolean;
-  setForceWriteAttempted: (value: boolean) => void;
   getLlmResponseWasStreamed: () => boolean;
   getLastExecutePhaseMessage: () => string | null;
   setLastExecutePhaseMessage: (value: string | null) => void;
@@ -397,12 +385,8 @@ export function buildExecuteDeps(
     setToolsInvoked: ctx.setToolsInvoked,
     getConsecutiveNoContentReadSteps: ctx.getConsecutiveNoContentReadSteps,
     setConsecutiveNoContentReadSteps: ctx.setConsecutiveNoContentReadSteps,
-    getBuildToolPhase: ctx.getBuildToolPhase,
-    setBuildToolPhase: ctx.setBuildToolPhase,
     getReadGateBlockCount: ctx.getReadGateBlockCount,
     setReadGateBlockCount: ctx.setReadGateBlockCount,
-    getForceWriteAttempted: ctx.getForceWriteAttempted,
-    setForceWriteAttempted: ctx.setForceWriteAttempted,
     getLlmResponseWasStreamed: ctx.getLlmResponseWasStreamed,
     getLastExecutePhaseMessage: ctx.getLastExecutePhaseMessage,
     setLastExecutePhaseMessage: ctx.setLastExecutePhaseMessage,
