@@ -42,6 +42,7 @@ import {
   evaluateZeroWritesExit,
   ZERO_WRITES_RESUME_MESSAGE,
 } from "../turn-guide.ts";
+import { attemptOpeningProse } from "../turn-opening.ts";
 import type {
   AgentState,
   ChatMessage,
@@ -865,6 +866,15 @@ export async function runBuildExecutePhase(
 
       if (assistantText) {
         deps.emitAgentProse(assistantText, deps.state.currentStepIndex);
+      } else if (!deps.narrationPhase?.openingEmitted) {
+        const opening = await attemptOpeningProse({
+          messages: deps.state.messages,
+          model: deps.executionModel,
+          userRequest: deps.originalUserRequest,
+        });
+        if (opening) {
+          deps.ensureOpeningBeforeWork(opening);
+        }
       }
 
       deps.emit("phase", {

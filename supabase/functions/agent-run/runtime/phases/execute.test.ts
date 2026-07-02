@@ -168,7 +168,7 @@ function buildStubbedExecuteDeps(overrides?: {
   return deps;
 }
 
-Deno.test("execute phase can start without mandatory opening assistant_text", async () => {
+Deno.test("execute phase — text-only completion não emite opening (só antes de tools)", async () => {
   const deps = buildStubbedExecuteDeps();
   const result = await runBuildExecutePhase(deps, 0);
   const events = (deps as unknown as { _events: () => { type: string; data: Record<string, unknown> }[] })._events();
@@ -177,7 +177,7 @@ Deno.test("execute phase can start without mandatory opening assistant_text", as
   assertEquals(firstOpening, -1);
 });
 
-Deno.test("execute phase segue sem exigir opening obrigatório", async () => {
+Deno.test("execute phase — stream vazio sem tools emite final sem opening espúrio", async () => {
   let calls = 0;
   const deps = buildStubbedExecuteDeps({
     llmChat: async () => {
@@ -194,12 +194,51 @@ Deno.test("execute phase segue sem exigir opening obrigatório", async () => {
   assertEquals(result.ok, true);
   assertEquals(result.resumable, undefined);
   assertEquals(result.buildFix, undefined);
-  // Closing no longer necessarily issues a second llmChat (uses resolve+history fallback for determinism);
-  // the guarantee is non-empty final prose + no hard error + no spurious opening.
   assert(calls >= 1, "at least one llm interaction");
   assertEquals(events.some((e) => e.type === "assistant_text" && e.data.opening === true), false);
   const finals = events.filter((e) => e.type === "assistant_text" && e.data.final === true);
   assert(finals.length > 0 && String((finals[0] as any).data?.text || "").length > 5);
+});
+
+Deno.test("execute phase — emite opening:true antes do primeiro batch de tools", async () => {
+  let llmCalls = 0;
+  const deps = buildStubbedExecuteDeps({
+    llmChat: async () => {
+      llmCalls += 1;
+      if (llmCalls === 1) {
+        return {
+          role: "assistant" as const,
+          content: "",
+          tool_calls: [{
+            id: "t1",
+            name: "fs_read",
+            arguments: { path: "src/App.tsx" },
+          }],
+        };
+      }
+      return { role: "assistant" as const, content: "Pronto.", tool_calls: [] };
+    },
+  });
+  deps.executionModel = {
+    chat: async () => ({
+      role: "assistant" as const,
+      content: "Vou ler o App.tsx primeiro.",
+      tool_calls: [],
+    }),
+  };
+  deps.requiresFinalBuildGate = () => false;
+  deps.maxStepsLimit = 2;
+
+  const result = await runBuildExecutePhase(deps, 0);
+  const events = (deps as unknown as { _events: () => { type: string; data: Record<string, unknown> }[] })._events();
+  const openingIdx = events.findIndex((e) => e.type === "assistant_text" && e.data.opening === true);
+  const toolStartIdx = events.findIndex((e) => e.type === "tool_start");
+
+  assertEquals(result.ok, true);
+  assert(openingIdx >= 0, "missing opening:true before tools");
+  if (toolStartIdx >= 0) {
+    assert(openingIdx < toolStartIdx, "opening must precede tool_start");
+  }
 });
 
 Deno.test("execute phase transforma preflight recuperavel em auto-repair sem terminal duplicado", async () => {
