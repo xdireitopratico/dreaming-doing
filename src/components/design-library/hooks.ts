@@ -209,19 +209,57 @@ export function useJobDetails(jobId: string | null) {
   return { job, loading };
 }
 
-export function useJobEvents(jobId: string | null) {
+export function useJobEvents(
+  jobId: string | null,
+  options?: { realtime?: boolean },
+) {
+  const realtime = options?.realtime ?? true;
   const [events, setEvents] = useState<RealtimeEvent[]>([]);
   const [connected, setConnected] = useState(false);
 
+  // Histórico: sempre carrega do banco quando o jobId muda (inclui jobs terminais).
   useEffect(() => {
     if (!jobId) {
       setEvents([]);
-      setConnected(false);
       return;
     }
 
-    setEvents([]);
-    fetchJobEvents(jobId).then((data) => setEvents(data));
+    let cancelled = false;
+    fetchJobEvents(jobId).then((data) => {
+      if (!cancelled) setEvents(data);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [jobId]);
+
+  // Ao encerrar (realtime off), refetch garante eventos finais (job_terminal, url_error).
+  const wasRealtime = useRef(realtime);
+  useEffect(() => {
+    if (!jobId) {
+      wasRealtime.current = realtime;
+      return;
+    }
+    if (wasRealtime.current && !realtime) {
+      wasRealtime.current = realtime;
+      let cancelled = false;
+      fetchJobEvents(jobId).then((data) => {
+        if (!cancelled) setEvents(data);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    wasRealtime.current = realtime;
+  }, [jobId, realtime]);
+
+  // Realtime: só enquanto o job está ativo — não limpa o histórico ao desligar.
+  useEffect(() => {
+    if (!jobId || !realtime) {
+      setConnected(false);
+      return;
+    }
 
     const channel = supabase
       .channel(`design-dna-events-${jobId}`)
@@ -242,9 +280,9 @@ export function useJobEvents(jobId: string | null) {
       });
 
     return () => {
-      supabase.removeChannel(channel);
+      void supabase.removeChannel(channel);
     };
-  }, [jobId]);
+  }, [jobId, realtime]);
 
   return { events, connected };
 }

@@ -290,7 +290,7 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
   const { job, loading: jobLoading } = useJobPolling(jobId);
   const jobStatus = job?.status;
   const isTerminal = jobStatus ? TERMINAL_STATUSES.has(jobStatus) : false;
-  const { events, connected } = useJobEvents(isTerminal ? null : jobId);
+  const { events, connected } = useJobEvents(jobId, { realtime: !isTerminal });
   const timelineRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
