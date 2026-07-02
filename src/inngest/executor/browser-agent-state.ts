@@ -13,11 +13,24 @@ export type AgentAction =
   | { type: "get_url"; params: Record<string, never> }
   | { type: "done"; params: Record<string, never> };
 
+export type CaptureQualification = {
+  sectionType: string;
+  label: string;
+  selector?: string;
+  confidence: number;
+};
+
 export type AgentObservation = {
   type: string;
   url?: string;
   result?: unknown;
+  /** @deprecated in agent history — use captureId + Storage (G-CAP-2) */
   screenshot?: string;
+  captureId?: string;
+  storagePath?: string;
+  thumbPath?: string;
+  byteSize?: number;
+  qualification?: CaptureQualification;
   error?: string;
   timestamp?: string;
 };

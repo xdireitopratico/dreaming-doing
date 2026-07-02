@@ -11,6 +11,11 @@ import type { AgentPlan } from "./browser-agent-llm";
 import type { SynthesizedDNA } from "./browser-agent-synthesis";
 import { appendJobEvent } from "../functions/_shared-design-dna";
 import {
+  captureObservationFromPersist,
+  persistScreenshotCapture,
+} from "./deep-capture/capture-storage";
+import { sanitizeObservationForEvidence } from "./deep-capture/sanitize";
+import {
   takeScreenshot,
   navigateTo,
   scrollPage,
@@ -45,6 +50,36 @@ export type SynthesizerFn = (
 
 export type FetchInstructionsFn = (jobId: string) => Promise<UserInstruction[]>;
 export type MarkInstructionsConsumedFn = (jobId: string) => Promise<void>;
+
+async function finalizeObservation(
+  supabase: SupabaseClient,
+  ctx: BrowserAgentContext,
+  action: AgentAction,
+  observation: AgentObservation,
+): Promise<AgentObservation> {
+  if (
+    action.type === "screenshot" &&
+    typeof observation.screenshot === "string" &&
+    observation.screenshot.length > 0
+  ) {
+    const pageUrl = observation.url ?? ctx.url;
+    const persisted = await persistScreenshotCapture(supabase, {
+      jobId: ctx.jobId,
+      pageUrl,
+      pngBase64: observation.screenshot,
+      fullPage: action.params.fullPage === true,
+    });
+    await appendJobEvent(supabase, ctx.jobId, "capture_qualified", {
+      captureId: persisted.captureId,
+      label: action.params.fullPage ? "full-page segment capture" : "viewport capture",
+      storagePath: persisted.storagePath,
+      pageUrl,
+      byteSize: persisted.byteSize,
+    });
+    return captureObservationFromPersist(pageUrl, persisted, action.params.fullPage === true);
+  }
+  return observation;
+}
 
 async function executeAction(
   ctx: BrowserAgentContext,
@@ -181,15 +216,21 @@ export async function runBrowserAgent(
         action: plan.action,
       });
 
-      const observation = await withTimeout(
+      const rawObservation = await withTimeout(
         executeAction(ctx, plan.action, tools),
         STEP_TIMEOUT_MS,
         `executeAction:${plan.action.type}`,
       );
 
+      const observation = await withTimeout(
+        finalizeObservation(supabase, ctx, plan.action, rawObservation),
+        STEP_TIMEOUT_MS,
+        "finalizeObservation",
+      );
+
       await appendJobEvent(supabase, ctx.jobId, "agent_observation", {
         step: stepNumber,
-        observation,
+        observation: sanitizeObservationForEvidence(observation),
       });
 
       const step: BrowserAgentStep = {

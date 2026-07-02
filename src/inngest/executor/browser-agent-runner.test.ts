@@ -9,6 +9,27 @@ vi.mock("../functions/_shared-design-dna", () => ({
   appendJobEvent: (...args: unknown[]) => mockAppendEvent(...args),
 }));
 
+vi.mock("./deep-capture/capture-storage", () => ({
+  persistScreenshotCapture: vi.fn().mockResolvedValue({
+    captureId: "cap-test",
+    storagePath: "jobs/job-1/captures/cap-test.png",
+    thumbPath: "jobs/job-1/thumbs/cap-test.png",
+    byteSize: 100,
+  }),
+  captureObservationFromPersist: vi.fn(
+    (pageUrl: string, persisted: { captureId: string; storagePath: string; thumbPath: string; byteSize: number }) => ({
+      type: "capture",
+      url: pageUrl,
+      captureId: persisted.captureId,
+      storagePath: persisted.storagePath,
+      thumbPath: persisted.thumbPath,
+      byteSize: persisted.byteSize,
+      qualification: { sectionType: "unknown", label: "viewport capture", confidence: 0 },
+      timestamp: new Date().toISOString(),
+    }),
+  ),
+}));
+
 describe("runBrowserAgent", () => {
   it("completes after agent returns done", async () => {
     const tools = {

@@ -451,8 +451,8 @@ Job DEEP `https://livekit.com/` scope level 7:
 | Gate | Status | Data | Commit |
 |------|--------|------|--------|
 | G-CAP-0 | PASS | 2026-07-02 | ebd55bf |
-| G-CAP-1 | PASS | 2026-07-02 | (PR-1 commit) |
-| G-CAP-2 | FAIL | — | — |
+| G-CAP-1 | PASS | 2026-07-02 | b0afe28 |
+| G-CAP-2 | PASS | 2026-07-02 | (PR-2 commit) |
 | G-CAP-3 | FAIL | — | — |
 | G-CAP-4 | FAIL | — | — |
 | G-CAP-5 | FAIL | — | — |

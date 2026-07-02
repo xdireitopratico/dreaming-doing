@@ -11,6 +11,12 @@ export function sanitizeObservationForEvidence(obs: AgentObservation): Record<st
   if (typeof copy.screenshot === "string" && copy.screenshot.length > OMIT_THRESHOLD_CHARS) {
     copy.screenshot = `[screenshot omitted, ${copy.screenshot.length} chars]`;
   }
+  if (typeof copy.storagePath === "string") {
+    copy.storagePath = `[storage:${copy.storagePath}]`;
+  }
+  if (typeof copy.thumbPath === "string") {
+    copy.thumbPath = `[thumb:${copy.thumbPath}]`;
+  }
   if (copy.result && typeof copy.result === "object" && copy.result !== null) {
     const result = { ...(copy.result as Record<string, unknown>) };
     if (typeof result.base64 === "string" && result.base64.length > OMIT_THRESHOLD_CHARS) {
