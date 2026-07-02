@@ -80,6 +80,8 @@ function buildStubbedExecuteDeps(overrides?: {
     setBuildSession: (next) => {
       buildSession = next;
     },
+    getDirectiveEmitted: () => false,
+    setDirectiveEmitted: () => {},
     touchedPaths: new Set(),
     executionModel: model,
     reg: {
@@ -110,6 +112,7 @@ function buildStubbedExecuteDeps(overrides?: {
     observer: {
       quickTypeCheck: async () => ({ ok: true, errors: [] }),
       observe: async () => ({ passed: true, checks: [] }),
+      observeLight: async () => ({ passed: true, checks: [] }),
     } as unknown as BuildExecuteDeps["observer"],
     router: {
       mainCfg: { model: "mock" },

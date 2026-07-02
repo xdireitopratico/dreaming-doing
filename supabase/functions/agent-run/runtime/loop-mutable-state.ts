@@ -15,6 +15,9 @@ export type AgentLoopMutableState = {
   lastRunMessageId: string | null;
   lastActivityAt: number;
   buildSession: CanonicalBuildSession | null;
+  directiveEmitted: boolean;
+  validationGeneration: number;
+  operationStartedAt: string;
 };
 
 export function createAgentLoopMutableState(
@@ -33,5 +36,8 @@ export function createAgentLoopMutableState(
     lastRunMessageId: init?.lastRunMessageId ?? null,
     lastActivityAt: init?.lastActivityAt ?? Date.now(),
     buildSession: init?.buildSession ?? null,
+    directiveEmitted: init?.directiveEmitted ?? false,
+    validationGeneration: init?.validationGeneration ?? 0,
+    operationStartedAt: init?.operationStartedAt ?? new Date().toISOString(),
   };
 }

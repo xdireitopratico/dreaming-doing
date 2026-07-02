@@ -84,6 +84,7 @@ import {
   resolveValidationMode,
   touchedPathsIncludeSrc,
 } from "../validation-policy.ts";
+import { classifyLlmLoopRetrial } from "../retrial-policy.ts";
 
 export type BuildExecuteDeps = {
   robinActive: boolean;
@@ -115,6 +116,8 @@ export type BuildExecuteDeps = {
   setLastExecutePhaseMessage: (value: string | null) => void;
   getBuildSession: () => CanonicalBuildSession | null;
   setBuildSession: (session: CanonicalBuildSession | null) => void;
+  getDirectiveEmitted: () => boolean;
+  setDirectiveEmitted: (value: boolean) => void;
   touchedPaths: Set<string>;
   executionModel: LLMProvider;
   reg: ToolRegistry;
@@ -402,6 +405,7 @@ export async function runBuildExecutePhase(
   let finalGateOk = false;
   let agentTextComplete = false;
   let lastValidationStep = 0;
+  let llmLoopAttempts = 0;
 
   logger.event("agent.build_execute_entered", {
     initialStep,
@@ -586,12 +590,12 @@ export async function runBuildExecutePhase(
         buildFixResume: deps.buildFixResume,
         design: deps.approvedPlanDesign,
       });
-      // Serializa o directive pro inspector (ACT III do simulacro) -- so no 1o passo do build.
-      if (loopStep === 1 && deps.approvedPlanDesign) {
+      if (loopStep === 1 && deps.approvedPlanDesign && !deps.getDirectiveEmitted()) {
         const d = deps.approvedPlanDesign;
         const gesture = typeof d.moment === "string" ? d.moment : "(sem gesto)";
         const techniques = Array.isArray(d.techniques) ? d.techniques : [];
         deps.emit("directive", { brief: deps.originalUserRequest, gesture, techniques });
+        deps.setDirectiveEmitted(true);
       }
       const actionableIntent = isActionableIntent(deps.state.intent?.type);
       const forceTools = computeForceTools({
@@ -634,7 +638,14 @@ export async function runBuildExecutePhase(
           loopStep--;
           continue;
         }
-        if (shouldFailFastLlmError(err)) {
+        const retrialLayer = classifyLlmLoopRetrial({
+          err,
+          loopAttempts: llmLoopAttempts,
+          maxLoopAttempts: EXECUTE_MAX_LLM_RETRIES,
+          timedOut,
+          timeoutRetriedThisStep,
+        });
+        if (retrialLayer === "terminal") {
           const failMsg = `Erro: ${friendly}`;
           const fastExit = await guardedTerminalExit(deps, loopStep, () =>
             emitClosingAndPersist(deps, loopStep, {
@@ -647,32 +658,33 @@ export async function runBuildExecutePhase(
           if (fastExit === null) continue;
           return fastExit;
         }
-        const retries = await deps.bumpLlmRetries();
-        if (retries >= EXECUTE_MAX_LLM_RETRIES) {
-          const zeroWrites = evaluateZeroWritesExit({
-            approvedPlanBuild: deps.approvedPlanBuild,
-            touchedPathsCount: deps.touchedPaths.size,
-            loopStep,
-          });
-          if (zeroWrites.action === "pause_zero_writes") {
-            return zeroWritesResumableExit(deps, loopStep, "llm_retries_exhausted");
-          }
-          const failMsg = `Erro: ${friendly}`;
+        if (retrialLayer === "in_loop") {
+          llmLoopAttempts++;
+          await deps.bumpLlmRetries();
           deps.notifyLoopStatus({ kind: "model_error", errorDetail: friendly });
-          return deps.pauseOperationForUser({
-            reason: "llm_exhausted",
-            message: failMsg,
-            steps: loopStep,
-            toolsUsed: deps.toolsUsed,
+          loopStep--;
+          deps.state.messages.push({
+            role: "user",
+            content: friendly,
           });
+          continue;
         }
-        deps.notifyLoopStatus({ kind: "model_error", errorDetail: friendly });
-        loopStep--;
-        deps.state.messages.push({
-          role: "user",
-          content: friendly,
+        const zeroWrites = evaluateZeroWritesExit({
+          approvedPlanBuild: deps.approvedPlanBuild,
+          touchedPathsCount: deps.touchedPaths.size,
+          loopStep,
         });
-        continue;
+        if (zeroWrites.action === "pause_zero_writes") {
+          return zeroWritesResumableExit(deps, loopStep, "llm_retries_exhausted");
+        }
+        const failMsg = `Erro: ${friendly}`;
+        deps.notifyLoopStatus({ kind: "model_error", errorDetail: friendly });
+        return deps.pauseOperationForUser({
+          reason: "llm_exhausted",
+          message: failMsg,
+          steps: loopStep,
+          toolsUsed: deps.toolsUsed,
+        });
       }
 
       if (!response) break;
@@ -1022,10 +1034,6 @@ export async function runBuildExecutePhase(
           }
         }
 
-        if ((call.name === "fs_write" || call.name === "fs_edit") && result.ok) {
-          const pathArg = (call.arguments.path as string) ?? call.name;
-          deps.emit("preview_sync", { path: pathArg, reason: "fs_change" });
-        }
         return { ...result, toolCallId: call.id };
       });
 
@@ -1044,10 +1052,6 @@ export async function runBuildExecutePhase(
           arguments: {
             command: `cd /home/user && git add -A && git commit -m "${commitMsg}" 2>&1 || true`,
           },
-        });
-        deps.emit("preview_sync", {
-          path: modifiedPaths[0],
-          reason: "fs_success",
         });
       }
 
@@ -1157,10 +1161,23 @@ export async function runBuildExecutePhase(
         isFinalGate: false,
         lastValidationStep,
       });
-      if (modifiedFiles && buildAttempts < EXECUTE_MAX_RETRIES && validationMode === "full") {
+      if (modifiedFiles && buildAttempts < EXECUTE_MAX_RETRIES && validationMode === "light") {
+        deps.emit("phase", { phase: "validate", message: "Conferindo tipos…" });
+        const lightObservation = await deps.observer.observeLight(() => deps.platformLimitExceeded());
+        lastValidationStep = loopStep;
+        if (!lightObservation.passed) {
+          buildAttempts++;
+          deps.state.messages.push({
+            role: "user",
+            content: formatBuildFeedback(lightObservation.feedback, lightObservation.checks),
+          });
+          continue;
+        }
+        buildAttempts = 0;
+      } else if (modifiedFiles && buildAttempts < EXECUTE_MAX_RETRIES && validationMode === "full") {
         deps.state.phase = LoopPhaseEnum.VALIDATE_STEP;
         deps.notifyLoopStatus({ kind: "build_check" });
-        deps.emit("phase", { phase: "observe", message: "" });
+        deps.emit("phase", { phase: "validate", message: "Conferindo build…" });
         const session = deps.getBuildSession();
         if (session) {
           deps.setBuildSession(

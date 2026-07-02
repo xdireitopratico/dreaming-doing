@@ -155,18 +155,13 @@ export class RuntimeObserver {
     // Só gates de DESIGN usam pushGate (infra checks ficam em checks.push, já vistos via build_log).
     const pushGate = (name: string, ok: boolean, output: string) => {
       checks.push({ name, ok, output });
-      this.emit?.("gate", {
-        dimension: name,
-        verdict: ok ? "pass" : "fail",
-        reason: output.slice(0, 240),
-      });
     };
     const isOverBudget = () => budgetExceeded?.() === true;
     if (isOverBudget()) {
       return {
         passed: false,
         checks,
-        feedback: "[budget] Loop budget exhausted before observe() started",
+        feedback: "[platform] Deadline exceeded before observe() started",
       };
     }
 
@@ -237,7 +232,7 @@ export class RuntimeObserver {
 
     // 1. Build check
     if (isOverBudget()) {
-      return { passed: false, checks, feedback: "[budget] Skipped build check" };
+      return { passed: false, checks, feedback: "[platform] Skipped build check" };
     }
     try {
       const build = await this.reg.execute({
@@ -255,7 +250,7 @@ export class RuntimeObserver {
 
     // 2. TypeScript check (se existir tsconfig)
     if (isOverBudget()) {
-      return { passed: false, checks, feedback: "[budget] Skipped typescript check" };
+      return { passed: false, checks, feedback: "[platform] Skipped typescript check" };
     }
     const hasTs = await this.sandboxPathExists("tsconfig.json");
     if (hasTs) {
@@ -276,7 +271,7 @@ export class RuntimeObserver {
 
     // 3. Lint check (se existir eslint config)
     if (isOverBudget()) {
-      return { passed: false, checks, feedback: "[budget] Skipped lint check" };
+      return { passed: false, checks, feedback: "[platform] Skipped lint check" };
     }
     const hasLint =
       (await this.sandboxPathExists(".eslintrc")) ||
@@ -334,6 +329,41 @@ export class RuntimeObserver {
       checks,
       feedback,
     };
+  }
+
+  /** Validação leve — apenas `tsc --noEmit` (sem build/npm install). */
+  async observeLight(budgetExceeded?: () => boolean): Promise<ObservationResult> {
+    const checks: Array<{ name: string; ok: boolean; output: string }> = [];
+    if (budgetExceeded?.()) {
+      return {
+        passed: false,
+        checks,
+        feedback: "[platform] Skipped typescript check (deadline)",
+      };
+    }
+    const hasTs = await this.sandboxPathExists("tsconfig.json");
+    if (!hasTs) {
+      return { passed: true, checks };
+    }
+    try {
+      const tsc = await this.reg.execute({
+        id: crypto.randomUUID(),
+        name: "shell_exec",
+        arguments: { command: "npx tsc --noEmit --project tsconfig.json 2>&1 || true" },
+      });
+      const tscOutput = stripAnsi(shellOutput(tsc));
+      const ok = !outputIndicatesBuildFailure(tscOutput);
+      checks.push({ name: "typescript", ok, output: tscOutput.slice(0, 2000) });
+      return {
+        passed: ok,
+        checks,
+        feedback: ok ? undefined : `[typescript] ${tscOutput.slice(0, 400)}`,
+      };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "typescript check falhou";
+      checks.push({ name: "typescript", ok: false, output: msg });
+      return { passed: false, checks, feedback: `[typescript] ${msg}` };
+    }
   }
 
   /** Type-check incremental — roda tsc apenas nos arquivos modificados (rápido) */

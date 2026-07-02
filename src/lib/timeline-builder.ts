@@ -476,15 +476,16 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
       continue;
     }
 
+    if (isInternalRunEvent(ev.type, data)) {
+      continue;
+    }
+
     // Fallback canônico para eventos não reconhecidos — nunca drop silencioso.
     flushThought(ts);
     const fallbackMessage = typeof data.message === "string" ? data.message : "";
     const fallbackSummary = typeof data.summary === "string" ? data.summary : "";
     const fallbackText = fallbackMessage || fallbackSummary || ev.type;
-    const shouldRenderFallback =
-      fallbackText.trim() &&
-      !isInternalRunText(fallbackText) &&
-      !isInternalRunEvent(ev.type, data);
+    const shouldRenderFallback = fallbackText.trim() && !isInternalRunText(fallbackText);
     if (shouldRenderFallback) {
       items.push({
         type: "TASK",

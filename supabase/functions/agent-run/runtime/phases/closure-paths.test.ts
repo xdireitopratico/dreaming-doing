@@ -80,6 +80,8 @@ function makeMinimalDeps(overrides: Partial<BuildExecuteDeps> = {}): BuildExecut
     setLastExecutePhaseMessage: () => {},
     getBuildSession: () => createCanonicalBuildSession("r1", false),
     setBuildSession: () => {},
+    getDirectiveEmitted: () => false,
+    setDirectiveEmitted: () => {},
     touchedPaths: touched,
     executionModel: {
       chat: async () => ({ role: "assistant", content: "Vou começar pelo pedido.", tool_calls: [] }),

@@ -1,6 +1,9 @@
 // runtime/phases/persist.ts — Persistência de mensagens e checkpoints (Fase 2.2)
-import { checkpointChatText } from "../../checkpoint-chat.ts";
-import { type CheckpointExtra, serializeCheckpointPayload } from "../../checkpoint.ts";
+import {
+  defaultOperationSnapshot,
+  type CheckpointExtra,
+  serializeCheckpointPayload,
+} from "../../checkpoint.ts";
 import { buildExecutionLogMeta } from "../../executionLogMeta.ts";
 import { logger } from "../../../_shared/logger.ts";
 import { capMetaSize } from "../loop-config.ts";
@@ -53,6 +56,9 @@ export type AgentPersistDeps = {
   getLastCheckpointStep: () => number;
   setLastCheckpointStep: (step: number) => void;
   getBuildSession: () => CanonicalBuildSession | null;
+  getDirectiveEmitted: () => boolean;
+  getValidationGeneration: () => number;
+  getOperationStartedAt: () => string;
   emit: (type: string, data: unknown) => void;
 };
 
@@ -193,74 +199,6 @@ export async function updateAssistantStep(
   });
   const meta = buildExecutionLogMeta(null, deps.state.executionLog, step);
   await deps.sb.from("messages").update({ tool_calls, meta }).eq("id", msgId);
-}
-
-export async function persistCheckpointChat(
-  deps: AgentPersistDeps,
-  steps: number,
-  buildFix?: boolean,
-): Promise<void> {
-  const buildFixFlag = buildFix === true;
-  const text = checkpointChatText(deps.narrationBuffer, buildFixFlag);
-  const deliveryFiles = [...deps.touchedPaths];
-  const cardSnapshot = cardSnapshotForPersist(deps, {
-    streamText: text,
-    deliveryFiles,
-    finished: false,
-    lastFinishOk: null,
-    resumable: true,
-    phase: deps.state.phase,
-    currentStep: steps,
-  });
-  const meta: Record<string, unknown> = {
-    runId: deps.runId ?? undefined,
-    partial: false,
-    checkpoint: true,
-    betweenChunks: true,
-    resumable: true,
-    buildFix: buildFixFlag || undefined,
-    deliveryFiles,
-    executionLog: deps.state.executionLog,
-    finishedAt: new Date().toISOString(),
-    currentStep: steps,
-    totalSteps: deps.getMaxStepsLimit(),
-    streamTail: deps.tailSlice(120),
-    buildSession: deps.getBuildSession(),
-    cardSnapshot,
-    narrationText:
-      typeof cardSnapshot.narrationText === "string" ? cardSnapshot.narrationText : undefined,
-  };
-
-  const existingId = await resolveExistingRunMessageId(deps);
-  if (existingId) {
-    const updateData: Record<string, unknown> = {
-      tool_calls: [],
-      meta,
-    };
-    if (text) {
-      updateData.parts = [{ type: "text", text }];
-    }
-    await deps.sb.from("messages").update(updateData).eq("id", existingId);
-    await touchProjectUpdatedAt(deps);
-    return;
-  }
-
-  if (!text) return;
-
-  const { data } = await deps.sb
-    .from("messages")
-    .insert({
-      conversation_id: deps.state.conversationId,
-      role: "assistant",
-      parts: [{ type: "text", text }],
-      tool_calls: [],
-      meta,
-    })
-    .select("id")
-    .single();
-  const id = data?.id ?? null;
-  if (id) deps.setLastRunMessageId(id);
-  await touchProjectUpdatedAt(deps);
 }
 
 export async function persistFinal(
@@ -429,12 +367,19 @@ export async function saveCheckpoint(
       complexityScore: deps.getComplexityScore(),
       maxStepsLimit: deps.getMaxStepsLimit(),
     };
+    const operation = defaultOperationSnapshot({
+      touchedPaths: [...deps.touchedPaths],
+      directiveEmitted: deps.getDirectiveEmitted(),
+      buildSession: deps.getBuildSession(),
+      validationGeneration: deps.getValidationGeneration(),
+      operationStartedAt: deps.getOperationStartedAt(),
+    });
     await deps.sb.from("agent_checkpoints").upsert(
       {
         project_id: deps.state.projectId,
         conversation_id: deps.state.conversationId,
         phase,
-        state: serializeCheckpointPayload(deps.state, extra),
+        state: serializeCheckpointPayload(deps.state, extra, operation),
         updated_at: new Date().toISOString(),
       },
       { onConflict: "project_id,conversation_id" },

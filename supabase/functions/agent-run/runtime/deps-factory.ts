@@ -94,6 +94,16 @@ function mutableAccessors(mutable: AgentLoopMutableState) {
     setBuildSession: (session: CanonicalBuildSession | null) => {
       mutable.buildSession = session;
     },
+    getDirectiveEmitted: () => mutable.directiveEmitted,
+    setDirectiveEmitted: (value: boolean) => {
+      mutable.directiveEmitted = value;
+    },
+    getValidationGeneration: () => mutable.validationGeneration,
+    bumpValidationGeneration: () => {
+      mutable.validationGeneration += 1;
+      return mutable.validationGeneration;
+    },
+    getOperationStartedAt: () => mutable.operationStartedAt,
   };
 }
 
@@ -205,6 +215,8 @@ export type AgentLoopDepsContext = {
   setLastActivityAt: (ms: number) => void;
   getBuildSession: () => CanonicalBuildSession | null;
   setBuildSession: (session: CanonicalBuildSession | null) => void;
+  getDirectiveEmitted: () => boolean;
+  setDirectiveEmitted: (value: boolean) => void;
   narrationTrim: () => string;
   tailSlice: (count: number) => unknown[];
   getTimeline: () => Array<{ type: string; data: Record<string, unknown>; timestamp?: number }>;
@@ -288,6 +300,9 @@ export function buildPersistDeps(ctx: AgentLoopDepsContext): AgentPersistDeps {
     getLastCheckpointStep: ctx.getLastCheckpointStep,
     setLastCheckpointStep: ctx.setLastCheckpointStep,
     getBuildSession: ctx.getBuildSession,
+    getDirectiveEmitted: ctx.getDirectiveEmitted,
+    getValidationGeneration: ctx.getValidationGeneration,
+    getOperationStartedAt: ctx.getOperationStartedAt,
     emit: ctx.emit,
   };
 }
@@ -365,6 +380,8 @@ export function buildExecuteDeps(
     setLastExecutePhaseMessage: ctx.setLastExecutePhaseMessage,
     getBuildSession: ctx.getBuildSession,
     setBuildSession: ctx.setBuildSession,
+    getDirectiveEmitted: ctx.getDirectiveEmitted,
+    setDirectiveEmitted: ctx.setDirectiveEmitted,
     touchedPaths: ctx.touchedPaths,
     executionModel,
     reg: ctx.reg,

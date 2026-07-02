@@ -45,22 +45,22 @@ O problema principal não é um único bug. O contrato do `agent_run` divergiu e
 - `failed`: falha terminal não recuperável.
 - `canceled`: cancelamento solicitado.
 
-### Eventos Essenciais
+### Eventos Essenciais (allowlist §6 execution sanity v2)
 
-- `start`: abertura do run.
-- `phase`: estado narrativo visível.
-- `step`: progresso numerável quando houver etapa conhecida.
-- `delivery_checkpoint`: entrega parcial e estado recuperável; deve carregar progresso se `step`/`totalSteps` existirem.
-- `tool_start` / `tool_done`: execução de ferramenta.
-- `validate_fail` / `validate_pass`: validação/build.
-- `finish`: evento terminal único.
+- `start`, `thinking_text`, `assistant_text`, `tool_start` / `tool_done`, `file_diff`, `design`, `directive` (1× por operação).
+- `run_paused`: pausa honesta com `awaiting_user` — única retomada via botão **Continuar** (mesmo `run_id`).
+- `phase` (validate), `heartbeat`, `alert` (`rate_limit`, `connection_retry`), `context_usage` / `context_compact_done`.
+- `finish` / `done`: terminal da invocação Inngest (não confundir com fim da operação quando `awaiting: true`).
 
-### Regras de Chunk/Resume
+**Removidos do stream:** `gate`, `preview_sync`, `validate_fail`/`validate_ok`, `timeout_warning`, `chunk_resume`, `delivery_checkpoint`, auto-chunk.
 
-- Chunk resumível não é falha terminal.
-- Enquanto resumível: status `running`, metadados de chunk presentes, sem `finish` terminal falso.
-- Ao esgotar tentativas: status `failed`, `resumableExhausted=true`, `resumeAttempts` registrado, exatamente um `finish`.
-- Run zumbi deve ser separado de run entre chunks.
+### Operação e retomada (substitui Chunk/Resume)
+
+- **1 mensagem = 1 operação** até terminal ou pausa explícita (`awaiting_user`).
+- Teto por invocação Inngest: **14min**; aos ~13min → `platform_limit` + checkpoint + `run_paused`.
+- **Continuar** (ação do usuário): `postAgentRun({ resume: true })` — mesmo `run_id`, restaura `OperationSnapshot` (`touchedPaths`, `buildSession`, `directiveEmitted`, step).
+- Retrial: camada A (robin/transitório), B (in-loop repair), C (Continuar) — **sem** auto-dispatch Inngest entre chunks.
+- `maxStepsLimit` atingido → `step_limit` + `awaiting_user`, não auto-chunk.
 
 ## Plano de Execução
 

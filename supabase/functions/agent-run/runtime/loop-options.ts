@@ -3,6 +3,7 @@ import type { AgentPreferencesPayload } from "../connector-keys.ts";
 import type { ProviderConfig } from "../providers.ts";
 import type { DesignPlanField, LoopPhase, PlanStep } from "../types.ts";
 import type { DesignSignatureRecord } from "../design-plan-field.ts";
+import type { OperationSnapshot } from "../checkpoint.ts";
 
 export type AgentLoopOptions = {
   maxSteps?: number;
@@ -32,4 +33,6 @@ export type AgentLoopOptions = {
   preferences?: AgentPreferencesPayload;
   /** Usuário clicou «Compactar agora» — sinal one-shot via agent_runs.meta. */
   compactRequested?: boolean;
+  /** Snapshot da operação restaurado do checkpoint (resume). */
+  operationSnapshot?: OperationSnapshot;
 };

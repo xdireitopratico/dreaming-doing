@@ -179,6 +179,18 @@ export class AgentLoop {
 
     this.thinkingStreamStartedAt = null;
     this.touchedPaths = new Set();
+    const opSnap = options?.operationSnapshot;
+    if (opSnap) {
+      for (const p of opSnap.touchedPaths) {
+        if (p) this.touchedPaths.add(p);
+      }
+      this.mutable.directiveEmitted = opSnap.directiveEmitted;
+      this.mutable.validationGeneration = opSnap.validationGeneration;
+      this.mutable.operationStartedAt = opSnap.operationStartedAt;
+      if (opSnap.buildSession) {
+        this.mutable.buildSession = opSnap.buildSession;
+      }
+    }
     this.buildFixResume = options?.buildFixResume ?? false;
     this.smokeRun = options?.smokeRun ?? false;
     if (options?.hasCheckpoint) {
@@ -211,7 +223,9 @@ export class AgentLoop {
       (type, data) => this.emitter.emit(type, data),
     );
     this.bindings = createLoopBindings(this.loopHost(), this.runStartTime);
-    this.mutable.buildSession = createCanonicalBuildSession(this.runId, this.approvedPlanBuild);
+    if (!this.mutable.buildSession) {
+      this.mutable.buildSession = createCanonicalBuildSession(this.runId, this.approvedPlanBuild);
+    }
   }
 
   private loopHost(): AgentLoopHost {
@@ -400,7 +414,9 @@ export class AgentLoop {
       this.compression.requestCompact();
     }
     this.mutable.consecutiveNoContentReadSteps = 0;
-    this.mutable.buildSession = createCanonicalBuildSession(this.runId, this.approvedPlanBuild);
+    if (!this.resumeRun && !this.mutable.buildSession) {
+      this.mutable.buildSession = createCanonicalBuildSession(this.runId, this.approvedPlanBuild);
+    }
     logger.event("agent.loop_started", {
       runId: this.runId ?? undefined,
       approvedPlanBuild: this.approvedPlanBuild,

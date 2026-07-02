@@ -565,6 +565,7 @@ export async function executeAgentJob(
           buildFixResume: preMeta.buildFix === true,
           smokeRun: isSmokeRun,
           compactRequested,
+          operationSnapshot: loadedCheckpoint?.operation,
         },
   });
 
