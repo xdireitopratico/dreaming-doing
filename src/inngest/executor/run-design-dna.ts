@@ -7,17 +7,19 @@ import {
   type DesignDnaExecuteResponse,
 } from "../functions/_shared-design-dna";
 import {
+  createLlmChatDispatcher,
   extractDesignDnaForUrl,
   resolveLLMConfig,
   type LLMConfig,
 } from "./design-dna-extraction.ts";
+import { ensurePreview } from "./design-dna-preview.ts";
 import { resolveExtractionCapabilities } from "./resolve-extraction-capabilities.ts";
 import { loadUserE2bApiKey } from "../../../supabase/functions/_shared/user-e2b.ts";
 import {
   persistLibraryEntry,
   resolveJobTerminalStatus,
 } from "./persist-library-entry.ts";
-import { connectToSandbox, waitForEnvdReady, runInSandbox } from "./e2b-client";
+import { connectToSandbox, waitForEnvdReady } from "./e2b-client";
 import { createAgentContext } from "./browser-agent-state";
 import { runBrowserAgent, createDefaultCdpTools } from "./browser-agent-runner";
 import { runAgentPlanningStep } from "./browser-agent-llm";
@@ -25,10 +27,8 @@ import { synthesizeDesignDNA } from "./browser-agent-synthesis";
 import type { BrowserAgentContext, BrowserAgentStep } from "./browser-agent-state";
 
 const E2B_API_BASE = process.env.E2B_API_BASE || "https://api.e2b.app";
-const E2B_DOMAIN = process.env.E2B_DOMAIN || "e2b.app";
 const E2B_TEMPLATE_ID = process.env.E2B_TEMPLATE || "dreaming-doing-chromium";
 const LOOP_BUDGET_MS = 270_000;
-const PREVIEW_PORT = 9222;
 
 async function ensureDesignDnaSandbox(
   supabase: SupabaseClient,
@@ -36,7 +36,7 @@ async function ensureDesignDnaSandbox(
   userId: string,
   e2bApiKey: string,
   jobId: string,
-): Promise<{ sandboxId: string; accessToken: string | null; previewUrl: string }> {
+): Promise<{ sandboxId: string; accessToken: string | null }> {
   // Tenta reusar sandbox existente de jobs anteriores
   const { data: latestJob } = await serviceClient
     .from("design_dna_jobs")
@@ -53,7 +53,6 @@ async function ensureDesignDnaSandbox(
         return {
           sandboxId: latestJob.sandbox_id as string,
           accessToken,
-          previewUrl: `https://${PREVIEW_PORT}-${latestJob.sandbox_id}.${E2B_DOMAIN}`,
         };
       }
     } catch {
@@ -100,25 +99,7 @@ async function ensureDesignDnaSandbox(
     console.warn("[design-dna] envd not ready, continuing anyway:", err);
   });
 
-  // Chrome CDP — o template já inicia Chromium via start-chromium.sh na porta 9222.
-  // Não tenta iniciar de novo (causaria conflito de porta).
-  // Apenas verifica se está respondendo.
-  const chromeCheck = `curl -s http://127.0.0.1:9222/json/version && echo "CHROME_READY" || echo "CHROME_NOT_READY"`;
-  const chromeResult = await runInSandbox(sandboxId, accessToken, chromeCheck, { timeoutMs: 10_000 });
-  if (!chromeResult.stdout?.includes("CHROME_READY")) {
-    throw new Error(`Chrome CDP not responding on port 9222 — template start-chromium.sh may have failed. Check E2B template build.`);
-  }
-
-  await appendJobEvent(supabase, jobId, "chrome_cdp_ready", { port: 9222 });
-  console.log("[design-dna] Chrome CDP ready on port 9222");
-
-  const previewUrl = `https://${PREVIEW_PORT}-${sandboxId}.${E2B_DOMAIN}`;
-  await appendJobEvent(supabase, jobId, "sandbox_ready", {
-    sandboxId,
-    previewUrl,
-  });
-
-  return { sandboxId, accessToken, previewUrl };
+  return { sandboxId, accessToken };
 }
 
 export async function executeDesignDnaJob(
@@ -246,8 +227,9 @@ export async function executeDesignDnaJob(
     const sb = await ensureDesignDnaSandbox(supabase, serviceClient, userId, e2bApiKey, jobId);
     sandboxId = sb.sandboxId;
     sandboxAccessToken = sb.accessToken;
-    const previewUrl = sb.previewUrl;
-    currentMeta.previewUrl = previewUrl;
+
+    const preview = await ensurePreview(supabase, jobId, sandboxId, sandboxAccessToken);
+    currentMeta.previewUrl = preview.previewUrl;
 
     currentMeta.progress = 15;
 
@@ -320,32 +302,9 @@ export async function executeDesignDnaJob(
 
         const tools = createDefaultCdpTools();
 
-        const planner = async (ctx: BrowserAgentContext, screenshotBase64?: string) => {
-          const callLlm = async (messages: Array<{ role: string; content: string }>) => {
-            const res = await fetch(`${llm.baseUrl}/chat/completions`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${llm.apiKey}`,
-              },
-              body: JSON.stringify({
-                model: llm.model,
-                messages,
-                max_tokens: 2048,
-                temperature: 0.3,
-                response_format: { type: "json_object" },
-              }),
-              signal: AbortSignal.timeout(120000),
-            });
-            if (!res.ok) {
-              const text = await res.text().catch(() => "");
-              throw new Error(`Agent planner LLM error: ${res.status} ${text.slice(0, 200)}`);
-            }
-            const data = await res.json();
-            return { content: data.choices?.[0]?.message?.content ?? "" };
-          };
-          return runAgentPlanningStep(ctx, callLlm, screenshotBase64);
-        };
+        const plannerLlm = createLlmChatDispatcher(llm);
+        const planner = async (ctx: BrowserAgentContext, screenshotBase64?: string) =>
+          runAgentPlanningStep(ctx, plannerLlm, screenshotBase64);
 
         const synthesizer = async (steps: BrowserAgentStep[], u: string, cats: string[]) => {
           const callLlm = async (messages: Array<{ role: string; content: string }>) => {

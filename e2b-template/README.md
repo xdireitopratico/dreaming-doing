@@ -1,19 +1,33 @@
 # E2B Template: dreaming-doing-chromium
 
-Custom E2B template que vem com Chromium + Playwright pré-instalados e Chromium rodando com Chrome DevTools na porta 9222.
+Custom E2B template com Chromium headed + live view (noVNC) + CDP para extração DEEP.
+
+**Fonte de verdade:** `docs/DESIGN_DNA_CANONICAL_SPEC.md` §5 e Etapa 4 (Gate G4).
+
+## Portas
+
+| Porta | Uso | URL externa |
+|-------|-----|-------------|
+| **9222** | Chrome DevTools Protocol (agent loop) | `https://9222-<sandboxId>.e2b.app` |
+| **6080** | Live view noVNC (`previewUrl` no iframe) | `https://6080-<sandboxId>.e2b.app` |
+
+A porta **9222 não é HTML** — nunca use como `previewUrl`. O iframe carrega **6080** (mesmo Chrome que o CDP controla).
 
 ## Por que?
 
-Sem template custom, o sandbox genérico E2B (`code-interpreter-v1`) não tem Chromium nem Chrome DevTools. O padrão `<port>-<sandboxId>.e2b.app` que o app gera (`https://9222-<sandboxId>.e2b.app`) **não funciona** porque o sandbox não escuta em 9222.
+Sem template custom, o sandbox genérico E2B não tem Chromium. Este template sobe:
 
-Este template resolve isso instalando e iniciando Chromium no build, então quando um sandbox é criado, Chrome já está rodando e o `previewUrl` do BrowserPreview realmente funciona.
+1. **Xvfb** `:99` — display virtual
+2. **Chromium headed** (sem `--headless`) com CDP em `:9222`
+3. **x11vnc** `:5900` + **websockify/noVNC** `:6080`
+
+Quando `run-design-dna` cria o sandbox, `ensurePreview()` valida CDP + live view e grava `meta.previewUrl` **antes** do agent loop.
 
 ## Build
 
 ```bash
 cd e2b-template
 npm install
-# .env precisa de E2B_API_KEY (pega do .env.local raiz ou define direto)
 echo "E2B_API_KEY=e2b_..." > .env
 echo "E2B_TEMPLATE_TAG=dreaming-doing-chromium" >> .env
 
@@ -24,47 +38,43 @@ npm run build:dev
 npm run build:prod
 ```
 
-O build demora ~5-10 min (download do Chromium + install de deps).
+O build demora ~5–10 min (download do Chromium + deps + noVNC).
 
-## Uso
-
-Depois do build, configure o app para usar o template:
+## Uso no app
 
 ```bash
-# No .env.local (ou secrets do Supabase)
+# .env.local ou secrets Supabase/Inngest
 E2B_TEMPLATE=dreaming-doing-chromium
 ```
 
-Quando o executor `run-design-dna` criar o sandbox, ele usa este template. Chromium já estará rodando em `:9222` e o `previewUrl` será `https://9222-<sandboxId>.e2b.app` — acessível externamente via E2B.
-
-O script Playwright (`buildPlaywrightScript`) é executado dentro do sandbox via `e2b-client.ts` (protocolo Connect E2B), não via `prometheus-tool-executor` (que é de outro contexto).
+Após rebuild do template, jobs DEEP recebem `previewUrl = https://6080-<sandboxId>.e2b.app`.
 
 ## Arquitetura
 
 ```
-┌─────────────────────────────────┐
-│ E2B Sandbox (template custom)   │
-│                                 │
-│  /usr/local/bin/start-chromium  │
-│  └─> chromium headless          │
-│      --remote-debugging-port=9222│
-│      --remote-debugging-address │
-│          =0.0.0.0                │
-│                                 │
-│  :9222  ←─── E2B hostname ────→  https://9222-<sandboxId>.e2b.app
-│  :3000+ ←─ Playwright scripts  │
-└─────────────────────────────────┘
+┌─────────────────────────────────────────────┐
+│ E2B Sandbox (dreaming-doing-chromium)       │
+│                                             │
+│  start-browser-stack.sh                     │
+│  ├─ Xvfb :99                                │
+│  ├─ Chromium (headed) → CDP :9222         │
+│  ├─ x11vnc :5900                            │
+│  └─ websockify/noVNC :6080  ← previewUrl    │
+│                                             │
+│  :9222  → agent CDP (WebSocket)             │
+│  :6080  → iframe live view (HTML)           │
+└─────────────────────────────────────────────┘
 ```
+
+## Gate G4 (manual)
+
+1. Disparar extração DEEP de uma URL
+2. Iframe carrega `6080-...e2b.app` (noVNC)
+3. Agente `navigate` → preview muda (mesmo browser)
+4. Não reatribuir `iframe.src` para URL externa no frontend
 
 ## Limites
 
 - 2 vCPUs, 4GB RAM por sandbox
-- Sandbox TTL: 1h (configurável via `setSandboxTimeout`)
-- Build demora ~5-10 min na primeira vez
-
-## Próximos passos
-
-1. Build dev, testar manualmente
-2. Build prod, atualizar `E2B_TEMPLATE` no app
-3. Validar iframe carrega no BrowserPreview
-4. Commit no E2B → para reusar, basta o nome do template
+- Sandbox TTL: 15 min auto-pause (configurado no executor)
+- Rebuild obrigatório após alterar `template.ts`

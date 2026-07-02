@@ -109,6 +109,9 @@ async function main() {
   const accessToken = connData.envdAccessToken ?? null;
   console.log("   Access token:", accessToken ? "yes (" + accessToken.slice(0, 20) + "...)" : "no");
 
+  const PREVIEW_PORT = 6080;
+  const CDP_PORT = 9222;
+
   console.log("\n3) Waiting for envd...");
   for (let i = 0; i < 60; i++) {
     try {
@@ -121,24 +124,54 @@ async function main() {
     await new Promise(r => setTimeout(r, 1000));
   }
 
-  console.log("\n4) Preparing Python agent via runViaConnect...");
+  console.log("\n4) Verifying live preview (G4)...");
+  const previewUrl = `https://${PREVIEW_PORT}-${sandboxId}.${E2B_DOMAIN}`;
+  let previewOk = false;
+  for (let i = 0; i < 30; i++) {
+    try {
+      const headers = { "X-Access-Token": accessToken };
+      const resp = await fetch(previewUrl, { headers, signal: AbortSignal.timeout(8_000) });
+      if (resp.ok) {
+        const text = await resp.text();
+        if (text.length > 100) {
+          previewOk = true;
+          console.log("   Live preview HTTP 200,", text.length, "bytes");
+          break;
+        }
+      }
+    } catch {}
+    await new Promise(r => setTimeout(r, 2000));
+  }
+  assert(previewOk, `Live preview not ready at ${previewUrl} — rebuild template with noVNC stack`);
+
+  const cdpCheck = await runViaConnect(
+    sandboxId,
+    accessToken,
+    `curl -sf http://127.0.0.1:${CDP_PORT}/json/version && echo CDP_OK`,
+    15_000,
+  );
+  assert.equal(cdpCheck.exitCode, 0, `CDP not ready: ${cdpCheck.stderr}`);
+  assert(cdpCheck.stdout.includes("CDP_OK"), "CDP /json/version should respond");
+  console.log("   CDP ready on :9222");
+
+  console.log("\n5) Preparing Python agent via runViaConnect...");
   const agentPy = readFileSync("../supabase/functions/extract-design-dna/python-agent.py", "utf-8");
   const writeCmd = "cat > /opt/forge/agent.py << 'PYEOF'\n" + agentPy + "\nPYEOF";
   const r0 = await runViaConnect(sandboxId, accessToken, writeCmd, 15_000);
   assert.equal(r0.exitCode, 0, `Write failed: ${r0.stderr}`);
   console.log("   Agent uploaded: " + agentPy.length + " bytes");
 
-  console.log("\n5) Verifying agent file...");
+  console.log("\n6) Verifying agent file...");
   const r1 = await runViaConnect(sandboxId, accessToken, "wc -c /opt/forge/agent.py", 10_000);
   assert.equal(r1.exitCode, 0);
   console.log("   File size:", r1.stdout.trim());
 
-  console.log("\n6) Running Python agent via runViaConnect...");
+  console.log("\n7) Running Python agent via runViaConnect...");
   const url = "https://example.com";
   const r2 = await runViaConnect(sandboxId, accessToken, `cd /opt/forge && python3.11 agent.py --url "${url}" --cdp-port 9222 --timeout 120`, 180_000);
   assert.equal(r2.exitCode, 0, `Agent failed (exit ${r2.exitCode}): ${(r2.stderr || "").slice(0, 500)}`);
 
-  console.log("\n7) Parsing agent output...");
+  console.log("\n8) Parsing agent output...");
   let parsed;
   try {
     parsed = JSON.parse(r2.stdout);
@@ -167,7 +200,7 @@ async function main() {
 
   console.log("\n=== ALL TESTS PASSED ===");
 
-  console.log("\n8) Cleaning up sandbox...");
+  console.log("\n9) Cleaning up sandbox...");
   await fetch(`${E2B_API_BASE}/sandboxes/${sandboxId}`, {
     method: "DELETE",
     headers: { "X-API-Key": API_KEY },

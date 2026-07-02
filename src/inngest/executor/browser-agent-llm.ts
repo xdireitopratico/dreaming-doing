@@ -1,7 +1,12 @@
 import type { BrowserAgentContext, AgentAction } from "./browser-agent-state";
 import { formatStepsForPrompt } from "./browser-agent-state";
 
-export type LlmCallFn = (messages: Array<{ role: string; content: string }>) => Promise<{ content: string }>;
+/** Vision-capable LLM call — system + user text + optional screenshot (G4). */
+export type AgentLlmCallFn = (
+  systemPrompt: string,
+  userContent: string,
+  screenshot: string,
+) => Promise<{ content: string }>;
 
 export type AgentPlan = {
   thought: string;
@@ -100,16 +105,14 @@ function normalizeAction(raw: unknown): AgentAction {
 
 export async function runAgentPlanningStep(
   ctx: BrowserAgentContext,
-  callLlm: LlmCallFn,
+  callLlm: AgentLlmCallFn,
   screenshotBase64?: string,
 ): Promise<AgentPlan> {
   const systemPrompt = buildAgentPrompt(ctx, screenshotBase64);
-  const messages: Array<{ role: string; content: string }> = [
-    { role: "system", content: systemPrompt },
-    { role: "user", content: "Qual o próximo passo?" },
-  ];
+  const screenshot =
+    screenshotBase64?.startsWith("data:") ? screenshotBase64 : "";
 
-  const response = await callLlm(messages);
+  const response = await callLlm(systemPrompt, "Qual o próximo passo?", screenshot);
   const parsed = safeJsonParse(response.content);
 
   if (!parsed) {

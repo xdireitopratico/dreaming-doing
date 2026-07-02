@@ -1,117 +1,145 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+const mockClient = {
+  ensurePageAttached: vi.fn().mockResolvedValue("session-1"),
+  sendOnPage: vi.fn(),
+  once: vi.fn(),
+  connect: vi.fn(),
+  close: vi.fn(),
+};
+
+vi.mock("./browser-cdp-websocket", () => ({
+  getGlobalCdpClient: () => mockClient,
+}));
+
 import {
   analyzeElement,
   clickElement,
-  cdpSend,
   navigateTo,
+  sandboxPreviewUrl,
   scrollPage,
   takeScreenshot,
   typeText,
 } from "./browser-cdp-tools";
+import { PREVIEW_PORT } from "./design-dna-preview";
 
 describe("browser-cdp-tools", () => {
-  it("cdpSend surfaces CDP JSON error", async () => {
-    const originalFetch = globalThis.fetch;
-    try {
-      globalThis.fetch = vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ error: { code: -32602, message: "Invalid params" } }), { status: 200 }),
-      );
-      await expect(cdpSend("sb-123", "token", "Foo.bar")).rejects.toThrow("CDP error -32602: Invalid params");
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockClient.ensurePageAttached.mockResolvedValue("session-1");
   });
 
-  it("navigateTo returns success on OK relay", async () => {
-    const result = await navigateTo("sb-123", "token", "https://example.com", {
-      cdpSend: async () => ({ result: {} }),
-      evaluateJs: async () => ({ result: true }),
-    });
+  it("sandboxPreviewUrl uses live view port (not CDP)", () => {
+    const url = sandboxPreviewUrl("sb-123");
+    expect(url).toBe(`https://${PREVIEW_PORT}-sb-123.e2b.app`);
+    expect(url).not.toContain("9222");
+  });
+
+  it("navigateTo returns success when load event fires", async () => {
+    mockClient.once.mockResolvedValue({});
+    mockClient.sendOnPage.mockResolvedValue({});
+
+    const result = await navigateTo("sb-123", "token", "https://example.com");
     expect(result.success).toBe(true);
+    expect(mockClient.ensurePageAttached).toHaveBeenCalled();
+    expect(mockClient.sendOnPage).toHaveBeenCalledWith("Page.navigate", {
+      url: "https://example.com",
+    });
   });
 
-  it("navigateTo fails when document.readyState polling times out", async () => {
-    const result = await navigateTo("sb-123", "token", "https://example.com", {
-      cdpSend: async () => ({ result: {} }),
-      evaluateJs: async () => ({ result: false }),
-    });
+  it("navigateTo fails when load event times out", async () => {
+    mockClient.once.mockRejectedValue(new Error("CDP event timeout waiting for Page.loadEventFired"));
+
+    const result = await navigateTo("sb-123", "token", "https://example.com");
     expect(result.success).toBe(false);
-    expect(result.error).toBe("Navigation readyState polling timed out");
-  }, 15000);
+    expect(result.error).toContain("Page.loadEventFired");
+  });
 
   it("takeScreenshot returns base64 on success", async () => {
-    const result = await takeScreenshot("sb-123", "token", false, {
-      cdpSend: async () => ({ result: { data: "abc123" } }),
-    });
+    mockClient.sendOnPage.mockResolvedValue({ data: "abc123" });
+
+    const result = await takeScreenshot("sb-123", "token", false);
     expect(result.base64).toBe("abc123");
+    expect(mockClient.sendOnPage).toHaveBeenCalledWith("Page.captureScreenshot", {
+      format: "png",
+      captureBeyondViewport: false,
+    });
   });
 
   it("takeScreenshot returns error when data missing", async () => {
-    const result = await takeScreenshot("sb-123", "token", false, {
-      cdpSend: async () => ({ result: {} }),
-    });
+    mockClient.sendOnPage.mockResolvedValue({});
+
+    const result = await takeScreenshot("sb-123", "token", false);
     expect(result.base64).toBe("");
     expect(result.error).toBe("Screenshot data missing");
   });
 
   it("scrollPage returns success", async () => {
-    const result = await scrollPage("sb-123", "token", 500, {
-      evaluateJs: async () => ({ result: "scrolled" }),
+    mockClient.sendOnPage.mockResolvedValue({
+      result: { value: "scrolled" },
     });
+
+    const result = await scrollPage("sb-123", "token", 500);
     expect(result.success).toBe(true);
   });
 
   it("analyzeElement extracts element data", async () => {
-    const result = await analyzeElement("sb-123", "token", ".hero", {
-      evaluateJs: async () => ({
-        result: {
+    mockClient.sendOnPage.mockResolvedValue({
+      result: {
+        value: {
           tagName: "SECTION",
           text: "Hero text",
           html: "<section>...</section>",
           rect: { x: 0, y: 0, width: 100, height: 100 },
           styles: { color: "rgb(0,0,0)" },
         },
-      }),
+      },
     });
+
+    const result = await analyzeElement("sb-123", "token", ".hero");
     expect(result.tagName).toBe("SECTION");
     expect(result.text).toBe("Hero text");
   });
 
   it("analyzeElement returns error when element not found", async () => {
-    const result = await analyzeElement("sb-123", "token", ".missing", {
-      evaluateJs: async () => ({
-        result: { error: "Element not found: .missing" },
-      }),
+    mockClient.sendOnPage.mockResolvedValue({
+      result: { value: { error: "Element not found: .missing" } },
     });
+
+    const result = await analyzeElement("sb-123", "token", ".missing");
     expect(result.error).toBe("Element not found: .missing");
   });
 
-  it("clickElement returns success on OK relay", async () => {
-    const result = await clickElement("sb-123", "token", "button", {
-      evaluateJs: async () => ({ result: { success: true } }),
+  it("clickElement returns success", async () => {
+    mockClient.sendOnPage.mockResolvedValue({
+      result: { value: { success: true } },
     });
+
+    const result = await clickElement("sb-123", "token", "button");
     expect(result.success).toBe(true);
   });
 
   it("clickElement returns success:false when element missing", async () => {
-    const result = await clickElement("sb-123", "token", "button", {
-      evaluateJs: async () => ({ result: { success: false, error: "Element not found" } }),
+    mockClient.sendOnPage.mockResolvedValue({
+      result: { value: { success: false, error: "Element not found" } },
     });
+
+    const result = await clickElement("sb-123", "token", "button");
     expect(result.success).toBe(false);
     expect(result.error).toBe("Element not found");
   });
 
   it("typeText handles text with quotes, backslashes and newlines", async () => {
-    const injected: string[] = [];
-    const result = await typeText("sb-123", "token", "input", `He said "Hi"\nline`, {
-      evaluateJs: async (_sandboxId, _accessToken, expression: string) => {
-        injected.push(expression);
-        return { result: "typed" };
-      },
+    const injected: unknown[] = [];
+    mockClient.sendOnPage.mockImplementation(async (_method, params) => {
+      injected.push((params as { expression: string }).expression);
+      return { result: { value: "typed" } };
     });
+
+    const result = await typeText("sb-123", "token", "input", `He said "Hi"\nline`);
     expect(result.success).toBe(true);
     expect(injected).toHaveLength(1);
-    const expr = injected[0]!;
+    const expr = String(injected[0]);
     expect(expr).toContain(`const value = ${JSON.stringify(`He said "Hi"\nline`)};`);
     expect(expr).not.toContain('el.value = "');
   });

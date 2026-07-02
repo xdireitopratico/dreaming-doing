@@ -333,15 +333,6 @@ export function BrowserPreviewPanel({ jobId, onClose }: BrowserPreviewPanelProps
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Action failed");
 
-        // Handle navigate → refresh iframe
-        if (action.type === "navigate" && action.params?.url) {
-          setTimeout(() => {
-            if (iframeRef.current) {
-              iframeRef.current.src = String(action.params!.url);
-            }
-          }, 500);
-        }
-
         toast.success(`${action.type} executado`);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Erro ao executar ação");

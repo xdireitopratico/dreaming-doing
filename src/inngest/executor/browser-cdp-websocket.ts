@@ -1,8 +1,8 @@
 /**
  * browser-cdp-websocket — WebSocket CDP client for E2B Chromium sandbox.
  *
- * Connects directly to the Chrome DevTools WebSocket exposed by the E2B sandbox
- * at wss://9222-<sandboxId>.e2b.app. No polling, no E2B envd CDP relay.
+ * Connects to wss://9222-<sandboxId>.e2b.app/ and attaches to a page target
+ * via Target.attachToTarget (flatten) — required for Page.* / Runtime.* (G4).
  */
 
 import { errorMessage } from "@/lib/error-utils";
@@ -13,13 +13,18 @@ const E2B_DOMAIN =
 const CDP_PORT = 9222;
 const CDP_TIMEOUT_MS = 60_000;
 
+const BROWSER_LEVEL_PREFIXES = ["Target.", "Browser."];
+
 export type CdpMessage = {
   id?: number;
   method?: string;
   params?: Record<string, unknown>;
   result?: unknown;
   error?: { code: number; message: string; data?: unknown };
+  sessionId?: string;
 };
+
+type CdpTarget = { id?: string; type?: string };
 
 export class CdpWebSocketClient {
   private ws: WebSocket | null = null;
@@ -34,6 +39,8 @@ export class CdpWebSocketClient {
   >();
   private eventListeners = new Map<string, Array<(params: unknown) => void>>();
   private connectPromise: Promise<void> | null = null;
+  private pageAttachPromise: Promise<void> | null = null;
+  private pageSessionId: string | null = null;
   private closed = false;
 
   constructor(
@@ -46,10 +53,18 @@ export class CdpWebSocketClient {
     return `wss://${host}/`;
   }
 
+  private cdpHttpBase(): string {
+    return `https://${CDP_PORT}-${this.sandboxId}.${E2B_DOMAIN}`;
+  }
+
   private headers(): Record<string, string> {
     const h: Record<string, string> = {};
     if (this.accessToken) h["X-Access-Token"] = this.accessToken;
     return h;
+  }
+
+  private isBrowserLevel(method: string): boolean {
+    return BROWSER_LEVEL_PREFIXES.some((prefix) => method.startsWith(prefix));
   }
 
   async connect(): Promise<void> {
@@ -90,7 +105,7 @@ export class CdpWebSocketClient {
         }
       };
 
-      ws.onerror = (event) => {
+      ws.onerror = () => {
         clearTimeout(connectTimer);
         const err = new Error(`CDP WebSocket error to ${url}`);
         if (this.ws === ws) this.ws = null;
@@ -136,10 +151,93 @@ export class CdpWebSocketClient {
     }
   }
 
-  async send(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
+  private async fetchPageTargets(): Promise<CdpTarget[]> {
+    try {
+      const resp = await fetch(`${this.cdpHttpBase()}/json/list`, {
+        headers: this.headers(),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!resp.ok) return [];
+      const list = (await resp.json()) as CdpTarget[];
+      return Array.isArray(list) ? list : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** Attach to an existing page target — mandatory before Page.* commands (G4). */
+  async ensurePageAttached(): Promise<string> {
+    if (this.pageSessionId) return this.pageSessionId;
+    if (this.pageAttachPromise) return this.pageAttachPromise.then(() => this.pageSessionId!);
+
+    this.pageAttachPromise = this.doAttachToPage();
+    try {
+      await this.pageAttachPromise;
+      return this.pageSessionId!;
+    } finally {
+      this.pageAttachPromise = null;
+    }
+  }
+
+  private async doAttachToPage(): Promise<void> {
+    await this.connect();
+
+    await this.send("Target.setAutoAttach", {
+      autoAttach: true,
+      waitForDebuggerOnStart: false,
+      flatten: true,
+    });
+
+    const attachEvent = this.once("Target.attachedToTarget", 5_000).catch(() => null);
+
+    const targets = await this.fetchPageTargets();
+    for (const target of targets) {
+      if (target.type !== "page" || !target.id) continue;
+      try {
+        const result = (await this.send("Target.attachToTarget", {
+          targetId: target.id,
+          flatten: true,
+        })) as { sessionId?: string };
+        if (result.sessionId) {
+          this.pageSessionId = result.sessionId;
+          break;
+        }
+      } catch {
+        /* try next page target */
+      }
+    }
+
+    if (!this.pageSessionId) {
+      const params = (await attachEvent) as {
+        sessionId?: string;
+        targetInfo?: { type?: string };
+      } | null;
+      if (params?.sessionId && params.targetInfo?.type === "page") {
+        this.pageSessionId = params.sessionId;
+      }
+    }
+
+    if (!this.pageSessionId) {
+      throw new Error(
+        "CDP page attach failed — no page target session. Check Chrome is running in the sandbox.",
+      );
+    }
+
+    await this.send("Page.enable", {}, this.pageSessionId);
+    await this.send("Runtime.enable", {}, this.pageSessionId);
+  }
+
+  async send(
+    method: string,
+    params: Record<string, unknown> = {},
+    sessionId?: string,
+  ): Promise<unknown> {
     await this.connect();
     const id = this.nextId++;
     const msg: CdpMessage = { id, method, params };
+
+    const sid = sessionId ?? (this.isBrowserLevel(method) ? undefined : this.pageSessionId ?? undefined);
+    if (sid) msg.sessionId = sid;
 
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -150,6 +248,12 @@ export class CdpWebSocketClient {
       this.pending.set(id, { resolve, reject, timer });
       this.ws!.send(JSON.stringify(msg));
     });
+  }
+
+  /** Send a Page/Runtime command on the attached page session. */
+  async sendOnPage(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
+    const sessionId = await this.ensurePageAttached();
+    return this.send(method, params, sessionId);
   }
 
   on(method: string, listener: (params: unknown) => void): () => void {
@@ -179,8 +283,13 @@ export class CdpWebSocketClient {
     });
   }
 
+  getPageSessionId(): string | null {
+    return this.pageSessionId;
+  }
+
   close(): void {
     this.closed = true;
+    this.pageSessionId = null;
     for (const [, { reject, timer }] of this.pending) {
       clearTimeout(timer);
       reject(new Error("CDP client closed"));

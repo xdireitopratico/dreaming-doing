@@ -49,7 +49,7 @@ describe("runAgentPlanningStep", () => {
       }),
     });
 
-    const result = await runAgentPlanningStep(baseCtx, mockLlm as any);
+    const result = await runAgentPlanningStep(baseCtx, mockLlm);
     expect(result.thought).toContain("screenshot");
     expect(result.action.type).toBe("screenshot");
     expect(result.done).toBe(false);
@@ -64,14 +64,33 @@ describe("runAgentPlanningStep", () => {
       }),
     });
 
-    const result = await runAgentPlanningStep(baseCtx, mockLlm as any);
+    const result = await runAgentPlanningStep(baseCtx, mockLlm);
     expect(result.action.type).toBe("done");
     expect(result.done).toBe(true);
   });
 
+  it("passes screenshot to vision-capable LLM call", async () => {
+    const mockLlm = vi.fn().mockResolvedValue({
+      content: JSON.stringify({
+        thought: "Vejo o hero.",
+        action: { type: "analyze", params: { selector: ".hero" } },
+        done: false,
+      }),
+    });
+    const screenshot = "data:image/png;base64,abc123";
+
+    await runAgentPlanningStep(baseCtx, mockLlm, screenshot);
+
+    expect(mockLlm).toHaveBeenCalledWith(
+      expect.stringContaining("https://example.com"),
+      "Qual o próximo passo?",
+      screenshot,
+    );
+  });
+
   it("returns done fallback on parse failure", async () => {
     const mockLlm = vi.fn().mockResolvedValue({ content: "not json" });
-    const result = await runAgentPlanningStep(baseCtx, mockLlm as any);
+    const result = await runAgentPlanningStep(baseCtx, mockLlm);
     expect(result.done).toBe(true);
     expect(result.action.type).toBe("done");
   });

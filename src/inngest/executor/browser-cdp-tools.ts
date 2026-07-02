@@ -10,12 +10,11 @@ import {
   CdpWebSocketClient,
   getGlobalCdpClient,
 } from "./browser-cdp-websocket";
+import { PREVIEW_PORT } from "./design-dna-preview";
 
 const E2B_DOMAIN =
   (typeof process !== "undefined" ? process.env.E2B_DOMAIN : undefined) ||
   "e2b.app";
-const CDP_PORT = 9222;
-const COMMAND_TIMEOUT_MS = 60_000;
 const NAVIGATE_TIMEOUT_MS = 60_000;
 
 export type CdpClient = CdpWebSocketClient;
@@ -27,12 +26,8 @@ function getClient(
   return getGlobalCdpClient(sandboxId, accessToken);
 }
 
-async function ensurePageEnabled(client: CdpClient): Promise<void> {
-  await client.send("Page.enable", {});
-}
-
-async function ensureRuntimeEnabled(client: CdpClient): Promise<void> {
-  await client.send("Runtime.enable", {});
+async function ensurePageSession(client: CdpClient): Promise<void> {
+  await client.ensurePageAttached();
 }
 
 export async function takeScreenshot(
@@ -42,8 +37,8 @@ export async function takeScreenshot(
 ): Promise<{ base64: string; error?: string }> {
   const client = getClient(sandboxId, accessToken);
   try {
-    await ensurePageEnabled(client);
-    const response = (await client.send("Page.captureScreenshot", {
+    await ensurePageSession(client);
+    const response = (await client.sendOnPage("Page.captureScreenshot", {
       format: "png",
       captureBeyondViewport: fullPage,
     })) as { data?: string };
@@ -60,13 +55,13 @@ export async function navigateTo(
 ): Promise<{ success: boolean; error?: string }> {
   const client = getClient(sandboxId, accessToken);
   try {
-    await ensurePageEnabled(client);
+    await ensurePageSession(client);
 
     // Wait for the next Page.loadEventFired *before* sending navigate so we
     // don't miss the event for fast loads.
     const loadEventPromise = client.once("Page.loadEventFired", NAVIGATE_TIMEOUT_MS);
 
-    await client.send("Page.navigate", { url });
+    await client.sendOnPage("Page.navigate", { url });
 
     await loadEventPromise;
     return { success: true };
@@ -80,12 +75,13 @@ export async function scrollPage(
   accessToken: string | null,
   y: number,
 ): Promise<{ success: boolean; error?: string }> {
-  return runJs(
+  const res = await runJs(
     sandboxId,
     accessToken,
     `window.scrollTo(0, ${y}); "scrolled"`,
     "scroll",
   );
+  return { success: !res.error, error: res.error };
 }
 
 export async function analyzeElement(
@@ -192,8 +188,8 @@ async function runJs(
 ): Promise<{ result?: unknown; error?: string }> {
   const client = getClient(sandboxId, accessToken);
   try {
-    await ensureRuntimeEnabled(client);
-    const response = (await client.send("Runtime.evaluate", {
+    await ensurePageSession(client);
+    const response = (await client.sendOnPage("Runtime.evaluate", {
       expression,
       returnByValue: true,
       awaitPromise: true,
@@ -231,9 +227,9 @@ export function createDefaultCdpTools() {
 
 export type CdpTools = ReturnType<typeof createDefaultCdpTools>;
 
-/** Public preview URL for the E2B Chromium sandbox. */
+/** Public live-view preview URL for the E2B Chromium sandbox (≠ CDP port). */
 export function sandboxPreviewUrl(sandboxId: string): string {
-  return `https://${CDP_PORT}-${sandboxId}.${E2B_DOMAIN}`;
+  return `https://${PREVIEW_PORT}-${sandboxId}.${E2B_DOMAIN}`;
 }
 
 export function closeCdpSession(sandboxId: string): void {

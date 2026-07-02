@@ -37,6 +37,8 @@ async function main() {
   log("template uses Template()", template.includes("Template()"));
   log("template sets start command", /setStartCmd|set_start_cmd/.test(template));
   log("template waits for port 9222", /9222|CHROMIUM_DEVTOOLS_PORT/.test(template));
+  log("template exposes live view port 6080", /6080|LIVE_VIEW_PORT/.test(template));
+  log("template uses headed browser stack", /start-browser-stack|xvfb|x11vnc|websockify/i.test(template));
   log("template installs chromium", /chromium/i.test(template));
   log("template installs playwright", /playwright/i.test(template));
 
@@ -50,7 +52,8 @@ async function main() {
   const executor = readFileSync(resolve(process.cwd(), "src/inngest/executor/run-design-dna.ts"), "utf8");
   log("executor uses custom template by default", /dreaming-doing-chromium/.test(executor));
   log("executor skips runtime playwright install (uses template)", !executor.includes("npm install playwright"));
-  log("executor pings CDP after sandbox", /json\/version/.test(executor));
+  log("executor uses ensurePreview (G4)", /ensurePreview/.test(executor));
+  log("executor does not use CDP port as previewUrl", !/PREVIEW_PORT\s*=\s*9222/.test(executor));
 
   console.log(`\n=== Result: ${passed} passed, ${failed} failed ===\n`);
   process.exit(failed > 0 ? 1 : 0);
