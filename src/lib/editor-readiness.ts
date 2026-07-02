@@ -11,19 +11,11 @@ export type ReadinessItem = {
   href?: string;
 };
 
+import { normalizeNvidiaApiModel } from "@/lib/nvidia-model";
+
 const NEMOTRON_SLUG = "nvidia/nemotron-3-ultra-550b-a55b";
 
-export function normalizeNvidiaApiModel(slug: string): string {
-  const s = slug.trim();
-  const bare = s.includes("/") ? s.slice(s.indexOf("/") + 1) : s;
-  if (bare.includes("nemotron-3-ultra-550b") && !bare.includes("-a55b")) {
-    return NEMOTRON_SLUG;
-  }
-  if (bare.includes("nemotron-3-super-120b") && !bare.includes("-a12b")) {
-    return "nvidia/nemotron-3-super-120b-a12b";
-  }
-  return s.includes("/") ? s : `nvidia/${bare}`;
-}
+export { normalizeNvidiaApiModel };
 
 type ConnectorRow = {
   kind: string | null;

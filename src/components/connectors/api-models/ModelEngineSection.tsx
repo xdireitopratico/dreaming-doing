@@ -463,7 +463,8 @@ export function ModelEngineSection({
 
         <div className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50 p-3">
           <p className="font-mono text-[10px] text-[var(--text-dim)] mb-2 leading-relaxed">
-            Adicione um modelo deste provider. No OpenRouter, cole o slug completo.
+            Adicione um modelo deste provider. NVIDIA NIM: slug exato do build.nvidia.com
+            (ex: moonshotai/kimi-k2.6). OpenRouter: slug completo provider/model.
           </p>
           <div className="flex flex-wrap gap-2">
               <input

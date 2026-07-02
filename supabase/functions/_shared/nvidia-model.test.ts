@@ -22,6 +22,18 @@ Deno.test("normalizeNvidiaApiModel — já canônico", () => {
   );
 });
 
+Deno.test("normalizeNvidiaApiModel — NIM third-party slugs pass-through", () => {
+  assertEquals(normalizeNvidiaApiModel("moonshotai/kimi-k2.6"), "moonshotai/kimi-k2.6");
+  assertEquals(
+    normalizeNvidiaApiModel("stepfun-ai/step-3.7-flash"),
+    "stepfun-ai/step-3.7-flash",
+  );
+});
+
+Deno.test("normalizeNvidiaApiModel — migra nvidia/kimi errado da UI antiga", () => {
+  assertEquals(normalizeNvidiaApiModel("nvidia/kimi-k2.6"), "moonshotai/kimi-k2.6");
+});
+
 Deno.test("normalizeNimBaseUrl — remove chat/completions duplicado", () => {
   assertEquals(
     normalizeNimBaseUrl("https://integrate.api.nvidia.com/v1/chat/completions"),

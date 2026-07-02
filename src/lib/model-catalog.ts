@@ -5,6 +5,7 @@
  * Só modelos sem API dedicada no app usam env openrouter (ex.: Zhipu).
  */
 import { providerWire } from "@/lib/ai-provider-registry";
+import { normalizeNvidiaApiModel } from "@/lib/nvidia-model";
 import {
   normalizePresetId as normalizePresetIdContract,
   TASTE_PLATFORM_MODEL_PRESET_ID,
@@ -301,13 +302,7 @@ function apiModelForEnv(env: AiEnvId | string, slug: string): string {
   if (typeof env === "string" && env.startsWith("custom-")) return bare;
   if (env === "openrouter") return slug;
   if (env === "nvidia") {
-    if (bare.includes("nemotron-3-ultra-550b") && !bare.includes("-a55b")) {
-      return "nvidia/nemotron-3-ultra-550b-a55b";
-    }
-    if (bare.includes("nemotron-3-super-120b") && !bare.includes("-a12b")) {
-      return "nvidia/nemotron-3-super-120b-a12b";
-    }
-    return slug.includes("/") ? slug : `nvidia/${bare}`;
+    return normalizeNvidiaApiModel(slug.includes("/") ? slug : `nvidia/${bare}`);
   }
   if (env === "minimax") {
     if (bare.includes("m3")) return "MiniMax-M3";

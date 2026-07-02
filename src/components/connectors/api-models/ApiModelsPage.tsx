@@ -682,9 +682,14 @@ export function ApiModelsPage() {
         toast.error("Digite o ID do modelo.");
         return;
       }
-      // For custom providers, the slug must be just the model name (e.g. "mercury-2"),
-      // NOT "custom-inception/mercury-2". The env field already stores the provider.
-      // For built-in providers, keep the full slug format "provider/model".
+      // NVIDIA NIM: slug = id exato do build.nvidia.com (vendor/model), ex. moonshotai/kimi-k2.6
+      if (selectedEnv === "nvidia" && !raw.includes("/")) {
+        toast.error(
+          "NVIDIA NIM: cole o slug completo vendor/model (ex: moonshotai/kimi-k2.6, stepfun-ai/step-3.7-flash).",
+        );
+        return;
+      }
+      // Custom providers: só o nome do modelo. Demais: slug completo provider/model.
       const slug = raw.includes("/") || selectedEnv.startsWith("custom-")
         ? raw
         : `${selectedEnv}/${raw}`;
