@@ -98,7 +98,6 @@ export function createLifecycleHandlers(deps: LifecycleHandlersDeps) {
           ? { tasteAction: options.tasteAction }
           : {}),
         resume: manualResume,
-        autoResume: false,
         mode: options?.mode ?? "chat",
         ...loadAgentSessionExtensions(),
       });

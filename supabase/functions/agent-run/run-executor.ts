@@ -352,7 +352,6 @@ export async function executeAgentRun(
     meta: {
       ...currentMeta,
       ...runMetaBase,
-      betweenChunks: false,
       plan: params.plan ?? currentMeta.plan ?? null,
       planSourceRunId: params.planSourceRunId ?? currentMeta.planSourceRunId ?? null,
     },

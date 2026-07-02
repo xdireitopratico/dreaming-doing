@@ -490,7 +490,7 @@ export function deriveCardView(
   nodes: JobStreamNode[],
   progress: Pick<
     AgentProgress,
-    "finished" | "lastFinishOk" | "canceled" | "autoResuming" | "message" | "statusHint" | "phase"
+    "finished" | "lastFinishOk" | "canceled" | "message" | "statusHint" | "phase"
   >,
   opts?: { running?: boolean },
 ): CardView {
@@ -509,7 +509,6 @@ export function deriveCardView(
     headerBadge = "failed";
   } else if (
     running ||
-    progress.autoResuming ||
     nodes.some((n) => (n.kind === "step" || n.kind === "thought") && n.status === "active")
   ) {
     cardStatus = "working";

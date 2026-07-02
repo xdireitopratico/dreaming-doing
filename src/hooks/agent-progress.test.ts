@@ -22,7 +22,6 @@ const base: AgentProgress = {
   statusHint: null,
   streamText: null,
   lastFinishOk: null,
-  autoResuming: false,
   pendingQueueCount: 0,
   diffs: [],
   pendingPlan: null,
@@ -294,27 +293,6 @@ describe("applyAgentProgressEvent", () => {
     expect(next.streamText).toBeNull();
   });
 
-  it("delivery_checkpoint silencioso mantém progresso sem pausar", () => {
-    const next = applyAgentProgressEvent(
-      { ...base, finished: false, streamText: null },
-      ev("delivery_checkpoint", {
-        step: 3,
-        totalSteps: 10,
-        deliveryFiles: ["app/build.gradle.kts", "src/App.tsx"],
-        narration: "Gradle configurado.",
-        resumable: true,
-        silent: true,
-      }),
-    );
-    expect(next.currentStep).toBe(3);
-    expect(next.totalSteps).toBe(10);
-    expect(next.streamText).toBeNull();
-    expect(next.narrationText).toBe("Gradle configurado.");
-    expect(next.deliveryFiles).toEqual(["app/build.gradle.kts", "src/App.tsx"]);
-    expect(next.resumable).toBe(false);
-    expect(next.finished).toBe(false);
-  });
-
   it("heartbeat atualiza statusHint", () => {
     const next = applyAgentProgressEvent(
       { ...base, finished: false },
@@ -475,25 +453,19 @@ describe("Session 2.0 — contrato agent_run", () => {
       expect(next.cost).toBeCloseTo(0.025, 5);
     });
 
-    it("finish com chunkCap + resumableExhausted + resumeAttempts", () => {
+    it("finish com erro não resumable marca failed", () => {
       const next = applyAgentProgressEvent(
         { ...base, finished: false, error: null },
         ev("finish", {
           ok: false,
-          error: "Loop budget exausto após 3 chunks",
+          error: "Loop budget exausto",
           resumable: false,
-          chunkCap: true,
-          resumableExhausted: true,
-          resumeAttempts: 3,
         }),
       );
       expect(next.finished).toBe(true);
       expect(next.lastFinishOk).toBe(false);
-      expect(next.chunkCap).toBe(true);
-      expect(next.resumableExhausted).toBe(true);
-      expect(next.resumeAttempts).toBe(3);
       expect(next.resumable).toBe(false);
-      expect(next.error).toContain("3 chunks");
+      expect(next.error).toContain("budget");
     });
   });
 
@@ -558,7 +530,7 @@ describe("Session 2.0 — contrato agent_run", () => {
     });
   });
 
-  describe("B6 — novos cases: stuck / typecheck_fail / timeout_warning / chunk_resume", () => {
+  describe("B6 — novos cases: stuck / typecheck_fail / timeout_warning / run_paused", () => {
     it("stuck atualiza statusHint com mensagem de modelo preso", () => {
       const next = applyAgentProgressEvent(
         { ...base, finished: false, statusHint: null },
@@ -588,15 +560,14 @@ describe("Session 2.0 — contrato agent_run", () => {
       expect(next.statusHint).toContain("budget");
     });
 
-    it("run_paused marca resumable sem autoResuming", () => {
+    it("run_paused marca resumable", () => {
       const next = applyAgentProgressEvent(
-        { ...base, finished: false, autoResuming: false, resumable: false },
+        { ...base, finished: false, resumable: false },
         ev("run_paused", {
           reason: "platform_limit",
           message: "Execução longa — clique Continuar para seguir de onde parou",
         }),
       );
-      expect(next.autoResuming).toBe(false);
       expect(next.resumable).toBe(true);
       expect(next.statusHint?.toLowerCase()).toContain("continuar");
     });

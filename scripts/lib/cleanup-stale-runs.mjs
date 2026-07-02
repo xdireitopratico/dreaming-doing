@@ -1,5 +1,3 @@
-import { shouldSkipStaleExpiry } from "./stale-run-filter.mjs";
-
 const STALE_MS = 15 * 60 * 1000;
 
 export async function fetchStaleRuns({ supabaseUrl, serviceKey, projectId = null }) {
@@ -15,38 +13,9 @@ export async function fetchStaleRuns({ supabaseUrl, serviceKey, projectId = null
   return rows ?? [];
 }
 
-export async function lastStreamEvent(supabaseUrl, serviceKey, runId) {
-  const url = `${supabaseUrl}/rest/v1/agent_stream_events?run_id=eq.${runId}&select=event_type,created_at&order=seq.desc&limit=1`;
-  const res = await fetch(url, {
-    headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
-  });
-  const rows = await res.json();
-  if (!res.ok || !rows?.[0]) return { lastEventType: null, lastEventAt: null };
-  return {
-    lastEventType: rows[0].event_type ?? null,
-    lastEventAt: rows[0].created_at ?? null,
-  };
-}
-
 /** Marca runs stale como failed (opt-in cleanup). */
 export async function cleanupStaleRuns({ supabaseUrl, serviceKey, projectId = null, dryRun = false }) {
-  const rows = await fetchStaleRuns({ supabaseUrl, serviceKey, projectId });
-  const toClean = [];
-
-  for (const row of rows) {
-    const stream = await lastStreamEvent(supabaseUrl, serviceKey, row.id);
-    const meta = row.meta && typeof row.meta === "object" ? row.meta : {};
-    if (
-      shouldSkipStaleExpiry({
-        meta,
-        lastEventType: stream.lastEventType,
-        lastEventAt: stream.lastEventAt,
-      })
-    ) {
-      continue;
-    }
-    toClean.push(row);
-  }
+  const toClean = await fetchStaleRuns({ supabaseUrl, serviceKey, projectId });
 
   if (dryRun) return { cleaned: 0, candidates: toClean };
 

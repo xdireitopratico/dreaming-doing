@@ -2,9 +2,6 @@
  * Fila agent_pending_messages — enqueue no agent-run; drain via continue_queue.
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-
-/** Gap sem eventos de stream antes de considerar run stale para fila do usuário. */
-export const CHUNK_HANDOFF_GAP_MS = 90 * 1000;
 import { appendStreamEvent } from "./agent-stream.ts";
 import { logger } from "./logger.ts";
 import { transitionRun } from "./run-lifecycle.ts";
@@ -142,32 +139,6 @@ export function buildEnqueueBody(input: {
   };
 }
 
-/** Run em handoff entre chunks — não expirar como zumbi dentro da janela de graça. */
-export function shouldSkipStaleExpiry(input: {
-  meta: Record<string, unknown>;
-  lastEventType?: string | null;
-  lastEventAt?: string | null;
-  nowMs?: number;
-}): boolean {
-  const nowMs = input.nowMs ?? Date.now();
-  const chunkHandoffGraceMs = CHUNK_HANDOFF_GAP_MS * 2;
-  const meta = input.meta;
-
-  if (meta.betweenChunks === true) {
-    const lastChunkAt = meta.lastChunkAt as string | undefined;
-    if (!lastChunkAt) return true;
-    const chunkAgeMs = nowMs - new Date(lastChunkAt).getTime();
-    if (chunkAgeMs <= chunkHandoffGraceMs) return true;
-  }
-
-  if (input.lastEventType === "chunk_resume" && input.lastEventAt) {
-    const chunkAgeMs = nowMs - new Date(input.lastEventAt).getTime();
-    if (chunkAgeMs <= chunkHandoffGraceMs) return true;
-  }
-
-  return false;
-}
-
 export async function expireStaleRuns(
   supabase: SupabaseClient,
   projectId: string,
@@ -199,16 +170,6 @@ export async function expireStaleRuns(
       .order("seq", { ascending: false })
       .limit(1)
       .maybeSingle();
-
-    if (
-      shouldSkipStaleExpiry({
-        meta,
-        lastEventType: (lastEv?.event_type as string | undefined) ?? null,
-        lastEventAt: (lastEv?.created_at as string | undefined) ?? null,
-      })
-    ) {
-      continue;
-    }
 
     const heartbeat = (run.heartbeat_at ?? run.started_at) as string | null;
     if (heartbeat && heartbeat < cutoff) {
@@ -295,47 +256,20 @@ export async function conversationNeedsAgentResponse(
   return (count ?? 0) > 0;
 }
 
-const CHUNK_HANDOFF_EVENT_TYPES = new Set(["delivery_checkpoint"]);
-
 export async function hasBlockingActiveRun(
   supabase: SupabaseClient,
   projectId: string,
 ): Promise<string | null> {
   const { data } = await supabase
     .from("agent_runs")
-    .select("id, status, meta")
+    .select("id")
     .eq("project_id", projectId)
     .in("status", ["running", "pending", "awaiting_user"])
     .order("started_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  if (!data?.id) return null;
-  if (data.status === "awaiting_user") return data.id;
-
-  const meta = (data.meta ?? {}) as Record<string, unknown>;
-  const lastChunkAt = meta.lastChunkAt as string | undefined;
-  if (!lastChunkAt && meta.betweenChunks !== true) return data.id;
-
-  const { data: lastEv } = await supabase
-    .from("agent_stream_events")
-    .select("created_at, event_type")
-    .eq("run_id", data.id)
-    .order("seq", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const lastEvTime = (lastEv?.created_at ?? lastChunkAt) as string | undefined;
-  if (!lastEvTime) return data.id;
-
-  const gapMs = Date.now() - new Date(lastEvTime).getTime();
-  const handoff = !!lastEv && CHUNK_HANDOFF_EVENT_TYPES.has(lastEv.event_type as string);
-
-  if (handoff && gapMs > CHUNK_HANDOFF_GAP_MS) {
-    return null;
-  }
-
-  return data.id;
+  return data?.id ?? null;
 }
 
 /** Reordena um item na fila movendo-o para uma nova posição (sort_order). */

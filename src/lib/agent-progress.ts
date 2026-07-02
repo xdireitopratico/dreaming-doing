@@ -100,7 +100,6 @@ export interface AgentProgress {
   statusHint: string | null;
   streamText: string | null;
   lastFinishOk: boolean | null;
-  autoResuming: boolean;
   pendingQueueCount: number;
   diffs: Array<{
     id: string;
@@ -116,7 +115,7 @@ export interface AgentProgress {
   awaitingKind?: AwaitingKind;
   /** Incrementado quando o agente altera ficheiros — cliente deve force-sync preview. */
   previewSyncTick?: number;
-  /** Paths entregues no último delivery_checkpoint (contrato parcial). */
+  /** Paths entregues parcialmente (meta persistida / replay). */
   deliveryFiles?: string[];
   /** Linhas de saída Gradle/shell (preview nativo). */
   buildLogLines?: Array<{ command: string; line: string; ok: boolean; ts: number }>;
@@ -143,12 +142,6 @@ export interface AgentProgress {
   connectionState?: "connected" | "reconnecting" | "disconnected";
   /** Session 2.0 — tokens consumidos pela run (lidos do finish/done enriquecido). */
   tokens?: { input: number; output: number; total: number } | null;
-  /** Session 2.0 — nº da tentativa de retomada de chunk (lido de chunk_resume/finish). */
-  resumeAttempts?: number | null;
-  /** Session 2.0 — true quando o finish terminal indicou chunkCap (exaustão de chunks). */
-  chunkCap?: boolean;
-  /** Session 2.0 — true quando o finish terminal indicou resumableExhausted. */
-  resumableExhausted?: boolean;
   /** Session 2.0 — complexidade classificada pelo agente (lida de classify). */
   classifyComplexity?: string | null;
   /** Session 2.0 — sumário da classificação (lido de classify). */
@@ -202,7 +195,6 @@ export const initialAgentProgress: AgentProgress = {
   narrationText: null,
   workingDurationMs: null,
   lastFinishOk: null,
-  autoResuming: false,
   pendingQueueCount: 0,
   diffs: [],
   pendingPlan: null,
@@ -212,9 +204,6 @@ export const initialAgentProgress: AgentProgress = {
   fsmState: null,
   planSummary: null,
   tokens: null,
-  resumeAttempts: null,
-  chunkCap: false,
-  resumableExhausted: false,
   classifyComplexity: null,
   classifySummary: null,
   classifyRestored: false,
@@ -600,27 +589,6 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         timeline: [...prev.timeline, event],
       };
 
-    case "delivery_checkpoint": {
-      const narration = typeof data.narration === "string" ? data.narration.trim() : "";
-      const deliveryFiles = Array.isArray(data.deliveryFiles)
-        ? (data.deliveryFiles as string[]).filter((p) => typeof p === "string")
-        : prev.deliveryFiles;
-      const silent = data.silent === true;
-      return {
-        ...prev,
-        finished: false,
-        error: null,
-        currentStep: typeof data.step === "number" ? data.step : prev.currentStep,
-        totalSteps: typeof data.totalSteps === "number" ? data.totalSteps : prev.totalSteps,
-        streamText: prev.streamText,
-        narrationText: narration || prev.narrationText,
-        deliveryFiles,
-        resumable: silent ? false : data.resumable === true || prev.resumable,
-        statusHint: (data.message as string) ?? prev.statusHint,
-        timeline: [...prev.timeline, event],
-      };
-    }
-
     case "classify": {
       return {
         ...prev,
@@ -856,10 +824,6 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       const totalTokens =
         typeof data.totalTokens === "number" ? data.totalTokens : prev.tokens?.total;
       const costUsd = typeof data.costUsd === "number" ? data.costUsd : prev.cost;
-      const chunkCap = data.chunkCap === true || prev.chunkCap;
-      const resumableExhausted = data.resumableExhausted === true || prev.resumableExhausted;
-      const resumeAttempts =
-        typeof data.resumeAttempts === "number" ? data.resumeAttempts : prev.resumeAttempts;
       const summary =
         typeof data.summary === "string" && data.summary.trim() ? data.summary : prev.summary;
       return {
@@ -900,9 +864,6 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
               }
             : prev.tokens,
         cost: costUsd,
-        chunkCap,
-        resumableExhausted,
-        resumeAttempts,
         timeline: [...prev.timeline, event],
       };
     }
@@ -951,23 +912,9 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         timeline: [...prev.timeline, event],
       };
 
-    case "chunk_resume": {
-      const attempt = typeof data.attempt === "number" ? data.attempt : 0;
-      const maxAttempts = typeof data.maxAttempts === "number" ? data.maxAttempts : 0;
-      const reason = typeof data.reason === "string" ? data.reason : "step budget exceeded";
-      return {
-        ...prev,
-        autoResuming: true,
-        resumeAttempts: attempt,
-        statusHint: `Retomando chunk ${attempt}/${maxAttempts} — ${reason}`,
-        timeline: [...prev.timeline, event],
-      };
-    }
-
     case "run_paused":
       return {
         ...prev,
-        autoResuming: false,
         resumable: true,
         statusHint:
           (data.message as string) ?? "Execução pausada — use Continuar para retomar.",

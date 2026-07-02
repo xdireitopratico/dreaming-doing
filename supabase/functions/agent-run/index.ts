@@ -286,7 +286,6 @@ Deno.serve(async (req) => {
       const sessionKindRaw = body.sessionKind as string | undefined;
       const tasteActionRaw = body.tasteAction as string | undefined;
       const resumeRun = body.resume === true;
-      const autoResume = body.autoResume === true;
       // Modo vem do dropdown (estilo Lovable): Plan = pensar/plano; Build = executar.
       // - "plan": propõe plano, não mexe em código até aprovação
       // - "build": loop de ferramentas (implementação direta quando pedido claro)
@@ -760,7 +759,6 @@ Deno.serve(async (req) => {
         model: mainCfg.model,
         sessionKind: tasteStart ? "taste_start" : "byok",
         resume: resumeRun,
-        autoResume,
         checkpoint: !!loadedCheckpoint,
         robin: effectiveRobin,
         taste: tasteStart,

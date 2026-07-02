@@ -163,7 +163,7 @@ function normalizeProse(prose: string): string {
 
 export { buildForgeTimeline } from "@/lib/timeline-builder";
 
-/** Job ativo confirmado — sem autoResuming nem flags stale. */
+/** Job ativo confirmado — sem flags stale fantasmas. */
 export function hasActiveJob(
   progress: AgentProgress,
   opts?: { running?: boolean; slotActive?: boolean },

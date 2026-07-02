@@ -38,11 +38,10 @@ describe("buildChatThread", () => {
     expect(thread.map((t) => t.kind)).toEqual(["user", "assistant", "user", "assistant"]);
   });
 
-  it("autoResuming sozinho não mantém slot ativo sem running", () => {
+  it("statusHint de retomada sozinho não mantém slot ativo sem running", () => {
     const messages = [msg("u1", "user", "fix build")];
     const progress = {
       ...initialAgentProgress,
-      autoResuming: true,
       finished: false,
       statusHint: "Retomando automaticamente no servidor…",
     };

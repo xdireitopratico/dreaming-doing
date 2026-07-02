@@ -372,7 +372,7 @@ function baseProgress() {
     statusHint: null,
     streamText: null,
     lastFinishOk: null,
-    autoResuming: false,
+
     pendingQueueCount: 0,
     diffs: [],
     pendingPlan: null,

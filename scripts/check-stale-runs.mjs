@@ -1,13 +1,11 @@
 #!/usr/bin/env node
 /**
  * Lista runs zumbis (running/pending > 15 min) e sai com código 1 se houver.
- * Ignora handoff entre chunks (betweenChunks / chunk_resume recente).
  *
  * Usage: node scripts/check-stale-runs.mjs [--project-id=UUID] [--cleanup]
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { shouldSkipStaleExpiry } from "./lib/stale-run-filter.mjs";
 import { cleanupStaleRuns } from "./lib/cleanup-stale-runs.mjs";
 
 function loadEnvLocal() {
@@ -56,17 +54,6 @@ function restHeaders() {
   };
 }
 
-async function lastStreamEvent(runId) {
-  const url = `${SUPABASE_URL}/rest/v1/agent_stream_events?run_id=eq.${runId}&select=event_type,created_at&order=seq.desc&limit=1`;
-  const res = await fetch(url, { headers: restHeaders() });
-  const rows = await res.json();
-  if (!res.ok || !rows?.[0]) return { lastEventType: null, lastEventAt: null };
-  return {
-    lastEventType: rows[0].event_type ?? null,
-    lastEventAt: rows[0].created_at ?? null,
-  };
-}
-
 async function main() {
   if (!SUPABASE_URL || !SERVICE_KEY) {
     console.error("FAIL: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY required");
@@ -85,29 +72,10 @@ async function main() {
     process.exit(1);
   }
 
-  const stale = [];
-  for (const r of rows ?? []) {
-    const meta = r.meta && typeof r.meta === "object" ? r.meta : {};
-    const { lastEventType, lastEventAt } = await lastStreamEvent(r.id);
-    if (
-      shouldSkipStaleExpiry({
-        meta,
-        lastEventType,
-        lastEventAt,
-      })
-    ) {
-      continue;
-    }
-    stale.push(r);
-  }
+  const stale = rows ?? [];
 
   if (!stale.length) {
-    const skipped = (rows?.length ?? 0) - stale.length;
-    if (skipped > 0) {
-      console.log(`OK: 0 stale runs (${skipped} em handoff entre chunks ignorada(s))`);
-    } else {
-      console.log("OK: 0 stale runs");
-    }
+    console.log("OK: 0 stale runs");
     process.exit(0);
   }
 

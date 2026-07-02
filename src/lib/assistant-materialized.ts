@@ -18,9 +18,9 @@ function hasVisibleText(message: ChatMessage): boolean {
   return false;
 }
 
-/** Meta de checkpoint entre chunks — não é terminal para UX nem persistência. */
+/** Meta de checkpoint — não é terminal para UX nem persistência. */
 export function isCheckpointMeta(meta: Record<string, unknown>): boolean {
-  return meta.checkpoint === true || meta.betweenChunks === true;
+  return meta.checkpoint === true;
 }
 
 /** Terminal no DB (meta) — espelho backend; rejeita partial e checkpoint. */

@@ -232,26 +232,6 @@ describe("shouldShowJobCard", () => {
 });
 
 describe("hasActiveJob — sem fantasma no mount", () => {
-  it("autoResuming sozinho não é job ativo", () => {
-    const progress = {
-      ...initialAgentProgress,
-      autoResuming: true,
-      finished: false,
-      phase: "build",
-    };
-    expect(isRunEffectivelyActive(progress, false)).toBe(false);
-    expect(
-      shouldShowJobCard({
-        runId: "run-1",
-        progress,
-        isClarifyOnly: false,
-        isAgentJobMessage: false,
-        hasExecutionEvidence: true,
-        slotActive: false,
-      }),
-    ).toBe(false);
-  });
-
   it("job ativo exige running e slotActive", () => {
     const progress = { ...initialAgentProgress, finished: false, phase: "execute" };
     expect(isRunEffectivelyActive(progress, true)).toBe(true);

@@ -82,7 +82,6 @@ describe("isAssistantRunMaterialized", () => {
             runId: "r1",
             finishedAt: "2026-06-08T00:00:00Z",
             checkpoint: true,
-            betweenChunks: true,
           },
         }),
       ),
