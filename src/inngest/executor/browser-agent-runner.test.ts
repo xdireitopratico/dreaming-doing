@@ -1,37 +1,38 @@
-import { describe, it, expect, vi } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import { snapshotExtractionScope } from "@/lib/agent-deep-capture-contract";
 import { runBrowserAgent } from "./browser-agent-runner";
 import { createAgentContext } from "./browser-agent-state";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const mockAppendEvent = vi.fn().mockResolvedValue(undefined);
+const mockProcessQualifiedCapture = vi.fn().mockResolvedValue({
+  persisted: {
+    captureId: "cap-test",
+    storagePath: "jobs/job-1/captures/cap-test.png",
+    thumbPath: "jobs/job-1/thumbs/cap-test.png",
+    byteSize: 100,
+  },
+  qualification: {
+    worthKeeping: true,
+    label: "Hero viewport",
+    sectionType: "hero",
+    confidence: 0.85,
+  },
+});
 
 vi.mock("../functions/_shared-design-dna", () => ({
   appendJobEvent: (...args: unknown[]) => mockAppendEvent(...args),
 }));
 
-vi.mock("./deep-capture/capture-storage", () => ({
-  persistScreenshotCapture: vi.fn().mockResolvedValue({
-    captureId: "cap-test",
-    storagePath: "jobs/job-1/captures/cap-test.png",
-    thumbPath: "jobs/job-1/thumbs/cap-test.png",
-    byteSize: 100,
-  }),
-  captureObservationFromPersist: vi.fn(
-    (pageUrl: string, persisted: { captureId: string; storagePath: string; thumbPath: string; byteSize: number }) => ({
-      type: "capture",
-      url: pageUrl,
-      captureId: persisted.captureId,
-      storagePath: persisted.storagePath,
-      thumbPath: persisted.thumbPath,
-      byteSize: persisted.byteSize,
-      qualification: { sectionType: "unknown", label: "viewport capture", confidence: 0 },
-      timestamp: new Date().toISOString(),
-    }),
-  ),
+vi.mock("./deep-capture/process-capture", () => ({
+  processQualifiedCapture: (...args: unknown[]) => mockProcessQualifiedCapture(...args),
 }));
-
 describe("runBrowserAgent", () => {
+  beforeEach(() => {
+    mockAppendEvent.mockClear();
+    mockProcessQualifiedCapture.mockClear();
+  });
+
   it("completes after agent returns done", async () => {
     const tools = {
       getUrl: vi.fn().mockResolvedValue({ url: "https://example.com" }),
@@ -202,11 +203,32 @@ describe("runBrowserAgent", () => {
     expect(result.ok).toBe(true);
     expect(tools.capturePageSegments).toHaveBeenCalledTimes(1);
     expect(tools.takeScreenshot).toHaveBeenCalledTimes(1);
-    expect(mockAppendEvent).toHaveBeenCalledWith(
+    expect(mockProcessQualifiedCapture).toHaveBeenCalledTimes(2);
+    expect(mockProcessQualifiedCapture).toHaveBeenNthCalledWith(
+      1,
       expect.anything(),
-      "job-seg",
-      "capture_qualified",
-      expect.objectContaining({ segmentIndex: 0 }),
+      expect.objectContaining({ jobId: "job-seg" }),
+      expect.any(Function),
+      expect.objectContaining({
+        jobId: "job-seg",
+        pageUrl: "https://example.com",
+        pngBase64: "seg0",
+        segmentIndex: 0,
+        scrollY: 0,
+        fullPage: true,
+      }),
+    );
+    expect(mockProcessQualifiedCapture).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      expect.objectContaining({ jobId: "job-seg" }),
+      expect.any(Function),
+      expect.objectContaining({
+        pngBase64: "seg1",
+        segmentIndex: 1,
+        scrollY: 800,
+        fullPage: true,
+      }),
     );
   });
 

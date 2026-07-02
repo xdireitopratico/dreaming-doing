@@ -11,10 +11,9 @@ import { addStep, isCycleDetected } from "./browser-agent-state";
 import type { AgentPlan } from "./browser-agent-llm";
 import type { SynthesizedDNA } from "./browser-agent-synthesis";
 import { appendJobEvent } from "../functions/_shared-design-dna";
-import {
-  captureObservationFromPersist,
-  persistScreenshotCapture,
-} from "./deep-capture/capture-storage";
+import { captureObservationFromPersist } from "./deep-capture/capture-storage";
+import { heuristicQualification, type QualifyCaptureFn } from "./deep-capture/capture-qualify";
+import { processQualifiedCapture } from "./deep-capture/process-capture";
 import { sanitizeObservationForEvidence } from "./deep-capture/sanitize";
 import {
   takeScreenshot,
@@ -59,6 +58,7 @@ export type MarkInstructionsConsumedFn = (jobId: string) => Promise<void>;
 async function persistSegmentBatch(
   supabase: SupabaseClient,
   ctx: BrowserAgentContext,
+  qualifyFn: QualifyCaptureFn,
   pageUrl: string,
   segments: SegmentRaw[],
 ): Promise<AgentObservation> {
@@ -68,10 +68,13 @@ async function persistSegmentBatch(
     scrollY: number;
     storagePath: string;
     byteSize: number;
+    label: string;
+    sectionType: string;
+    confidence: number;
   }> = [];
 
   for (const seg of segments) {
-    const persisted = await persistScreenshotCapture(supabase, {
+    const processed = await processQualifiedCapture(supabase, ctx, qualifyFn, {
       jobId: ctx.jobId,
       pageUrl,
       pngBase64: seg.base64,
@@ -79,21 +82,16 @@ async function persistSegmentBatch(
       scrollY: seg.scrollY,
       fullPage: true,
     });
+    if (!processed) continue;
     captures.push({
-      captureId: persisted.captureId,
+      captureId: processed.persisted.captureId,
       segmentIndex: seg.segmentIndex,
       scrollY: seg.scrollY,
-      storagePath: persisted.storagePath,
-      byteSize: persisted.byteSize,
-    });
-    await appendJobEvent(supabase, ctx.jobId, "capture_qualified", {
-      captureId: persisted.captureId,
-      label: `page fold ${seg.segmentIndex + 1}`,
-      storagePath: persisted.storagePath,
-      pageUrl,
-      byteSize: persisted.byteSize,
-      segmentIndex: seg.segmentIndex,
-      scrollY: seg.scrollY,
+      storagePath: processed.persisted.storagePath,
+      byteSize: processed.persisted.byteSize,
+      label: processed.qualification.label,
+      sectionType: processed.qualification.sectionType,
+      confidence: processed.qualification.confidence,
     });
   }
 
@@ -109,6 +107,7 @@ async function persistSegmentBatch(
 async function finalizeObservation(
   supabase: SupabaseClient,
   ctx: BrowserAgentContext,
+  qualifyFn: QualifyCaptureFn,
   action: AgentAction,
   observation: AgentObservation,
 ): Promise<AgentObservation> {
@@ -117,7 +116,7 @@ async function finalizeObservation(
   if (observation.type === "capture_segments") {
     const rawSegments = (observation as AgentObservation & { segments?: SegmentRaw[] }).segments;
     if (Array.isArray(rawSegments) && rawSegments.length > 0) {
-      return persistSegmentBatch(supabase, ctx, pageUrl, rawSegments);
+      return persistSegmentBatch(supabase, ctx, qualifyFn, pageUrl, rawSegments);
     }
     return observation;
   }
@@ -127,20 +126,25 @@ async function finalizeObservation(
     typeof observation.screenshot === "string" &&
     observation.screenshot.length > 0
   ) {
-    const persisted = await persistScreenshotCapture(supabase, {
+    const processed = await processQualifiedCapture(supabase, ctx, qualifyFn, {
       jobId: ctx.jobId,
       pageUrl,
       pngBase64: observation.screenshot,
       fullPage: false,
     });
-    await appendJobEvent(supabase, ctx.jobId, "capture_qualified", {
-      captureId: persisted.captureId,
-      label: "viewport capture",
-      storagePath: persisted.storagePath,
+    if (!processed) {
+      return {
+        type: "capture",
+        url: pageUrl,
+        error: "capture rejected by qualification",
+        timestamp: new Date().toISOString(),
+      };
+    }
+    return captureObservationFromPersist(
       pageUrl,
-      byteSize: persisted.byteSize,
-    });
-    return captureObservationFromPersist(pageUrl, persisted, false);
+      processed.persisted,
+      processed.qualification,
+    );
   }
   return observation;
 }
@@ -261,10 +265,21 @@ export async function runBrowserAgent(
   fetchInstructions: FetchInstructionsFn,
   markConsumed: MarkInstructionsConsumedFn,
   resolveScope?: () => ExtractionScope,
+  qualifyCapture?: QualifyCaptureFn,
 ): Promise<
   { ok: true; dna: SynthesizedDNA; steps: BrowserAgentStep[] } | { ok: false; error: string }
 > {
   let ctx = initialCtx;
+  const qualifyFn: QualifyCaptureFn =
+    qualifyCapture ??
+    ((input) =>
+      Promise.resolve(
+        heuristicQualification({
+          ...input,
+          segmentIndex: input.segmentIndex ?? 0,
+          scrollY: input.scrollY ?? 0,
+        }),
+      ));
 
   try {
     for (let stepNumber = 1; stepNumber <= ctx.maxSteps; stepNumber++) {
@@ -312,7 +327,7 @@ export async function runBrowserAgent(
       );
 
       const observation = await withTimeout(
-        finalizeObservation(supabase, ctx, plan.action, rawObservation),
+        finalizeObservation(supabase, ctx, qualifyFn, plan.action, rawObservation),
         STEP_TIMEOUT_MS,
         "finalizeObservation",
       );

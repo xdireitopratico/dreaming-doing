@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   captureObservationFromPersist,
-  persistScreenshotCapture,
+  insertQualifiedCapture,
+  uploadCapturePng,
   CAPTURE_BUCKET,
 } from "./capture-storage";
 
@@ -37,20 +38,32 @@ function mockSupabase() {
   };
 }
 
-describe("persistScreenshotCapture", () => {
-  it("uploads png + thumb and inserts capture row", async () => {
+describe("uploadCapturePng + insertQualifiedCapture", () => {
+  it("uploads png + thumb and inserts qualified capture row", async () => {
     const { client, uploads, rows } = mockSupabase();
-    const result = await persistScreenshotCapture(client, {
+    const uploaded = await uploadCapturePng(client, {
       jobId: "job-1",
       pageUrl: "https://example.com",
       pngBase64: tinyPngBase64,
     });
 
+    const result = await insertQualifiedCapture(
+      client,
+      {
+        jobId: "job-1",
+        pageUrl: "https://example.com",
+        pngBase64: tinyPngBase64,
+      },
+      uploaded,
+      { label: "Hero section", sectionType: "hero", confidence: 0.9 },
+    );
+
     expect(result.captureId).toBeTruthy();
     expect(uploads).toHaveLength(2);
     expect(rows).toHaveLength(1);
     expect(rows[0].job_id).toBe("job-1");
-    expect(rows[0].storage_path).toContain("job-1/captures/");
+    expect(rows[0].label).toBe("Hero section");
+    expect(rows[0].section_type).toBe("hero");
   });
 });
 
@@ -64,7 +77,7 @@ describe("captureObservationFromPersist", () => {
         thumbPath: "jobs/j/thumbs/cap-1.png",
         byteSize: 100,
       },
-      false,
+      { label: "Hero", sectionType: "hero", confidence: 0.8 },
     );
     expect(obs.type).toBe("capture");
     expect(obs.captureId).toBe("cap-1");

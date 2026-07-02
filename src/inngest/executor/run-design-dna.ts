@@ -48,6 +48,7 @@ import {
   parseScopeFromInstruction,
   summarizeScopeChanges,
 } from "./deep-capture/scope-parser.ts";
+import { qualifyCaptureWithLlm } from "./deep-capture/capture-qualify.ts";
 
 const OPERATION_RESUME_BUFFER_MS = 120_000;
 
@@ -462,6 +463,7 @@ export async function executeDesignDnaJob(
           fetchInstructions,
           markConsumed,
           () => extractionScope,
+          (input) => qualifyCaptureWithLlm(visionLlm, input),
         );
 
         if (!agentResult.ok) {

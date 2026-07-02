@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { AgentObservation } from "../browser-agent-state";
+import type { AgentObservation, CaptureQualification } from "../browser-agent-state";
 
 export const CAPTURE_BUCKET = "design-dna-captures";
 
@@ -26,13 +26,13 @@ function decodeBase64Png(base64: string): Buffer {
   return Buffer.from(raw, "base64");
 }
 
-export async function persistScreenshotCapture(
+export type UploadedCapture = PersistCaptureResult & { captureId: string };
+
+export async function uploadCapturePng(
   supabase: SupabaseClient,
   input: PersistCaptureInput,
-): Promise<PersistCaptureResult> {
+): Promise<UploadedCapture> {
   const captureId = crypto.randomUUID();
-  const pageIndex = input.pageIndex ?? 0;
-  const segmentIndex = input.segmentIndex ?? 0;
   const buffer = decodeBase64Png(input.pngBase64);
   const byteSize = buffer.byteLength;
 
@@ -54,37 +54,73 @@ export async function persistScreenshotCapture(
     throw new Error(`thumb upload failed: ${thumbErr.message}`);
   }
 
-  const label = input.fullPage ? "full-page segment capture" : "viewport capture";
+  return { captureId, storagePath, thumbPath, byteSize };
+}
 
+export async function deleteUploadedCapture(
+  supabase: SupabaseClient,
+  storagePath: string,
+  thumbPath: string,
+): Promise<void> {
+  await supabase.storage.from(CAPTURE_BUCKET).remove([storagePath, thumbPath]);
+}
+
+export async function insertQualifiedCapture(
+  supabase: SupabaseClient,
+  input: PersistCaptureInput,
+  uploaded: UploadedCapture,
+  qualification: CaptureQualification & { notes?: string },
+): Promise<PersistCaptureResult> {
   const { error: insertErr } = await supabase.from("design_dna_captures").insert({
-    id: captureId,
+    id: uploaded.captureId,
     job_id: input.jobId,
     page_url: input.pageUrl,
-    page_index: pageIndex,
-    segment_index: segmentIndex,
+    page_index: input.pageIndex ?? 0,
+    segment_index: input.segmentIndex ?? 0,
     scroll_y: input.scrollY ?? 0,
     viewport_label: input.viewportLabel ?? "desktop",
-    section_type: "unknown",
-    label,
-    confidence: 0,
-    storage_path: storagePath,
-    thumb_path: thumbPath,
-    byte_size: byteSize,
-    meta: { fullPage: input.fullPage === true },
+    section_type: qualification.sectionType,
+    label: qualification.label,
+    confidence: qualification.confidence,
+    storage_path: uploaded.storagePath,
+    thumb_path: uploaded.thumbPath,
+    byte_size: uploaded.byteSize,
+    meta: {
+      fullPage: input.fullPage === true,
+      notes: qualification.notes ?? null,
+    },
   });
   if (insertErr) {
-    await supabase.storage.from(CAPTURE_BUCKET).remove([storagePath, thumbPath]);
+    await deleteUploadedCapture(supabase, uploaded.storagePath, uploaded.thumbPath);
     throw new Error(`capture row insert failed: ${insertErr.message}`);
   }
 
-  return { captureId, storagePath, thumbPath, byteSize };
+  return {
+    captureId: uploaded.captureId,
+    storagePath: uploaded.storagePath,
+    thumbPath: uploaded.thumbPath,
+    byteSize: uploaded.byteSize,
+  };
+}
+
+/** @deprecated use upload + qualify + insertQualifiedCapture */
+export async function persistScreenshotCapture(
+  supabase: SupabaseClient,
+  input: PersistCaptureInput,
+): Promise<PersistCaptureResult> {
+  const uploaded = await uploadCapturePng(supabase, input);
+  return insertQualifiedCapture(supabase, input, uploaded, {
+    sectionType: "unknown",
+    label: input.fullPage ? "full-page segment capture" : "viewport capture",
+    confidence: 0,
+  });
 }
 
 /** Observation shape for agent history — no pixels (law L2). */
 export function captureObservationFromPersist(
   pageUrl: string,
   persisted: PersistCaptureResult,
-  fullPage?: boolean,
+  qualification: CaptureQualification,
 ): AgentObservation {
   return {
     type: "capture",
@@ -93,11 +129,7 @@ export function captureObservationFromPersist(
     storagePath: persisted.storagePath,
     thumbPath: persisted.thumbPath,
     byteSize: persisted.byteSize,
-    qualification: {
-      sectionType: "unknown",
-      label: fullPage ? "full-page segment capture" : "viewport capture",
-      confidence: 0,
-    },
+    qualification,
     timestamp: new Date().toISOString(),
   };
 }
