@@ -8,9 +8,6 @@ type ServerEntry = {
 };
 
 let serverEntryPromise: Promise<ServerEntry> | undefined;
-let inngestHandlerPromise:
-  | Promise<(request: Request) => Promise<Response> | Response>
-  | undefined;
 
 async function getServerEntry(): Promise<ServerEntry> {
   if (!serverEntryPromise) {
@@ -19,13 +16,6 @@ async function getServerEntry(): Promise<ServerEntry> {
     );
   }
   return serverEntryPromise;
-}
-
-async function getInngestHandler(): Promise<(request: Request) => Promise<Response> | Response> {
-  if (!inngestHandlerPromise) {
-    inngestHandlerPromise = import("./inngest/handler").then((m) => m.inngestHandler);
-  }
-  return inngestHandlerPromise;
 }
 
 function brandedErrorResponse(): Response {
@@ -81,8 +71,13 @@ export default {
     try {
       const url = new URL(request.url);
       if (url.pathname === "/api/inngest") {
-        const inngestHandler = await getInngestHandler();
-        return await inngestHandler(request);
+        return new Response(
+          JSON.stringify({
+            error: "inngest_executor_migrated",
+            message: "Executor Inngest roda na VM (connect workers).",
+          }),
+          { status: 410, headers: { "Content-Type": "application/json" } },
+        );
       }
 
       const handler = await getServerEntry();

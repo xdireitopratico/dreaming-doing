@@ -8,9 +8,15 @@ export type ContextWindowPayload = {
   windowTokens?: number;
 };
 
+export type OperationPreferencesPayload = {
+  mode?: "cooperative" | "hotl";
+  hotlWallHours?: 24 | 48 | 72;
+};
+
 export type AgentPreferencesPayload = {
   mode?: "auto" | "robin" | "rob" | "fixed";
   contextWindow?: ContextWindowPayload;
+  operation?: OperationPreferencesPayload;
   poolProvider?: string;
   fixedPresetId?: string;
   robinPoolModelId?: string;

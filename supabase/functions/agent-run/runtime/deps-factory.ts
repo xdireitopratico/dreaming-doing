@@ -16,11 +16,11 @@ import type {
   ToolResult,
 } from "../types.ts";
 import { LoopPhase } from "../types.ts";
+import type { RunOperationMeta } from "../../_shared/agent-contract-operation.ts";
 import {
   bumpLlmRetries,
   maybeEmitSilenceHeartbeat,
   pauseOperationForUser,
-  platformLimitExceeded,
   resetLlmRetries,
   touchHeartbeat,
   type OperationPauseResult,
@@ -166,6 +166,8 @@ export type AgentLoopHost = {
   onActivity: () => void;
   getPlanLlmResponseWasStreamed: () => boolean;
   setPlanLlmResponseWasStreamed: (value: boolean) => void;
+  getRunOperationMeta: () => RunOperationMeta;
+  platformLimitExceeded: () => boolean;
 };
 
 export type AgentLoopDepsContext = {
@@ -285,6 +287,8 @@ export type AgentLoopDepsContext = {
   onActivity: () => void;
   getPlanLlmResponseWasStreamed: () => boolean;
   setPlanLlmResponseWasStreamed: (value: boolean) => void;
+  getRunOperationMeta: () => RunOperationMeta;
+  platformLimitExceeded: () => boolean;
 };
 
 export function buildPersistDeps(ctx: AgentLoopDepsContext): AgentPersistDeps {
@@ -407,6 +411,7 @@ export function buildExecuteDeps(
     ensureOpeningBeforeWork: ctx.ensureOpeningBeforeWork,
     narrationBuffer: ctx.narrationBuffer,
     emit: ctx.emit,
+    getRunOperationMeta: ctx.getRunOperationMeta,
     platformLimitExceeded: ctx.platformLimitExceeded,
     pauseOperationForUser: ctx.pauseOperationForUser,
     runDesignPreflightIfNeeded:
@@ -450,6 +455,7 @@ export function buildPlanTurnDeps(ctx: AgentLoopDepsContext, skillPrompt: string
     toolDefinitions: ctx.reg.getDefinitions(),
     streamState: ctx.planStreamState,
     compressMessages: ctx.compressMessages,
+    getRunOperationMeta: ctx.getRunOperationMeta,
     platformLimitExceeded: ctx.platformLimitExceeded,
     pauseOperationForUser: ctx.pauseOperationForUser,
     saveCheckpoint: (phase) => ctx.saveCheckpoint(phase),
@@ -505,7 +511,8 @@ export function createDepsContext(
     ensureOpeningBeforeWork: (fallback) => host.ensureOpeningBeforeWork(fallback),
     emit: (type, data) => host.emit(type, data),
     configuredModel: () => host.configuredModel(),
-    platformLimitExceeded: () => platformLimitExceeded({ invocationStartedAt }),
+    getRunOperationMeta: () => host.getRunOperationMeta(),
+    platformLimitExceeded: () => host.platformLimitExceeded(),
     pauseOperationForUser: (input) =>
       pauseOperationForUser(
         {

@@ -31,6 +31,10 @@ import { extractOriginalUserRequest, resolveAllocateSandbox } from "./run-contex
 import { resolveInngestEventKey, resolveInngestEventUrl } from "../_shared/inngest-event-url.ts";
 import { transitionRun } from "../_shared/run-lifecycle.ts";
 import type { AgentRunStatus } from "../_shared/agent-contract-events.ts";
+import {
+  parseOperationPreferences,
+  snapshotOperation,
+} from "../_shared/agent-contract-operation.ts";
 
 import { capMetaSize as capAgentRunMeta } from "./runtime/loop-config.ts";
 
@@ -754,6 +758,9 @@ Deno.serve(async (req) => {
         }
       }
 
+      const operationPrefs = parseOperationPreferences(
+        (preferences as Record<string, unknown> | undefined)?.operation,
+      );
       const runMetaBase = {
         provider: mainCfg.label,
         model: mainCfg.model,
@@ -765,6 +772,7 @@ Deno.serve(async (req) => {
         preferences: preferences ?? {},
         enabledSkillIds,
         enabledMcpIds,
+        ...(!resumeRun ? { operation: snapshotOperation(operationPrefs) } : {}),
       };
 
       let agentRunId: string | null = null;
@@ -784,11 +792,13 @@ Deno.serve(async (req) => {
           agentRunId = existingRun.id;
           const prevMeta = (existingRun.meta ?? {}) as Record<string, unknown>;
           await transitionRun(supabase, agentRunId as string, "running", {
+            resume: true,
             error: null,
             meta: {
               ...prevMeta,
               ...runMetaBase,
               resumedAt: new Date().toISOString(),
+              awaitingUser: null,
             },
           });
         }

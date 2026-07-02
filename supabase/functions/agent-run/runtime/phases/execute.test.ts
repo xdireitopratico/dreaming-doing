@@ -128,6 +128,12 @@ function buildStubbedExecuteDeps(overrides?: {
     narrationPhase: narration,
     narrationBuffer: "",
     emit: (type, data) => events.push({ type, data: data as Record<string, unknown> }),
+    getRunOperationMeta: () => ({
+      mode: "cooperative" as const,
+      startedAt: new Date().toISOString(),
+      wallMs: 60 * 60 * 1000,
+      reportOnExit: false,
+    }),
     platformLimitExceeded: () => false,
     pauseOperationForUser: async (input) => {
       const text = input.message.trim() || "Pausado — continue quando estiver pronto.";

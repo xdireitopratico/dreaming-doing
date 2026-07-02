@@ -45,6 +45,7 @@ supabase/.temp
 # Secrets locais
 .env
 .env.local
+infra/vm/.env
 .env.debug
 
 # Deno lockfile (muitas vezes ruidoso em projetos mistos Bun + Deno/Supabase)

@@ -29,13 +29,21 @@ export function resolveJobScopedSandboxId(
   return id;
 }
 
+/** E2B sandbox lifetime — aligned to operation wall (cooperative 60min / HOTL). */
+export function e2bSandboxTimeoutSeconds(wallMs: number): number {
+  const sec = Math.floor(wallMs / 1000);
+  return Math.min(Math.max(sec, 3600), 7200);
+}
+
 export async function ensureDesignDnaSandbox(
   supabase: SupabaseClient,
   userId: string,
   e2bApiKey: string,
   jobId: string,
   existingSandboxId?: string | null,
+  options?: { wallMs?: number },
 ): Promise<SandboxConnectResult> {
+  const sandboxTimeout = e2bSandboxTimeoutSeconds(options?.wallMs ?? 60 * 60 * 1000);
   const scopedId = resolveJobScopedSandboxId(jobId, existingSandboxId);
 
   if (scopedId) {
@@ -64,7 +72,7 @@ export async function ensureDesignDnaSandbox(
     signal: AbortSignal.timeout(30_000),
     body: JSON.stringify({
       templateID: E2B_TEMPLATE_ID,
-      timeout: 900,
+      timeout: sandboxTimeout,
       autoPause: true,
       autoPauseMemory: true,
       autoResume: { enabled: true },

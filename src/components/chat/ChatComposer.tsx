@@ -7,7 +7,7 @@ import {
   type DragEvent,
   type KeyboardEvent,
 } from "react";
-import { ArrowUp, FileText, ImageIcon, MousePointer2, Plus, Square, X } from "lucide-react";
+import { ArrowUp, FileText, ImageIcon, MousePointer2, Square, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MicButton } from "@/components/voice/MicButton";
 import { ComposerModeSelect } from "@/components/editor/ComposerModeSelect";
@@ -19,6 +19,7 @@ import {
   type StoredMessagePart,
 } from "@/lib/chat-attachments";
 import { enableSkillLocal } from "@/lib/agent-extensions-prefs";
+import { ComposerMorePopover } from "@/components/chat/ComposerMorePopover";
 import { ContextWindowIndicator } from "@/components/chat/ContextWindowIndicator";
 import type { AgentProgress } from "@/lib/agent-progress";
 
@@ -55,6 +56,8 @@ type ChatComposerProps = {
   onExternalPromptConsumed?: () => void;
   contextUsage?: AgentProgress["contextUsage"];
   activeRunId?: string | null;
+  /** false = botão + abre seletor de arquivo direto (legado). */
+  useMorePopover?: boolean;
 };
 
 export function ChatComposer({
@@ -74,6 +77,7 @@ export function ChatComposer({
   onExternalPromptConsumed,
   contextUsage,
   activeRunId,
+  useMorePopover = true,
 }: ChatComposerProps) {
   const [text, setText] = useState(() => {
     try {
@@ -369,15 +373,19 @@ export function ChatComposer({
 
       <div className="forge-composer-row">
         <div className="forge-composer-row-start">
-          <button
-            type="button"
-            className="forge-composer-add"
-            title="Anexar"
-            aria-label="Anexar"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Plus className="size-4" />
-          </button>
+          {useMorePopover ? (
+            <ComposerMorePopover onAttachFiles={() => fileInputRef.current?.click()} />
+          ) : (
+            <button
+              type="button"
+              className="forge-composer-add"
+              title="Anexar"
+              aria-label="Anexar"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <ImageIcon className="size-4" />
+            </button>
+          )}
 
           <ContextWindowIndicator
             contextUsage={contextUsage}

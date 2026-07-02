@@ -31,6 +31,11 @@ import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { loadCheckpoint } from "./checkpoint.ts";
 import { buildSandboxEnv } from "./sandbox-env.ts";
 import { remainingPlatformMs } from "./runtime/platform-deadline.ts";
+import {
+  parseOperationPreferences,
+  parseRunOperationMeta,
+  snapshotOperation,
+} from "../_shared/agent-contract-operation.ts";
 import { AGENT_MAX_STEPS } from "./runtime/loop-config.ts";
 import { buildDesignDirectiveBlock } from "./design-directive.ts";
 import {
@@ -308,6 +313,12 @@ export async function executeAgentJob(
   const loadedCheckpoint = resumeRun
     ? await loadCheckpoint(supabase, projectId, conversationId)
     : null;
+  const runOperationMeta =
+    parseRunOperationMeta(preMeta.operation) ??
+    snapshotOperation(
+      parseOperationPreferences(effectivePreferences?.operation),
+      loadedCheckpoint?.operation?.operationStartedAt,
+    );
 
   type SessionKind = "taste_start" | "byok";
   let sessionKind: SessionKind = "byok";
@@ -567,6 +578,7 @@ export async function executeAgentJob(
           smokeRun: isSmokeRun,
           compactRequested,
           operationSnapshot: loadedCheckpoint?.operation,
+          runOperationMeta,
         },
   });
 

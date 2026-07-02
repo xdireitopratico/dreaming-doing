@@ -8,7 +8,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./events": "./src/events.ts",
-    "./lifecycle": "./src/lifecycle.ts"
+    "./lifecycle": "./src/lifecycle.ts",
+    "./operation": "./src/operation.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

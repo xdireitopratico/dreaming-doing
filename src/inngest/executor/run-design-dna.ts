@@ -29,8 +29,15 @@ import { runBrowserAgent, createDefaultCdpTools } from "./browser-agent-runner";
 import { runAgentPlanningStep } from "./browser-agent-llm";
 import { synthesizeDesignDNA } from "./browser-agent-synthesis";
 import type { BrowserAgentContext, BrowserAgentStep } from "./browser-agent-state";
+import {
+  COOPERATIVE_WALL_MS,
+  operationWallExceeded,
+  parseRunOperationMeta,
+  remainingOperationMs,
+  type RunOperationMeta,
+} from "@/lib/agent-operation-contract";
 
-const LOOP_BUDGET_MS = 270_000;
+const OPERATION_RESUME_BUFFER_MS = 120_000;
 
 export async function executeDesignDnaJob(
   supabase: SupabaseClient,
@@ -123,6 +130,13 @@ export async function executeDesignDnaJob(
       ? currentMeta.ingestKind.trim()
       : "production";
   currentMeta.ingestKind = ingestKind;
+  const operationMeta: RunOperationMeta =
+    parseRunOperationMeta(currentMeta.operation) ?? {
+      mode: "cooperative",
+      startedAt: new Date(startMs).toISOString(),
+      wallMs: COOPERATIVE_WALL_MS,
+      reportOnExit: false,
+    };
   const isDeep = depth === "deep";
   let sandboxId = "";
   let sandboxAccessToken: string | null = null;
@@ -232,6 +246,7 @@ export async function executeDesignDnaJob(
       e2bApiKey,
       jobId,
       job?.sandbox_id,
+      { wallMs: operationMeta.wallMs },
     );
     sandboxId = sb.sandboxId;
     sandboxAccessToken = sb.accessToken;
@@ -254,8 +269,34 @@ export async function executeDesignDnaJob(
   }
 
   for (let i = startIndex; i < urls.length; i++) {
-    const budgetElapsed = Date.now() - startMs;
-    if (budgetElapsed > LOOP_BUDGET_MS * 0.8) {
+    if (operationWallExceeded(operationMeta)) {
+      const errorRecord = {
+        scope: "job",
+        error: "Operation wall exceeded",
+        code: "operation_wall",
+      };
+      errors.push(errorRecord);
+      await appendJobEvent(supabase, jobId, "capability_error", errorRecord);
+      await saveJobCheckpoint(supabase, jobId, {
+        currentUrlIndex: i,
+        results,
+        errors,
+        blockedCount,
+        libraryPersistedCount,
+      });
+      return {
+        ok: false,
+        status: "failed",
+        jobId,
+        resumable: false,
+        canceled: false,
+        error: "Operation wall exceeded",
+        urlsCompleted: results.length,
+        durationMs: Date.now() - startMs,
+      };
+    }
+
+    if (remainingOperationMs(operationMeta) < OPERATION_RESUME_BUFFER_MS) {
       await saveJobCheckpoint(supabase, jobId, {
         currentUrlIndex: i,
         results,
@@ -269,7 +310,7 @@ export async function executeDesignDnaJob(
         jobId,
         resumable: true,
         canceled: false,
-        error: "loop budget exhausted",
+        error: "operation wall nearly exhausted — resume to continue",
         urlsCompleted: results.length,
         durationMs: Date.now() - startMs,
       };
@@ -370,7 +411,7 @@ export async function executeDesignDnaJob(
           screenshots: agentResult.steps
             .filter((s) => s.observation.screenshot)
             .map((s) => s.observation.screenshot as string),
-          providerTrace: [`llm:${llm.label}`, "cdp:browser-agent"],
+          providerTrace: [`llm:${llm.label}`, "cdp:sandbox-playwright"],
           confidence: 90,
           notes: [
             `Browser agent completed ${agentResult.steps.length} steps`,

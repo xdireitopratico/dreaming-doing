@@ -11,7 +11,7 @@ import {
 import { getPresetById } from "@/lib/model-catalog";
 import { postAgentRun } from "@/hooks/agent-run/agent-run-connect";
 import { Switch } from "@/components/ui/switch";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ForgePopoverShell } from "@/components/chat/ForgePopoverShell";
 
 type ContextUsage =
   | {
@@ -136,8 +136,11 @@ export function ContextWindowIndicator({
   }, [activeRunId, persistPrefs, prefs.mode, prefs.windowTokens, running]);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
+    <ForgePopoverShell
+      open={open}
+      onOpenChange={setOpen}
+      widthClassName="w-[152px]"
+      trigger={
         <button
           type="button"
           className="forge-composer-context-window"
@@ -172,16 +175,9 @@ export function ContextWindowIndicator({
             </span>
           )}
         </button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        side="top"
-        sideOffset={8}
-        className="w-[152px] border border-[var(--border-forge)]/70 bg-transparent p-0 shadow-none"
-        onOpenAutoFocus={(event) => event.preventDefault()}
-      >
-        <div className="rounded-[11px] border border-[var(--forge-border-strong,rgba(237,239,242,0.14))] bg-[linear-gradient(135deg,#1a1e27,#0b0d12)] p-1 shadow-[0_12px_30px_rgba(0,0,0,0.38),0_0_0_1px_rgba(255,182,39,0.04)_inset] backdrop-blur-[18px] backdrop-saturate-[140%]">
-          <div className="grid gap-[3px]">
+      }
+    >
+      <div className="grid gap-[3px]">
             <div className="grid grid-cols-[minmax(0,1.25fr)_minmax(0,0.95fr)] gap-1">
               <div className="min-w-0">
                 <label
@@ -272,8 +268,6 @@ export function ContextWindowIndicator({
               </button>
             </div>
           </div>
-        </div>
-      </PopoverContent>
-    </Popover>
+    </ForgePopoverShell>
   );
 }

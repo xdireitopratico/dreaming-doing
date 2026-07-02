@@ -2,12 +2,17 @@
 import type { ChatMessage, LoopPhase } from "../types.ts";
 import type { CanonicalBuildSession } from "./build-session.ts";
 import { transitionRun } from "../../_shared/run-lifecycle.ts";
+import { operationWallExceeded } from "../../_shared/agent-contract-operation.ts";
+import type { RunOperationMeta } from "../../_shared/agent-contract-operation.ts";
 import { platformDeadlineExceeded } from "./platform-deadline.ts";
 
 export const MAX_LLM_RETRIES = 3;
 export const SILENCE_HEARTBEAT_MS = 90_000;
 
-export type PauseReason = "llm_exhausted" | "platform_limit" | "step_limit" | "llm_error";
+export type PauseReason = "llm_exhausted" | "operation_wall" | "step_limit" | "llm_error";
+
+/** @deprecated Use operation_wall — legado de mensagens/UI antigas. */
+export const LEGACY_PLATFORM_LIMIT_REASON = "platform_limit" as const;
 
 export type OperationPauseResult = {
   ok: false;
@@ -38,10 +43,16 @@ export type RunInfraDeps = {
   persistFinal?: (summary: string, opts?: { lastFinishOk?: boolean; finished?: boolean }) => Promise<void>;
 };
 
+/** Teto de invocação Inngest (~14min) — transporte, não decisor de produto. */
 export function platformLimitExceeded(
   deps: Pick<RunInfraDeps, "invocationStartedAt">,
 ): boolean {
   return platformDeadlineExceeded(deps.invocationStartedAt);
+}
+
+/** Teto da operação (cooperative 60min | HOTL 24/48/72h) — decisor de produto. */
+export function operationLimitExceeded(runOperation: RunOperationMeta): boolean {
+  return operationWallExceeded(runOperation);
 }
 
 export async function touchHeartbeat(deps: RunInfraDeps): Promise<void> {

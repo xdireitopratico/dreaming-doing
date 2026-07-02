@@ -1,7 +1,7 @@
 // closure-paths.test.ts — Table-driven AC1: todo exit de execute.ts emite assistant_text + persistFinal.
 //
 // Inventário de exits (execute.ts):
-//   platform_limit | canceled | preflight_terminal | llm_fail_fast | llm_error_pause
+//   operation_wall | canceled | preflight_terminal | llm_fail_fast | llm_error_pause
 //   llm_retries_exhausted | zero_writes_resumable | clarify | tool_miss_terminal
 //   canceled_mid_loop | max_steps_resumable | final_gate_failed | final_gate_budget
 //   success_summarize
@@ -139,6 +139,12 @@ function makeMinimalDeps(overrides: Partial<BuildExecuteDeps> = {}): BuildExecut
       persistCalls.push({ s: message, o: { lastFinishOk: true } });
       return { ok: true, summary: message, steps: 0, toolsUsed: [] };
     },
+    getRunOperationMeta: () => ({
+      mode: "cooperative" as const,
+      startedAt: new Date().toISOString(),
+      wallMs: 60 * 60 * 1000,
+      reportOnExit: false,
+    }),
     platformLimitExceeded: () => false,
     requiresFinalBuildGate: () => false,
     bumpLlmRetries: async () => 0,
@@ -176,7 +182,7 @@ type ClosureCase = {
 
 const cases: ClosureCase[] = [
   {
-    name: "platform_limit",
+    name: "operation_wall",
     setup: (deps) => {
       deps.platformLimitExceeded = () => true;
     },

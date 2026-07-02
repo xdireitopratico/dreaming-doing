@@ -87,6 +87,8 @@ import {
   touchedPathsIncludeSrc,
 } from "../validation-policy.ts";
 import { classifyLlmLoopRetrial } from "../retrial-policy.ts";
+import type { RunOperationMeta } from "../../../_shared/agent-contract-operation.ts";
+import { appendHotlReport, hotlWallIsTerminal } from "../operation-report.ts";
 
 export type BuildExecuteDeps = {
   robinActive: boolean;
@@ -131,6 +133,7 @@ export type BuildExecuteDeps = {
   narrationPhase?: NarrationPhase;
   narrationBuffer: string;
   emit: PlanTurnEmit;
+  getRunOperationMeta: () => RunOperationMeta;
   platformLimitExceeded: () => boolean;
   pauseOperationForUser: (input: {
     reason: PauseReason;
@@ -326,9 +329,16 @@ async function emitClosingAndPersist(
 ): Promise<PlanTurnRunResult> {
   const instruction = opts.instruction ?? deps.originalUserRequest;
   const history = deps.state.messages;
-  const finalText = (opts.closing ?? "").trim() ||
+  const baseText = (opts.closing ?? "").trim() ||
     forceFinalClosing(deps, instruction, history, opts.error);
   const ok = opts.ok === true;
+  const reportKind = opts.canceled ? "error" : ok ? "exit" : "error";
+  const finalText = appendHotlReport(baseText, deps.getRunOperationMeta(), {
+    kind: reportKind,
+    summary: baseText,
+    steps: loopStep,
+    touchedPaths: [...deps.touchedPaths],
+  });
   await emitTerminalUserMessage(deps, finalText, true, ok, true, {
     buildFailed: opts.buildFailed,
   });
@@ -360,12 +370,18 @@ async function emitTerminalBuildFailure(
   loopStep: number,
   message: string,
 ): Promise<PlanTurnRunResult> {
-  const text = message.trim() || ensureUserMessage(
+  const base = message.trim() || ensureUserMessage(
     deps.state.messages,
     [...deps.touchedPaths],
     deps.originalUserRequest,
     message,
   );
+  const text = appendHotlReport(base, deps.getRunOperationMeta(), {
+    kind: "error",
+    summary: base,
+    steps: loopStep,
+    touchedPaths: [...deps.touchedPaths],
+  });
   await emitTerminalUserMessage(deps, text, true, false, true, { buildFailed: true });
   const session = deps.getBuildSession();
   if (session) {
@@ -519,9 +535,24 @@ export async function runBuildExecutePhase(
           touchedPaths: [...deps.touchedPaths],
           userRequest: deps.originalUserRequest,
         }).catch(() => "");
+        const message = prose || "Limite de tempo da operação — continue quando estiver pronto.";
+        const meta = deps.getRunOperationMeta();
+        if (hotlWallIsTerminal(meta)) {
+          const closing = appendHotlReport(message, meta, {
+            kind: "timeout",
+            summary: message,
+            steps: loopStep,
+            touchedPaths: [...deps.touchedPaths],
+          });
+          return emitClosingAndPersist(deps, loopStep, {
+            closing,
+            ok: false,
+            error: "Timeout da operação",
+          });
+        }
         return deps.pauseOperationForUser({
-          reason: "platform_limit",
-          message: prose || "Limite de tempo da plataforma — continue quando estiver pronto.",
+          reason: "operation_wall",
+          message,
           steps: loopStep,
           toolsUsed: deps.toolsUsed,
         });
@@ -1303,9 +1334,26 @@ export async function runBuildExecutePhase(
     }
 
     if (deps.platformLimitExceeded()) {
+      const message =
+        "Limite de tempo da operação com build pendente — continue quando estiver pronto.";
+      const meta = deps.getRunOperationMeta();
+      if (hotlWallIsTerminal(meta)) {
+        const closing = appendHotlReport(message, meta, {
+          kind: "timeout",
+          summary: message,
+          steps: loopStep,
+          touchedPaths: [...deps.touchedPaths],
+        });
+        return emitClosingAndPersist(deps, loopStep, {
+          closing,
+          ok: false,
+          error: "Timeout da operação",
+          buildFailed: true,
+        });
+      }
       return deps.pauseOperationForUser({
-        reason: "platform_limit",
-        message: "Limite de tempo da plataforma com build pendente — continue quando estiver pronto.",
+        reason: "operation_wall",
+        message,
         steps: loopStep,
         toolsUsed: deps.toolsUsed,
       });
@@ -1348,6 +1396,12 @@ export async function runBuildExecutePhase(
   if (!finalClosing) {
     finalClosing = forceFinalClosing(deps, deps.originalUserRequest, deps.state.messages);
   }
+  finalClosing = appendHotlReport(finalClosing, deps.getRunOperationMeta(), {
+    kind: "exit",
+    summary: finalClosing,
+    steps: loopStep,
+    touchedPaths: [...deps.touchedPaths],
+  });
   deps.emit("assistant_text", {
     text: finalClosing,
     append: false,

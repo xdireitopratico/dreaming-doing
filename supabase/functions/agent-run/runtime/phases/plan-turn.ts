@@ -37,6 +37,8 @@ import type {
 import { LoopPhase } from "../../types.ts";
 import { enrichProposedPlanDesign } from "../../plan-design-enrich.ts";
 import type { OperationPauseResult, PauseReason } from "../infra.ts";
+import type { RunOperationMeta } from "../../../_shared/agent-contract-operation.ts";
+import { appendHotlReport, hotlWallIsTerminal } from "../operation-report.ts";
 
 export const MAX_PLAN_EXPLORE = 10;
 
@@ -384,6 +386,7 @@ export type PlanTurnDeps = PlanTurnFinishDeps & {
   toolDefinitions: ToolDefinition[];
   streamState: PlanModeStreamState;
   compressMessages: (messages: ChatMessage[]) => Promise<ChatMessage[]>;
+  getRunOperationMeta: () => RunOperationMeta;
   platformLimitExceeded: () => boolean;
   pauseOperationForUser: (input: {
     reason: PauseReason;
@@ -437,9 +440,20 @@ export async function runPlanModeAgentTurn(
 
   for (let step = 0; step < MAX_PLAN_EXPLORE; step++) {
     if (deps.platformLimitExceeded()) {
+      const message = "Limite de tempo da operação — continue o plano quando estiver pronto.";
+      const meta = deps.getRunOperationMeta();
+      if (hotlWallIsTerminal(meta)) {
+        const closing = appendHotlReport(message, meta, {
+          kind: "timeout",
+          summary: message,
+          steps: step,
+          touchedPaths: [],
+        });
+        return finishPlanModeFailure(finishDeps, closing, step, [...toolsUsed], "Timeout da operação");
+      }
       return deps.pauseOperationForUser({
-        reason: "platform_limit",
-        message: "Limite de tempo da plataforma — continue o plano quando estiver pronto.",
+        reason: "operation_wall",
+        message,
         steps: step,
         toolsUsed,
       });

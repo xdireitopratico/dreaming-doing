@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { markPendingAgentRun } from "@/lib/agent-auto-run";
 import { createProjectFromPrompt } from "@/lib/projects.functions";
 import { bootstrapComposerMode } from "@/lib/composer-mode";
+import { HotlOperationControl } from "@/components/chat/HotlOperationControl";
 
 import { sanitizeNext } from "@/lib/sanitize-next";
 import { MicButton } from "@/components/voice/MicButton";
@@ -177,30 +178,37 @@ export function PromptEngine({
         />
 
         <div className="mt-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-1.5 text-[var(--text-dim)]">
-            <button
-              type="button"
-              data-cursor="hover"
-              onClick={() => setModel((m) => (m === "forge-1" ? "forge-pro" : "forge-1"))}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-mono tracking-[0.15em] uppercase hover:bg-white/5 hover:text-[var(--foreground)] transition-colors"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--primary)]" />
-              {model}
-            </button>
-            <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-mono tracking-[0.15em] uppercase text-[var(--text-ghost)]">
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 text-[var(--text-dim)]">
+              <button
+                type="button"
+                data-cursor="hover"
+                onClick={() => setModel((m) => (m === "forge-1" ? "forge-pro" : "forge-1"))}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-mono tracking-[0.15em] uppercase hover:bg-white/5 hover:text-[var(--foreground)] transition-colors"
               >
-                <circle cx="12" cy="12" r="10" />
-                <path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20" />
-              </svg>
-              Public
-            </span>
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--primary)]" />
+                {model}
+              </button>
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-mono tracking-[0.15em] uppercase text-[var(--text-ghost)]">
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20" />
+                </svg>
+                Public
+              </span>
+            </div>
+            {projectKind === "agent" && (
+              <div className="min-w-[200px] max-w-[280px] flex-1">
+                <HotlOperationControl layout="inline" />
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2">

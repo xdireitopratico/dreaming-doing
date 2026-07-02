@@ -28,6 +28,10 @@ import { appendStreamEvent } from "../_shared/agent-stream.ts";
 import { ensureTerminalRunMessage } from "../_shared/ensure-terminal-message.ts";
 import { transitionRun } from "../_shared/run-lifecycle.ts";
 import type { AgentRunStatus } from "../_shared/agent-contract-events.ts";
+import {
+  parseOperationPreferences,
+  snapshotOperation,
+} from "../_shared/agent-contract-operation.ts";
 
 function executorRunMode(planMode: boolean, chatMode: boolean): "plan" | "build" | "chat" {
   if (chatMode) return "chat";
@@ -330,6 +334,9 @@ export async function executeAgentRun(
   });
 
   // Build runMetaBase + update run
+  const operationPrefs = parseOperationPreferences(
+    (effectivePreferences as Record<string, unknown> | undefined)?.operation,
+  );
   const runMetaBase = {
     provider: mainCfg.label,
     model: mainCfg.model,
@@ -341,6 +348,7 @@ export async function executeAgentRun(
     preferences: effectivePreferences ?? {},
     enabledSkillIds: effectiveSkillIds,
     enabledMcpIds: effectiveMcpIds,
+    ...(!resumeRun ? { operation: snapshotOperation(operationPrefs) } : {}),
   };
   const { data: currentRun } = await supabase
     .from("agent_runs")

@@ -1,8 +1,8 @@
 /**
- * browser-cdp-websocket — WebSocket CDP client for E2B Chromium sandbox.
+ * browser-cdp-websocket — LEGACY external CDP client (not used in DEEP production).
  *
- * Connects to wss://9222-<sandboxId>.e2b.app/ and attaches to a page target
- * via Target.attachToTarget (flatten) — required for Page.* / Runtime.* (G4).
+ * DEEP uses sandbox-cdp-driver.py via runInSandbox (localhost CDP). Kept for unit
+ * tests of flatten helpers and optional future external-CDP experiments.
  */
 
 import { errorMessage } from "@/lib/error-utils";

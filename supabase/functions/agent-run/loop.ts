@@ -35,7 +35,12 @@ import { emitLoopFsmTransition } from "./runtime/loop-fsm.ts";
 import { notifyLoopStatusFromHost } from "./runtime/loop-notify.ts";
 import { RuntimeEmitter, type StreamCallback } from "./runtime/emitter.ts";
 import { createLoopBindings, type AgentLoopHost, type LoopBindings } from "./runtime/deps-factory.ts";
-import { isRunCanceled, platformLimitExceeded } from "./runtime/infra.ts";
+import {
+  parseOperationPreferences,
+  snapshotOperation,
+  type RunOperationMeta,
+} from "../_shared/agent-contract-operation.ts";
+import { isRunCanceled, operationLimitExceeded } from "./runtime/infra.ts";
 import { runLlmChatForHost, type LlmChatHost } from "./runtime/llm-chat.ts";
 import { runDesignPreflightIfNeeded as runDesignPreflightIfNeededPhase } from "./runtime/phases/design-preflight-phase.ts";
 import { attemptGracefulClosingForHost } from "./runtime/phases/graceful-closing-host.ts";
@@ -131,6 +136,7 @@ export class AgentLoop {
   private connectorKeys: Record<string, string>;
   /** Últimas skills emitidas — evita repetir o mesmo evento skills em runs subsequentes. */
   private lastEmittedSkills: string[] | null = null;
+  private runOperationMeta: RunOperationMeta;
   private bindings!: LoopBindings;
 
   get narrationBuffer(): string {
@@ -191,6 +197,12 @@ export class AgentLoop {
         this.mutable.buildSession = opSnap.buildSession;
       }
     }
+    this.runOperationMeta =
+      options?.runOperationMeta ??
+      snapshotOperation(
+        parseOperationPreferences(this.preferences?.operation),
+        opSnap?.operationStartedAt ?? this.mutable.operationStartedAt,
+      );
     this.buildFixResume = options?.buildFixResume ?? false;
     this.smokeRun = options?.smokeRun ?? false;
     if (options?.hasCheckpoint) {
@@ -279,6 +291,8 @@ export class AgentLoop {
       onActivity: () => this.onActivity(),
       getPlanLlmResponseWasStreamed: () => this.getPlanLlmResponseWasStreamed(),
       setPlanLlmResponseWasStreamed: (value) => this.setPlanLlmResponseWasStreamed(value),
+      getRunOperationMeta: () => this.runOperationMeta,
+      platformLimitExceeded: () => this.platformLimitExceeded(),
     };
   }
 
@@ -308,7 +322,7 @@ export class AgentLoop {
   }
 
   private platformLimitExceeded(): boolean {
-    return platformLimitExceeded({ invocationStartedAt: this.runStartTime });
+    return operationLimitExceeded(this.runOperationMeta);
   }
 
   private requiresFinalBuildGate(): boolean {

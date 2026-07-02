@@ -14,7 +14,7 @@ export const designDnaExtractFunction = inngest.createFunction(
     name: "Design-DNA: Extract",
     retries: 0,
     concurrency: { limit: 3 },
-    timeouts: { finish: "14m" },
+    timeouts: { finish: "60m" },
     triggers: [{ event: "design-dna/extract.requested" }],
     onFailure: async ({ error, event }) => {
       const sb = getSupabaseAdmin();

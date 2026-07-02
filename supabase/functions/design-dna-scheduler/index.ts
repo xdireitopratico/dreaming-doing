@@ -4,6 +4,10 @@ import {
   resolveExtractionCapabilities,
   type ExtractionDepth,
 } from "../_shared/resolve-extraction-capabilities.ts";
+import {
+  parseOperationPreferences,
+  snapshotOperation,
+} from "../_shared/agent-contract-operation.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": forgeOrigin(),
@@ -215,6 +219,21 @@ async function handleSchedule(
     })
     .in("status", ["pending", "running"]);
 
+  let operationMeta = snapshotOperation(parseOperationPreferences(undefined));
+  if (userId) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("agent_preferences")
+      .eq("id", userId)
+      .maybeSingle();
+    const rawPrefs = (profile as { agent_preferences?: unknown } | null)?.agent_preferences;
+    const opRaw =
+      rawPrefs && typeof rawPrefs === "object" && !Array.isArray(rawPrefs)
+        ? (rawPrefs as Record<string, unknown>).operation
+        : undefined;
+    operationMeta = snapshotOperation(parseOperationPreferences(opRaw));
+  }
+
   // Cria job na tabela (via service_role client)
   const { data: job, error: insertError } = await supabase
     .from("design_dna_jobs")
@@ -227,7 +246,7 @@ async function handleSchedule(
       current_url_index: 0,
       results: [],
       errors: [],
-      meta: { ingestKind },
+      meta: { ingestKind, operation: operationMeta },
     })
     .select("id")
     .single();

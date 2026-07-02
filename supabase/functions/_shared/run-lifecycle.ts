@@ -31,17 +31,22 @@ export async function transitionRun(
     .maybeSingle();
 
   const from = (row?.status as AgentRunStatus | undefined) ?? "pending";
-  if (!canTransitionRunStatus(from, to)) {
+  const resume = extras.resume === true;
+  const { resume: _resumeFlag, ...transitionExtras } = extras;
+  if (!canTransitionRunStatus(from, to, { resume })) {
     return { ok: false, skipped: true, from, to };
   }
 
-  const { columns, metaDelta } = partitionRunExtras(extras);
+  const { columns, metaDelta } = partitionRunExtras(transitionExtras);
   const patch: Record<string, unknown> = { status: to, ...columns };
 
   if (shouldSetFinishedAt(to)) {
     patch.finished_at = new Date().toISOString();
   }
-  if (to === "awaiting_user" || (to === "running" && from === "failed")) {
+  if (
+    to === "awaiting_user" ||
+    (to === "running" && (from === "failed" || from === "awaiting_user"))
+  ) {
     patch.finished_at = null;
   }
 

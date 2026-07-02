@@ -12,6 +12,11 @@ type ContextWindowPayload = {
   windowTokens?: number;
 };
 
+type OperationPreferencesPayload = {
+  mode?: "cooperative" | "hotl";
+  hotlWallHours?: 24 | 48 | 72;
+};
+
 function normalizeUserModelEntries(raw: Record<string, unknown>): UserModelEntry[] | undefined {
   const fromField = Array.isArray(raw.userModelEntries)
     ? raw.userModelEntries
@@ -67,6 +72,7 @@ export function normalizeAgentPreferences(
     webScrapeFallback: typeof r.webScrapeFallback === "string" ? r.webScrapeFallback : undefined,
     browserFallback: typeof r.browserFallback === "string" ? r.browserFallback : undefined,
     contextWindow: normalizeContextWindow(r.contextWindow),
+    operation: normalizeOperationPreferences(r.operation),
   };
 
   return Object.values(normalized).some((value) => {
@@ -75,6 +81,21 @@ export function normalizeAgentPreferences(
   })
     ? normalized
     : undefined;
+}
+
+function normalizeOperationPreferences(raw: unknown): OperationPreferencesPayload | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  const mode = r.mode === "hotl" ? "hotl" : r.mode === "cooperative" ? "cooperative" : undefined;
+  const hotlWallHours =
+    r.hotlWallHours === 24 || r.hotlWallHours === 48 || r.hotlWallHours === 72
+      ? r.hotlWallHours
+      : undefined;
+  if (!mode && !hotlWallHours) return undefined;
+  return {
+    mode: mode ?? "cooperative",
+    ...(mode === "hotl" ? { hotlWallHours: hotlWallHours ?? 24 } : {}),
+  };
 }
 
 function normalizeContextWindow(raw: unknown): ContextWindowPayload | undefined {

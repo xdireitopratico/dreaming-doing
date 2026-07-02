@@ -27,8 +27,9 @@ describe("canTransitionRunStatus", () => {
     expect(canTransitionRunStatus("running", "awaiting_user")).toBe(true);
   });
 
-  it("não reverte awaiting_user → running (nova run no dispatch)", () => {
+  it("awaiting_user → running só com resume explícito", () => {
     expect(canTransitionRunStatus("awaiting_user", "running")).toBe(false);
+    expect(canTransitionRunStatus("awaiting_user", "running", { resume: true })).toBe(true);
   });
 
   it("não reverte completed → running", () => {

@@ -327,7 +327,7 @@ async function main() {
     if (finalStatus !== "completed" && finalStatus !== "failed") {
       if (strictInngest) {
         throw new Error(
-          `Inngest worker não processou em ${workerWaitMs}ms (status=${finalStatus}) — faça redeploy Vercel com build:inngest`,
+          `Inngest worker não processou em ${workerWaitMs}ms (status=${finalStatus}) — npm run deploy:vm-workers`,
         );
       }
       const fallback = await driveExecuteStepFallback(gw.execution_id);
@@ -359,7 +359,7 @@ async function main() {
   const toolName = dbToolStep.tool_name ?? toolStep?.output?.tool_name ?? dbToolStep.node_type;
   console.log(`  ✓ tool step DB: ${toolName} node=${dbToolStep.node_id} (${dbToolStep.status})`);
   if (driver === "execute_step_fallback") {
-    console.log("  ℹ Redeploy Vercel (npm run build:inngest) para registar gateway-flow-execute no Inngest");
+    console.log("  ℹ Redeploy VM workers (npm run deploy:vm-workers) para sync gateway-flow no Inngest");
   }
   console.log("\n✓ Smoke gateway Inngest passou");
 }

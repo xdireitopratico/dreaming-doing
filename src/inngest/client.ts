@@ -22,7 +22,10 @@ const designDnaExtractRequestedEvent = eventType("design-dna/extract.requested",
 
 export const inngest = new Inngest({
   id: "dreaming-doing",
-  isDev: process.env.NODE_ENV !== "production",
+  isDev:
+    process.env.INNGEST_DEV === "1" ||
+    (process.env.NODE_ENV !== "production" && !process.env.INNGEST_SIGNING_KEY),
+  appVersion: process.env.INNGEST_APP_VERSION ?? process.env.VERCEL_GIT_COMMIT_SHA,
 });
 
 export const events = {

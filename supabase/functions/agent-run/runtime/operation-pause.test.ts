@@ -49,7 +49,7 @@ Deno.test("pauseOperationForUser — emite run_paused e finish sem auto-enfileir
   };
 
   const result = await pauseOperationForUser(deps, {
-    reason: "platform_limit",
+    reason: "operation_wall",
     message: "Limite de tempo — clique Continuar.",
     steps: 12,
     toolsUsed: new Set(["fs_write"]),

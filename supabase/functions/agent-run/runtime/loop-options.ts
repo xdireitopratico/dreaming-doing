@@ -4,6 +4,7 @@ import type { ProviderConfig } from "../providers.ts";
 import type { DesignPlanField, LoopPhase, PlanStep } from "../types.ts";
 import type { DesignSignatureRecord } from "../design-plan-field.ts";
 import type { OperationSnapshot } from "../checkpoint.ts";
+import type { RunOperationMeta } from "../../_shared/agent-contract-operation.ts";
 
 export type AgentLoopOptions = {
   maxSteps?: number;
@@ -35,4 +36,6 @@ export type AgentLoopOptions = {
   compactRequested?: boolean;
   /** Snapshot da operação restaurado do checkpoint (resume). */
   operationSnapshot?: OperationSnapshot;
+  /** SSOT de wall/mode — agent_runs.meta.operation (imutável após start). */
+  runOperationMeta?: RunOperationMeta;
 };

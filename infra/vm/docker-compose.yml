@@ -1,0 +1,80 @@
+name: dp-dd
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: dp-dd-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - dp-dd-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - dp-dd
+
+  inngest-worker:
+    build:
+      context: ../..
+      dockerfile: infra/vm/Dockerfile
+    container_name: dp-dd-inngest-worker
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      WORKER_HEALTH_PORT: "8081"
+      WORKER_INSTANCE_ID: dp-dd-worker-1
+      INNGEST_CONNECT_MAX_WORKER_CONCURRENCY: "5"
+    ports:
+      - "8081:8081"
+    networks:
+      - dp-dd
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8081/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+
+  inngest-worker-2:
+    build:
+      context: ../..
+      dockerfile: infra/vm/Dockerfile
+    container_name: dp-dd-inngest-worker-2
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_URL: redis://redis:6379/1
+      WORKER_HEALTH_PORT: "8082"
+      WORKER_INSTANCE_ID: dp-dd-worker-2
+      INNGEST_CONNECT_MAX_WORKER_CONCURRENCY: "5"
+    ports:
+      - "8082:8082"
+    networks:
+      - dp-dd
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8082/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+
+networks:
+  dp-dd:
+    name: dp-dd_default
+
+volumes:
+  dp-dd-redis-data:

@@ -7,7 +7,7 @@ export type { AgentRunStatus } from "./agent-contract-events.ts";
 const ALLOWED: Record<AgentRunStatus, readonly AgentRunStatus[]> = {
   pending: ["running", "failed", "canceled", "completed"],
   running: ["running", "awaiting_user", "completed", "failed", "canceled"],
-  awaiting_user: ["completed", "failed", "canceled"],
+  awaiting_user: ["running", "completed", "failed", "canceled"],
   completed: ["awaiting_user"],
   failed: ["running"],
   canceled: [],
@@ -15,11 +15,21 @@ const ALLOWED: Record<AgentRunStatus, readonly AgentRunStatus[]> = {
 
 const TERMINAL = new Set<AgentRunStatus>(["completed", "failed", "canceled"]);
 
-export function canTransitionRunStatus(from: AgentRunStatus, to: AgentRunStatus): boolean {
+export type TransitionRunOptions = {
+  /** Continuar explícito (resume: true no dispatch) — única via awaiting_user → running. */
+  resume?: boolean;
+};
+
+export function canTransitionRunStatus(
+  from: AgentRunStatus,
+  to: AgentRunStatus,
+  opts?: TransitionRunOptions,
+): boolean {
   if (from === to) return true;
   if (from === "canceled") return false;
   if (TERMINAL.has(from) && !(ALLOWED[from] ?? []).includes(to)) return false;
-  if (to === "running" && (from === "awaiting_user" || from === "completed")) return false;
+  if (to === "running" && from === "awaiting_user") return opts?.resume === true;
+  if (to === "running" && from === "completed") return false;
   return (ALLOWED[from] ?? []).includes(to);
 }
 

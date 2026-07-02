@@ -44,8 +44,8 @@ npm run test:agent-journey
 echo "→ unit tests"
 npm run test
 
-echo "→ build inngest bundle"
-npm run build:inngest
+echo "→ build connect worker bundle (VM)"
+npm run build:connect-worker
 
 echo "→ deno: agent lifecycle + runtime emitter tests"
 deno test --allow-env supabase/functions/_shared/agent-pending-queue.test.ts
@@ -56,9 +56,12 @@ echo "→ deploy edge: agent-run"
 supabase functions deploy agent-run --no-verify-jwt
 
 if [[ "$SKIP_VERCEL" -eq 0 ]]; then
-  echo "→ vercel production deploy"
+  echo "→ vercel production deploy (UI only — executor na VM)"
   vercel deploy --prod --yes
 fi
+
+echo "→ deploy VM connect workers"
+npm run deploy:vm-workers
 
 if [[ "$EDGE_ONLY" -eq 1 ]]; then
   echo "✓ Edge deploy complete (--edge-only)"

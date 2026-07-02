@@ -28,6 +28,7 @@ import {
 } from "./types";
 import { toast } from "@/lib/toast";
 import { supabase } from "@/integrations/supabase/client";
+import { HotlOperationControl } from "@/components/chat/HotlOperationControl";
 
 interface UserMetrics {
   jobCount: number;
@@ -561,6 +562,8 @@ function CreateJobDialog({ open, onOpenChange, onCreate }: CreateJobDialogProps)
         </DialogHeader>
 
         <div className="space-y-3 py-3">
+          <HotlOperationControl />
+
           <div>
             <label className="text-xs font-medium mb-1.5 block">URLs (1-5, uma por linha)</label>
             <TextareaSimple

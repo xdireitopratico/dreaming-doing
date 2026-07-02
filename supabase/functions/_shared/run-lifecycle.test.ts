@@ -6,6 +6,11 @@ Deno.test("canTransitionRunStatus — failed → running (resume)", () => {
   assertEquals(canTransitionRunStatus("failed", "running"), true);
 });
 
+Deno.test("canTransitionRunStatus — awaiting_user → running só com resume", () => {
+  assertEquals(canTransitionRunStatus("awaiting_user", "running"), false);
+  assertEquals(canTransitionRunStatus("awaiting_user", "running", { resume: true }), true);
+});
+
 Deno.test("canTransitionRunStatus — completed → awaiting_user (repair)", () => {
   assertEquals(canTransitionRunStatus("completed", "awaiting_user"), true);
 });

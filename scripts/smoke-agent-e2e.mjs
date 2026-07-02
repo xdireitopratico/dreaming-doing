@@ -228,15 +228,19 @@ async function main() {
 
   await clearSmokeCheckpoints(projectIdResolved, conversationIdResolved);
 
-  const seed = await seedE2eAgentSetup({
-    supabaseUrl: SUPABASE_URL,
-    serviceKey: SERVICE_KEY,
-    userId: userIdResolved,
-    patchPreferences: false,
-  });
-  console.log(
-    `Seed: openrouter=${seed.openrouterSource} model=${seed.model} e2b=${seed.e2bSource}`,
-  );
+  if (process.env.SMOKE_SKIP_SEED === "1") {
+    console.log("Seed: skipped (SMOKE_SKIP_SEED=1 — connectors existentes do usuário)");
+  } else {
+    const seed = await seedE2eAgentSetup({
+      supabaseUrl: SUPABASE_URL,
+      serviceKey: SERVICE_KEY,
+      userId: userIdResolved,
+      patchPreferences: false,
+    });
+    console.log(
+      `Seed: openrouter=${seed.openrouterSource} model=${seed.model} e2b=${seed.e2bSource}`,
+    );
+  }
 
   const msgRes = await rest("messages", {
     method: "POST",
@@ -380,8 +384,8 @@ async function main() {
     ) {
       console.error("\nFAIL: Inngest não iniciou a run (ainda pending após dispatch timeout)");
       console.error("Event URL:", INNGEST_EVENT_URL);
-      console.error("Hint: verifique sync em Inngest dashboard → Apps → dreaming-doing → Sync");
-      console.error("Hint: npm run check:inngest && vercel deploy --prod");
+      console.error("Hint: npm run check:inngest && npm run deploy:vm-workers");
+      console.error("Hint: workers connect na VM — Vercel /api/inngest está desativado");
       process.exit(1);
     }
 

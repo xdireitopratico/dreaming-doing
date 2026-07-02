@@ -23,6 +23,11 @@ export type ContextWindowPrefs = {
   windowTokens: number;
 };
 
+export type OperationPrefs = {
+  mode: "cooperative" | "hotl";
+  hotlWallHours?: 24 | 48 | 72;
+};
+
 // Default somente quando o usuário ainda não gravou nenhuma janela explícita.
 export const DEFAULT_CONTEXT_WINDOW_TOKENS = 256;
 
@@ -51,6 +56,8 @@ export interface AgentPreferences {
   webScrapeFallback?: string;
   browserFallback?: string;
   contextWindow?: ContextWindowPrefs;
+  /** HOTL toggle + wall — SSOT perfil; snapshot em agent_runs.meta.operation no dispatch. */
+  operation?: OperationPrefs;
 }
 
 export const EMPTY_AGENT_PREFERENCES: AgentPreferences = {};
@@ -192,7 +199,23 @@ export function normalizeAgentPreferences(
       typeof raw.webScrapeFallback === "string" ? raw.webScrapeFallback : undefined,
     browserFallback: typeof raw.browserFallback === "string" ? raw.browserFallback : undefined,
     contextWindow: normalizeContextWindowPrefs(raw.contextWindow),
+    operation: normalizeOperationPrefs(raw.operation),
   };
+}
+
+function normalizeOperationPrefs(raw: unknown): OperationPrefs | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const o = raw as Record<string, unknown>;
+  const mode = o.mode === "hotl" ? "hotl" : o.mode === "cooperative" ? "cooperative" : undefined;
+  const hotlWallHours =
+    o.hotlWallHours === 24 || o.hotlWallHours === 48 || o.hotlWallHours === 72
+      ? o.hotlWallHours
+      : undefined;
+  if (!mode && !hotlWallHours) return undefined;
+  if (mode === "hotl" || hotlWallHours) {
+    return { mode: "hotl", hotlWallHours: hotlWallHours ?? 24 };
+  }
+  return { mode: "cooperative" };
 }
 
 function normalizeContextWindowPrefs(raw: unknown): ContextWindowPrefs | undefined {
