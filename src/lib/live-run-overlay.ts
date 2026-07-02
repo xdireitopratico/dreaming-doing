@@ -1,4 +1,5 @@
 import type { AgentProgress } from "@/lib/agent-progress";
+import { resolveTerminalPhase } from "@/lib/agent-progress";
 import { resolveAgentLifecycle } from "@/lib/agent-lifecycle";
 
 /** Mantém slot live no chat até a mensagem assistant materializar no DB. */
@@ -9,6 +10,7 @@ export function shouldRetainLiveRunSlot(progress: AgentProgress): boolean {
     running: !progress.finished,
   });
   if (lifecycle === "complete" || lifecycle === "cancel") return false;
+  if (resolveTerminalPhase(progress) === "closing") return true;
   if (!progress.finished) return true;
   if (progress.canceled) return false;
   if (progress.pendingPlan?.steps?.length) return true;

@@ -58,6 +58,17 @@ describe("shouldRetainLiveRunSlot", () => {
     ).toBe(true);
   });
 
+  it("mantém slot em terminalPhase closing até materializar", () => {
+    expect(
+      shouldRetainLiveRunSlot({
+        ...initialAgentProgress,
+        finished: false,
+        terminalPhase: "closing",
+        streamText: "Fechando o trabalho…",
+      }),
+    ).toBe(true);
+  });
+
   it("mantém plano pendente", () => {
     expect(
       shouldRetainLiveRunSlot({

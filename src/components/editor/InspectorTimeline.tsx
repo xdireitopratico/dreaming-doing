@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { buildForgeTimeline } from "@/lib/timeline-builder";
 import type { AgentProgress } from "@/lib/agent-progress";
+import { resolveForgeTimelineActive } from "@/lib/agent-progress";
 import { hasInspectorProgressContent } from "@/lib/assistant-run-progress";
 import { InspectorActivityFeed } from "@/components/editor/InspectorActivityFeed";
 
@@ -19,12 +20,14 @@ export function InspectorTimeline({
   const scrollRef = useRef<HTMLDivElement>(null);
   const userScrolledRef = useRef(false);
 
+  const jobActive = resolveForgeTimelineActive(progress, running);
+
   const timelineItems = useMemo(
-    () => buildForgeTimeline(progress.timeline, running),
-    [progress.timeline, running],
+    () => buildForgeTimeline(progress.timeline, jobActive),
+    [progress.timeline, jobActive],
   );
 
-  const showThinkingHeader = running && timelineItems.length === 0;
+  const showThinkingHeader = jobActive && timelineItems.length === 0;
 
   const handleUserScroll = useCallback(() => {
     userScrolledRef.current = true;
@@ -33,14 +36,14 @@ export function InspectorTimeline({
   useEffect(() => {
     const el =
       scrollRef.current?.closest<HTMLElement>(".forge-inspector-body") ?? scrollRef.current;
-    if (!el || !running) return;
+    if (!el || !jobActive) return;
 
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     if (distFromBottom < 100 && !userScrolledRef.current) {
       // Direto (instantâneo): smooth disparado a cada novo evento anima pra um alvo que cresce a cada frame → treme-treme.
       el.scrollTop = el.scrollHeight;
     }
-  }, [timelineItems.length, running]);
+  }, [timelineItems.length, jobActive]);
 
   useEffect(() => {
     userScrolledRef.current = false;
@@ -67,7 +70,7 @@ export function InspectorTimeline({
         <InspectorActivityFeed
           items={timelineItems}
           onOpenFile={onOpenFile}
-          running={running}
+          running={jobActive}
         />
       </div>
     </div>
