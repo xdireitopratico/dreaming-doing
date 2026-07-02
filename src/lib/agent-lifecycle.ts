@@ -1,6 +1,5 @@
 import { PENDING_RUN_ID } from "@/lib/pending-run-id";
 import type { AgentProgress } from "@/lib/agent-progress";
-import { resolveTerminalPhase } from "@/lib/agent-progress";
 
 export type AgentLifecycleStage =
   | "idle"
@@ -23,7 +22,6 @@ export type AgentLifecycleInput = {
     | "deliveryFiles"
     | "error"
     | "finished"
-    | "terminalPhase"
     | "lastFinishOk"
     | "narrationText"
     | "pendingPlan"
@@ -64,7 +62,6 @@ export function resolveAgentLifecycle(input: AgentLifecycleInput): AgentLifecycl
 
   if (progress.canceled) return "cancel";
   if (progress.awaiting || progress.awaitingKind) return "waiting_user";
-  if (resolveTerminalPhase(progress) === "closing") return "finish";
   if (!progress.finished) {
     if (input.running) return "running";
     if (!input.activeRunId || input.activeRunId === PENDING_RUN_ID) return "dispatch";

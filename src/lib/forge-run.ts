@@ -1,5 +1,4 @@
 import type { AgentProgress, PendingPlan, PlanStep, SSEEvent } from "@/lib/agent-progress";
-import { resolveTerminalPhase } from "@/lib/agent-progress";
 import { lifecycleLabel, resolveAgentLifecycle } from "@/lib/agent-lifecycle";
 import { emitStreamingTelemetry } from "@/lib/streaming-telemetry";
 import { sanitizeRunText } from "@/lib/run-story-hygiene";
@@ -173,18 +172,6 @@ export function hasActiveJob(
 }
 
 function deriveMiniCardStatus(progress: AgentProgress, jobActive: boolean): MiniCardStatus {
-  const terminalPhase = resolveTerminalPhase(progress);
-  if (terminalPhase === "closing" || terminalPhase === "terminal") {
-    if (progress.canceled || progress.lastFinishOk === false) {
-      const lifecycle = resolveAgentLifecycle({
-        progress,
-        activeRunId: null,
-        running: false,
-      });
-      if (lifecycle === "failed" || lifecycle === "stale" || lifecycle === "cancel") return "failed";
-    }
-    return "done";
-  }
   const lifecycle = resolveAgentLifecycle({
     progress,
     activeRunId: null,

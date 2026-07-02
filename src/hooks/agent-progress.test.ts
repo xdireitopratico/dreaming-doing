@@ -608,24 +608,4 @@ describe("Session 2.0 — contrato agent_run", () => {
       vi.unstubAllGlobals();
     });
   });
-
-  describe("terminalPhase", () => {
-    it("done build entra em closing sem finished", () => {
-      const next = applyAgentProgressEvent(
-        { ...base, finished: false, error: null, resumable: false },
-        ev("done", { summary: "Concluí o hero." }),
-      );
-      expect(next.terminalPhase).toBe("closing");
-      expect(next.finished).toBe(false);
-    });
-
-    it("finish promove para terminal", () => {
-      let state = applyAgentProgressEvent(
-        { ...base, finished: false, error: null, terminalPhase: "closing" },
-        ev("finish", { ok: true }),
-      );
-      expect(state.terminalPhase).toBe("terminal");
-      expect(state.finished).toBe(true);
-    });
-  });
 });

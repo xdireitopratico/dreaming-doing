@@ -1,25 +1,6 @@
 import { parseAgentDiagnostics, pushDiagnostics } from "@/hooks/useDiagnostics";
 import { dispatchTasteUiAction, isTasteUiAction } from "@/lib/taste-ui-actions";
 import type { AgentStreamEventData } from "@/lib/agent-event-contract";
-import { applyToolDoneRow, applyToolStartRow } from "@/lib/tool-invocation-ledger";
-
-export type TerminalPhase = "running" | "closing" | "terminal";
-
-export function resolveTerminalPhase(
-  progress: Pick<AgentProgress, "terminalPhase" | "finished">,
-): TerminalPhase {
-  if (progress.terminalPhase === "closing") return "closing";
-  if (progress.finished || progress.terminalPhase === "terminal") return "terminal";
-  return "running";
-}
-
-/** Inspector/mini-card: tools só “ativos” enquanto o job está em `running`. */
-export function resolveForgeTimelineActive(
-  progress: Pick<AgentProgress, "terminalPhase" | "finished">,
-  slotActive: boolean,
-): boolean {
-  return slotActive && resolveTerminalPhase(progress) === "running";
-}
 
 export interface SSEEvent {
   type: string;
@@ -115,8 +96,6 @@ export interface AgentProgress {
   summary: string | null;
   error: string | null;
   finished: boolean;
-  /** Fase terminal do stream — `closing` após `done` build; `terminal` após `finish`. */
-  terminalPhase?: TerminalPhase;
   resumable: boolean;
   statusHint: string | null;
   streamText: string | null;
@@ -210,7 +189,6 @@ export const initialAgentProgress: AgentProgress = {
   summary: null,
   error: null,
   finished: false,
-  terminalPhase: "running",
   resumable: false,
   statusHint: null,
   streamText: null,
@@ -383,7 +361,6 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         pendingQueueCount: prev.pendingQueueCount,
         error: null,
         finished: false,
-        terminalPhase: "running",
         resumable: false,
         statusHint: mode === "chat" ? "Respondendo…" : "Trabalhando no projeto…",
         conversational: mode === "chat" ? true : prev.conversational,
@@ -396,7 +373,6 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       return {
         ...prev,
         finished: true,
-        terminalPhase: "terminal",
         canceled: true,
         resumable: false,
         error: (data.message as string) ?? "Cancelado pelo usuário",
@@ -623,25 +599,47 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
     case "tool_start":
       return {
         ...prev,
-        tools: applyToolStartRow(prev.tools, {
-          name: (data.name as string) ?? "?",
-          args: (data.args as Record<string, unknown>) ?? {},
-          toolCallId: typeof data.toolCallId === "string" ? data.toolCallId : undefined,
-        }),
+        tools: [
+          ...prev.tools,
+          {
+            name: (data.name as string) ?? "?",
+            args: (data.args as Record<string, unknown>) ?? {},
+            ...(typeof data.toolCallId === "string" ? { toolCallId: data.toolCallId } : {}),
+          },
+        ],
         timeline: [...prev.timeline, event],
       };
 
     case "tool_done": {
       const toolName = data.name as string;
       const toolCallId = typeof data.toolCallId === "string" ? data.toolCallId : null;
+      const tools = [...prev.tools];
+      for (let i = tools.length - 1; i >= 0; i--) {
+        const t = tools[i];
+        if (t.ok !== undefined) continue;
+        if (toolCallId) {
+          // Session 2.0: correlação por toolCallId (suporta paralelo mesmo nome)
+          if ((t as { toolCallId?: string }).toolCallId === toolCallId) {
+            tools[i] = {
+              ...t,
+              ok: data.ok as boolean,
+              error: data.error as string,
+            };
+            break;
+          }
+        } else if (t.name === toolName) {
+          // Legado: por nome
+          tools[i] = {
+            ...t,
+            ok: data.ok as boolean,
+            error: data.error as string,
+          };
+          break;
+        }
+      }
       return {
         ...prev,
-        tools: applyToolDoneRow(prev.tools, {
-          name: toolName,
-          toolCallId,
-          ok: data.ok as boolean,
-          error: data.error as string,
-        }),
+        tools,
         cost: prev.cost + estimateCost(prev.model ?? "default", 2000),
         timeline: [...prev.timeline, event],
       };
@@ -702,17 +700,10 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       const totalTokens =
         typeof data.totalTokens === "number" ? data.totalTokens : prev.tokens?.total;
       const costUsd = typeof data.costUsd === "number" ? data.costUsd : prev.cost;
-      const enterClosing =
-        !planLifecycleEvent && !materializedTerminal && !planAwaiting && !conversational;
       return {
         ...prev,
         summary,
         finished: (materializedTerminal && !planLifecycleEvent) || prev.finished,
-        terminalPhase: materializedTerminal || planLifecycleEvent
-          ? "terminal"
-          : enterClosing
-            ? "closing"
-            : prev.terminalPhase ?? "running",
         awaiting: conversational ? false : !!(data.awaiting || data.qualified) || planAwaiting,
         awaitingKind: conversational
           ? null
@@ -760,7 +751,6 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         ...prev,
         error: (data.message as string) ?? (data.error as string) ?? "Erro desconhecido",
         finished: true,
-        terminalPhase: "terminal",
         resumable: data.recoverable === true || prev.resumable,
         timeline: [...prev.timeline, event],
       };
@@ -783,7 +773,6 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       return {
         ...prev,
         finished: true,
-        terminalPhase: "terminal",
         canceled,
         awaiting,
         awaitingKind: awaiting

@@ -308,7 +308,6 @@ function progressFromCardSnapshot(snap: Record<string, unknown>, msg: ChatMessag
     summary: typeof snap.summary === "string" ? snap.summary : null,
     error: typeof snap.error === "string" ? snap.error : null,
     finished: snap.finished === true,
-    terminalPhase: snap.finished === true ? "terminal" : "running",
     resumable: snap.resumable === true,
     streamText,
     narrationText,

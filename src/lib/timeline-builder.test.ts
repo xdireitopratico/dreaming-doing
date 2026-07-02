@@ -64,41 +64,6 @@ describe("buildForgeTimeline tool_done", () => {
     expect(read?.active).toBe(false);
     expect(read?.ok).toBe(true);
   });
-
-  it("fecha cada read paralelo pelo toolCallId", () => {
-    const items = buildForgeTimeline(
-      [
-        { type: "tool_start", data: { name: "fs_read", args: { path: "a/A.tsx" }, toolCallId: "tc-1" }, timestamp: 1 },
-        { type: "tool_start", data: { name: "fs_read", args: { path: "b/B.tsx" }, toolCallId: "tc-2" }, timestamp: 2 },
-        { type: "tool_done", data: { name: "fs_read", ok: true, toolCallId: "tc-2" }, timestamp: 3 },
-        { type: "tool_done", data: { name: "fs_read", ok: true, toolCallId: "tc-1" }, timestamp: 4 },
-      ],
-      false,
-    );
-    const reads = items.filter((i) => i.type === "READ");
-    expect(reads).toHaveLength(2);
-    for (const read of reads) {
-      if (read.type === "READ") {
-        expect(read.active).toBe(false);
-        expect(read.ok).toBe(true);
-      }
-    }
-  });
-
-  it("CLOSURE só em finish, não em done", () => {
-    const items = buildForgeTimeline(
-      [
-        { type: "done", data: { summary: "Resumo parcial" }, timestamp: 1 },
-        { type: "finish", data: { ok: true, summary: "Fechamento" }, timestamp: 2 },
-      ],
-      false,
-    );
-    const closures = items.filter((i) => i.type === "CLOSURE");
-    expect(closures).toHaveLength(1);
-    if (closures[0]?.type === "CLOSURE") {
-      expect(closures[0].text).toContain("Fechamento");
-    }
-  });
 });
 
 describe("buildForgeTimeline hygiene", () => {
@@ -157,8 +122,8 @@ describe("buildForgeTimeline hygiene", () => {
         },
         timestamp: 1,
       },
-      { type: "done", data: { summary: "Extração e mapeamento do Design System" }, timestamp: 2 },
-      { type: "finish", data: { ok: true, summary: "Extração e mapeamento do Design System" }, timestamp: 3 },
+      { type: "done", data: { summary: "Extração e mapeamento do Design System", ok: true }, timestamp: 2 },
+      { type: "done", data: { summary: "Extração e mapeamento do Design System", ok: true }, timestamp: 3 },
     ]);
 
     expect(items.filter((item) => item.type === "PLAN")).toHaveLength(1);

@@ -9,13 +9,6 @@ import {
   isInternalRunText,
 } from "@/lib/run-story-hygiene";
 import { isToolDoneEvent, isToolDoneOk, toolDoneName } from "@/lib/timeline-tool-events";
-import { resolveTerminalPhase, type TerminalPhase } from "@/lib/agent-progress";
-import {
-  closeToolInvocation,
-  createToolLedger,
-  openToolInvocation,
-  type ToolInvocation,
-} from "@/lib/tool-invocation-ledger";
 
 export type TimelineItemType =
   | "THOUGHT"
@@ -169,113 +162,89 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
     lastThoughtText = "";
   };
 
-  let toolLedger = createToolLedger();
-  const toolItemIndexById = new Map<string, number>();
-
-  const forgeItemFromInvocation = (inv: ToolInvocation, jobActive: boolean): ForgeTimelineItem => {
-    const name = inv.name;
-    const args = inv.args;
+  const upsertTool = (ev: SSEEvent, active = false) => {
+    const data = ev.data ?? {};
+    const name = String(data.name ?? data.tool ?? "tool");
+    const args = (data.args ?? data.input) as Record<string, unknown> | undefined;
     const rawPath = pathFromArgs(args);
     const path = rawPath ? fileBase(rawPath) : "";
-    const active = jobActive && inv.ok === undefined;
+    const ts = ev.timestamp;
 
-    if (
-      name === "fs_read" ||
-      name === "fs_read_many" ||
-      name === "web_fetch" ||
-      name === "web_scrape" ||
-      name === "read_design_library" ||
-      name === "web_search" ||
-      name === "web_research"
-    ) {
-      return {
+    if (name === "fs_read" || name === "fs_read_many" || name === "web_fetch" || name === "web_scrape" || name === "read_design_library" || name === "web_search" || name === "web_research") {
+      items.push({
         type: "READ",
-        id: inv.id,
+        id: `read-${ts}`,
         path: path || skillNameFromTool(name),
         detail: truncate(readDetail(name, args) || rawPath),
         active,
-        ok: inv.ok,
-      };
+      });
+      return;
     }
     if (name === "fs_list" || name === "fs_glob" || name === "fs_search") {
-      return {
+      items.push({
         type: "LISTED",
-        id: inv.id,
+        id: `listed-${ts}`,
         path: path || truncate(listedDetail(name, args)),
         detail: truncate(rawPath),
         active,
-        ok: inv.ok,
-      };
+      });
+      return;
     }
     if (name === "fs_write") {
-      return {
+      items.push({
         type: "CREATED",
-        id: inv.id,
+        id: `created-${ts}`,
         path: path || truncate(rawPath),
         active,
-        ok: inv.ok,
-      };
+      });
+      return;
     }
     if (name === "fs_edit") {
-      return {
+      items.push({
         type: "EDITED",
-        id: inv.id,
+        id: `edited-${ts}`,
         path: path || truncate(rawPath),
         active,
-        ok: inv.ok,
-      };
+      });
+      return;
     }
     if (name === "shell_exec") {
       const command = String(args?.command ?? "");
-      return {
+      items.push({
         type: "RUNNING",
-        id: inv.id,
+        id: `running-${ts}`,
         command: truncate(command) || "command",
         detail: truncate(command),
         active,
-        ok: inv.ok,
-      };
+      });
+      return;
     }
-    return {
+    items.push({
       type: "SKILL",
-      id: inv.id,
+      id: `skill-${ts}`,
       name: skillNameFromTool(name),
       detail: truncate(path || rawPath),
       active,
-      ok: inv.ok,
-    };
+    });
   };
 
-  const patchForgeItemFromInvocation = (
-    item: ForgeTimelineItem,
-    inv: ToolInvocation,
-    detail?: string,
-  ): ForgeTimelineItem => {
-    const ok = inv.ok !== false;
-    const closedDetail = detail ? truncate(detail, 400) : undefined;
-    if (
-      item.type === "READ" ||
-      item.type === "LISTED" ||
-      item.type === "CREATED" ||
-      item.type === "EDITED" ||
-      item.type === "SKILL"
-    ) {
-      return {
-        ...item,
-        active: false,
-        ok,
-        detail: closedDetail ?? item.detail,
-      };
+  const updateLastTool = (ok: boolean, detail?: string, name?: string) => {
+    for (let i = items.length - 1; i >= 0; i--) {
+      const item = items[i];
+      if (
+        item?.type !== "READ" &&
+        item?.type !== "LISTED" &&
+        item?.type !== "CREATED" &&
+        item?.type !== "EDITED" &&
+        item?.type !== "RUNNING" &&
+        item?.type !== "SKILL"
+      ) {
+        continue;
+      }
+      if (name && item.type === "RUNNING" && item.command !== name) continue;
+      items[i] = { ...item, active: false, ok, detail: detail ? truncate(detail, 400) : item.detail };
+      return;
     }
-    if (item.type === "RUNNING") {
-      return {
-        ...item,
-        active: false,
-        ok,
-        detail: closedDetail ?? item.detail,
-      };
-    }
-    return item;
   };
 
   for (const ev of timeline) {
@@ -361,46 +330,18 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
     }
 
     if (ev.type === "tool_start" || ev.type === "tool_call") {
-      const name = String(data.name ?? data.tool ?? "tool");
-      const args = ((data.args ?? data.input) as Record<string, unknown> | undefined) ?? {};
-      const toolCallId = typeof data.toolCallId === "string" ? data.toolCallId : undefined;
-      const opened = openToolInvocation(toolLedger, {
-        name,
-        args,
-        toolCallId,
-        openedAt: ts,
-        seq: ts,
-      });
-      toolLedger = opened.ledger;
-      const item = forgeItemFromInvocation(opened.invocation, running);
-      toolItemIndexById.set(opened.invocation.id, items.length);
-      items.push(item);
+      upsertTool(ev, running);
       continue;
     }
 
     if (isToolDoneEvent(ev)) {
       const ok = isToolDoneOk(data);
       const toolName = toolDoneName(data);
-      const toolCallId = typeof data.toolCallId === "string" ? data.toolCallId : null;
       const doneSummary = typeof data.summary === "string" && data.summary.trim() ? data.summary.trim() : undefined;
       const doneOutput = typeof data.output === "string" && data.output.trim() ? data.output.trim() : undefined;
       const doneError = typeof data.error === "string" && data.error.trim() ? data.error.trim() : undefined;
       const detail = doneSummary ?? (ok ? doneOutput : doneError);
-      const closed = closeToolInvocation(toolLedger, {
-        name: toolName,
-        toolCallId,
-        ok,
-        error: doneError,
-        summary: doneSummary,
-        closedAt: ts,
-      });
-      toolLedger = closed.ledger;
-      if (closed.invocation) {
-        const idx = toolItemIndexById.get(closed.invocation.id);
-        if (idx !== undefined) {
-          items[idx] = patchForgeItemFromInvocation(items[idx]!, closed.invocation, detail);
-        }
-      }
+      updateLastTool(ok, detail, toolName);
       continue;
     }
 
@@ -477,7 +418,7 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
       continue;
     }
 
-    if (ev.type === "finish") {
+    if (ev.type === "done" || ev.type === "finish") {
       flushThought(ts);
       const ok = data.ok !== false && !data.canceled;
       const canceled = data.canceled === true;
@@ -499,11 +440,6 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
         text: truncate(summary, 240),
         canceled,
       });
-      continue;
-    }
-
-    if (ev.type === "done") {
-      flushThought(ts);
       continue;
     }
 
@@ -565,19 +501,12 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
   return items;
 }
 
-/** Verifica se há job ativo confirmado (só fase `running` do stream). */
+/** Verifica se há job ativo confirmado. */
 export function hasActiveJob(
-  progress: {
-    finished: boolean;
-    canceled?: boolean;
-    awaiting?: boolean;
-    awaitingKind?: string | null;
-    terminalPhase?: TerminalPhase;
-  },
+  progress: { finished: boolean; canceled?: boolean; awaiting?: boolean; awaitingKind?: string | null },
   opts?: { running?: boolean; slotActive?: boolean },
 ): boolean {
-  if (resolveTerminalPhase(progress) !== "running") return false;
-  if (progress.canceled || progress.awaiting) return false;
+  if (progress.finished || progress.canceled || progress.awaiting) return false;
   if (progress.awaitingKind === "plan_approval" || progress.awaitingKind === "clarify") return false;
   return !!(opts?.running && opts?.slotActive);
 }
