@@ -101,6 +101,37 @@ describe("buildTerminalMessageMeta", () => {
     expect(meta.buildFailed).toBe(true);
     expect(meta.lastFinishOk).toBe(false);
   });
+
+  it("preserva contextUsage no cardSnapshot terminal", () => {
+    const meta = buildTerminalMessageMeta({
+      runId: "run-1",
+      text: "ok",
+      streamTail: [
+        {
+          type: "context_usage",
+          data: {
+            usageTokens: 64000,
+            windowTokens: 128000,
+            percent: 50,
+            mode: "auto",
+            compacting: false,
+          },
+          timestamp: 1,
+        },
+        {
+          type: "context_compact_done",
+          data: { afterTokens: 32000, percentAfter: 25, windowTokens: 128000 },
+          timestamp: 2,
+        },
+      ],
+    });
+
+    const snap = meta.cardSnapshot as {
+      contextUsage?: { percent?: number; windowTokens?: number };
+    };
+    expect(snap.contextUsage?.percent).toBe(25);
+    expect(snap.contextUsage?.windowTokens).toBe(128000);
+  });
 });
 
 describe("buildStreamTailFromRows", () => {

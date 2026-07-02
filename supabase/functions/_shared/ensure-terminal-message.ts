@@ -121,6 +121,50 @@ function toolsFromTimeline(
   return tools;
 }
 
+function contextUsageFromTimeline(
+  timeline: Array<{ type: string; data: Record<string, unknown> }>,
+): {
+  usageTokens: number;
+  windowTokens: number;
+  percent: number;
+  mode: "manual" | "auto";
+  compacting: boolean;
+} | undefined {
+  let usage:
+    | {
+        usageTokens: number;
+        windowTokens: number;
+        percent: number;
+        mode: "manual" | "auto";
+        compacting: boolean;
+      }
+    | undefined;
+
+  for (const ev of timeline) {
+    if (ev.type === "context_usage") {
+      usage = {
+        usageTokens: typeof ev.data.usageTokens === "number" ? ev.data.usageTokens : 0,
+        windowTokens: typeof ev.data.windowTokens === "number" ? ev.data.windowTokens : 0,
+        percent: typeof ev.data.percent === "number" ? ev.data.percent : 0,
+        mode: ev.data.mode === "auto" ? "auto" : "manual",
+        compacting: ev.data.compacting === true,
+      };
+      continue;
+    }
+    if (ev.type === "context_compact_done" && usage) {
+      usage = {
+        ...usage,
+        usageTokens:
+          typeof ev.data.afterTokens === "number" ? ev.data.afterTokens : usage.usageTokens,
+        percent: typeof ev.data.percentAfter === "number" ? ev.data.percentAfter : usage.percent,
+        compacting: false,
+      };
+    }
+  }
+
+  return usage;
+}
+
 export function resolveTerminalDisplayText(opts: {
   error?: string | null;
   summary?: string | null;
@@ -213,6 +257,7 @@ function buildTerminalMessageMeta(opts: {
     awaitingKind: null,
     conversational: false,
     buildFailed: opts.buildFailed === true,
+    contextUsage: contextUsageFromTimeline(opts.streamTail),
   };
 
   return {
