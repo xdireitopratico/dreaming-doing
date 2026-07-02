@@ -60,8 +60,29 @@ describe("Lovable acceptance — Chat (imgs 4/5/9/15)", () => {
         sessionTitle: "Lara cleanup",
       },
     );
-    expect(running.header).toBe("Running command");
+    expect(running.header).toBe("Executando deploy…");
 
+    const reading = buildMiniCardHeader(
+      {
+        ...initialAgentProgress,
+        finished: false,
+        tools: [{ name: "fs_read", args: { path: "src/routes/App.tsx" } }],
+      },
+      true,
+      { liveBriefings: ["Explorando rotas"], sessionTitle: "App routes" },
+    );
+    expect(reading.header).toBe("Lendo App.tsx…");
+
+    const editing = buildMiniCardHeader(
+      {
+        ...initialAgentProgress,
+        finished: false,
+        tools: [{ name: "fs_edit", args: { path: "src/components/Header.tsx" } }],
+      },
+      true,
+      { liveBriefings: ["Ajustando header"], sessionTitle: "Header" },
+    );
+    expect(editing.header).toBe("Editando Header.tsx…");
   });
 
   it("subtitle briefing separado do header (img 5)", () => {
