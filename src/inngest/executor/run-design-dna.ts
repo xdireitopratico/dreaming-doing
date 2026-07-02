@@ -27,7 +27,7 @@ import { ensureDesignDnaSandbox } from "./design-dna-sandbox.ts";
 import { createAgentContext } from "./browser-agent-state";
 import { runBrowserAgent, createDefaultCdpTools } from "./browser-agent-runner";
 import { runAgentPlanningStep } from "./browser-agent-llm";
-import { synthesizeDesignDNA } from "./browser-agent-synthesis";
+import { runDeepExtraction } from "./run-deep-extraction.ts";
 import type { BrowserAgentContext, BrowserAgentStep } from "./browser-agent-state";
 import {
   COOPERATIVE_WALL_MS,
@@ -440,7 +440,16 @@ export async function executeDesignDnaJob(
           runAgentPlanningStep(ctx, visionLlm, screenshotBase64);
 
         const synthesizer = async (steps: BrowserAgentStep[], u: string, cats: string[]) =>
-          synthesizeDesignDNA(steps, u, cats, visionLlm);
+          runDeepExtraction({
+            supabase,
+            jobId,
+            url: u,
+            categories: cats,
+            steps,
+            navigationReport: reportTracker.snapshot,
+            callLlm: visionLlm,
+            llmConfig: llm,
+          });
 
         const applyScopeFromInstructions = async (
           instructions: Array<{ content: string }>,
@@ -527,7 +536,7 @@ export async function executeDesignDnaJob(
           screenshots: agentResult.steps
             .filter((s) => s.observation.screenshot)
             .map((s) => s.observation.screenshot as string),
-          providerTrace: [`llm:${llm.label}`, "cdp:sandbox-playwright"],
+          providerTrace: [`llm:${llm.label}`, "cdp:sandbox-playwright", "synthesis:deep-multi-pass"],
           confidence: 90,
           notes: [
             `Browser agent completed ${agentResult.steps.length} steps`,

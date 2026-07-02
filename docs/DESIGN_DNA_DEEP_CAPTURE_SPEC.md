@@ -457,7 +457,7 @@ Job DEEP `https://livekit.com/` scope level 7:
 | G-CAP-4 | PASS | 2026-07-02 | (PR-4 commit) |
 | G-CAP-5 | PASS | 2026-07-02 | bf90d14 |
 | G-CAP-6 | PASS | 2026-07-02 | 2a8f37d |
-| G-CAP-7 | FAIL | — | — |
+| G-CAP-7 | PASS | 2026-07-02 | (PR-7 commit) |
 | G-CAP-8 | FAIL | — | — |
 
 ---

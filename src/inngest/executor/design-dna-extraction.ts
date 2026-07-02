@@ -576,6 +576,28 @@ export function assertLlmMatchesG1(wire: ResolvedLLM, g1Llm: G1ResolvedLlm): voi
 
 type ChatContent = string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
 
+function hasVisionAttachment(screenshot: string): boolean {
+  return screenshot.startsWith("data:") || screenshot.startsWith("http://") || screenshot.startsWith("https://");
+}
+
+async function fetchImageAsDataUrl(url: string): Promise<string> {
+  const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+  if (!response.ok) {
+    throw new Error(`vision fetch failed: HTTP ${response.status}`);
+  }
+  const contentType = response.headers.get("content-type") ?? "image/png";
+  const buffer = Buffer.from(await response.arrayBuffer());
+  const mime = contentType.split(";")[0]?.trim() || "image/png";
+  return `data:${mime};base64,${buffer.toString("base64")}`;
+}
+
+async function resolveVisionForProtocol(protocol: LLMConfig["protocol"], screenshot: string): Promise<string> {
+  if (!screenshot || screenshot.startsWith("data:")) return screenshot;
+  if (!screenshot.startsWith("http")) return "";
+  if (protocol === "openai") return screenshot;
+  return fetchImageAsDataUrl(screenshot);
+}
+
 function openAiChat(
   cfg: LLMConfig,
   systemPrompt: string,
@@ -586,7 +608,7 @@ function openAiChat(
     { role: "system", content: systemPrompt },
     {
       role: "user",
-      content: screenshot.startsWith("data:")
+      content: hasVisionAttachment(screenshot)
         ? [
             { type: "text", text: userContent },
             { type: "image_url", image_url: { url: screenshot } },
@@ -716,14 +738,15 @@ function geminiChat(
 
 /** Dispatcher LLM para multiPassExtractDNA (openai / anthropic / gemini). */
 export function createLlmChatDispatcher(cfg: LLMConfig): LLmChatFn {
-  return (systemPrompt, userContent, screenshot) => {
+  return async (systemPrompt, userContent, screenshot) => {
+    const vision = await resolveVisionForProtocol(cfg.protocol, screenshot);
     if (cfg.protocol === "anthropic") {
-      return anthropicChat(cfg, systemPrompt, userContent, screenshot);
+      return anthropicChat(cfg, systemPrompt, userContent, vision);
     }
     if (cfg.protocol === "gemini") {
-      return geminiChat(cfg, systemPrompt, userContent, screenshot);
+      return geminiChat(cfg, systemPrompt, userContent, vision);
     }
-    return openAiChat(cfg, systemPrompt, userContent, screenshot);
+    return openAiChat(cfg, systemPrompt, userContent, vision);
   };
 }
 

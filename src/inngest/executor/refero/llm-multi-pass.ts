@@ -61,6 +61,12 @@ export type MultiPassConfig = {
   isDeep: boolean;
   /** Force single-pass (skip multi-pass entirely). Default: false. */
   forceSinglePass?: boolean;
+  /** DEEP: navigation report + agent evidence (replaces markdown when set). */
+  evidenceText?: string;
+  /** DEEP: per-category vision input (signed https URL or data: URL). */
+  screenshotByCategory?: Partial<Record<ExtractionCategory, string>>;
+  /** DEEP: captureIds referenced in each pass user prompt. */
+  captureIdsByCategory?: Partial<Record<ExtractionCategory, string[]>>;
 };
 
 type SinglePassResult = {
@@ -134,30 +140,43 @@ function parseJsonResponse(raw: string): Record<string, unknown> | null {
 
 // ── Category-aware prompt builders ──
 
+function visionLabel(screenshot: string): string {
+  if (!screenshot) return "[sem imagem]";
+  if (screenshot.startsWith("data:")) return "[thumb anexado]";
+  if (screenshot.startsWith("http")) return "[thumb signed URL anexado]";
+  return screenshot;
+}
+
 function buildCategoryUserContent(
   category: ExtractionCategory,
   url: string,
   markdown: string,
   screenshot: string,
+  evidenceText?: string,
+  captureIds?: string[],
 ): string {
-  const modeLabel = screenshot.startsWith("data:") ? "[screenshot anexado]" : screenshot;
-  const baseIntro = `## Site: ${url}\n### Screenshot: ${modeLabel}\n\n`;
+  const modeLabel = visionLabel(screenshot);
+  const captureLine = captureIds?.length ? `\n### Capture IDs: ${captureIds.join(", ")}` : "";
+  const baseIntro = `## Site: ${url}\n### Vision: ${modeLabel}${captureLine}\n\n`;
+  const body = evidenceText ?? markdown;
+  const slice = (n: number) => body.slice(0, n);
+  const sourceLabel = evidenceText ? "Evidências DEEP" : "Markdown";
 
   switch (category) {
     case "hero":
-      return `${baseIntro}### Markdown (primeiros 15000 chars):\n${markdown.slice(0, 15000)}\n\nExtraia o DNA de HERO/LAYOUT deste site.`;
+      return `${baseIntro}### ${sourceLabel}:\n${slice(15000)}\n\nExtraia o DNA de HERO/LAYOUT deste site.`;
     case "motion":
-      return `${baseIntro}### Markdown:\n${markdown.slice(0, 25000)}\n\nExtraia o DNA de MOTION deste site.`;
+      return `${baseIntro}### ${sourceLabel}:\n${slice(25000)}\n\nExtraia o DNA de MOTION deste site.`;
     case "typography":
-      return `${baseIntro}### Markdown:\n${markdown.slice(0, 20000)}\n\nExtraia o DNA de TIPOGRAFIA deste site.`;
+      return `${baseIntro}### ${sourceLabel}:\n${slice(20000)}\n\nExtraia o DNA de TIPOGRAFIA deste site.`;
     case "color_application":
-      return `${baseIntro}### Markdown:\n${markdown.slice(0, 20000)}\n\nExtraia o DNA de COR deste site.`;
+      return `${baseIntro}### ${sourceLabel}:\n${slice(20000)}\n\nExtraia o DNA de COR deste site.`;
     case "components":
-      return `${baseIntro}### Markdown:\n${markdown.slice(0, 25000)}\n\nExtraia o DNA de COMPONENTES deste site.`;
+      return `${baseIntro}### ${sourceLabel}:\n${slice(25000)}\n\nExtraia o DNA de COMPONENTES deste site.`;
     case "interactions":
-      return `${baseIntro}### Markdown:\n${markdown.slice(0, 20000)}\n\nExtraia o DNA de INTERAÇÕES deste site.`;
+      return `${baseIntro}### ${sourceLabel}:\n${slice(20000)}\n\nExtraia o DNA de INTERAÇÕES deste site.`;
     default:
-      return `${baseIntro}### Markdown:\n${markdown.slice(0, 20000)}`;
+      return `${baseIntro}### ${sourceLabel}:\n${slice(20000)}`;
   }
 }
 
@@ -186,11 +205,20 @@ async function runCategoryPass(
   markdown: string,
   screenshot: string,
   isDeep: boolean,
+  evidenceText?: string,
+  captureIds?: string[],
 ): Promise<SinglePassResult> {
   const start = Date.now();
   try {
     const systemPrompt = buildCategorySystemPrompt(category, isDeep);
-    const userContent = buildCategoryUserContent(category, url, markdown, screenshot);
+    const userContent = buildCategoryUserContent(
+      category,
+      url,
+      markdown,
+      screenshot,
+      evidenceText,
+      captureIds,
+    );
 
     const result = await callLlm(systemPrompt, userContent, screenshot);
     const parsed = parseJsonResponse(result.content);
@@ -373,16 +401,22 @@ export async function multiPassExtractDNA(config: MultiPassConfig): Promise<Mult
   // ── Multi-pass: run all category passes in parallel ──
   console.log(`[llm-multi-pass] Starting ${categoriesToExtract.length} specialized passes in parallel`);
 
-  const passPromises = categoriesToExtract.map((cat) =>
-    runCategoryPass(
+  const evidenceText = config.evidenceText;
+  const passPromises = categoriesToExtract.map((cat) => {
+    const category = cat as ExtractionCategory;
+    const shot =
+      config.screenshotByCategory?.[category] ?? config.screenshot;
+    return runCategoryPass(
       config.callLlm,
-      cat as ExtractionCategory,
+      category,
       config.url,
       config.markdown,
-      config.screenshot,
+      shot,
       config.isDeep,
-    ),
-  );
+      evidenceText,
+      config.captureIdsByCategory?.[category],
+    );
+  });
 
   let passResults: SinglePassResult[];
   try {
@@ -479,7 +513,7 @@ export async function multiPassExtractDNA(config: MultiPassConfig): Promise<Mult
     component: synthesizedDna.component ?? synthesizedDna.component_patterns ?? null,
     implementation_notes: synthesizedDna.implementation_notes ?? null,
     quality_score: Math.min(10, Math.max(0, (synthesizedDna.quality_score as number) ?? (config.isDeep ? 7 : 5))),
-    quality_source: "multi_pass_extraction",
+    quality_source: config.isDeep ? "deep_multi_pass" : "multi_pass_extraction",
     extracted_at: new Date().toISOString(),
     validated: false,
   };

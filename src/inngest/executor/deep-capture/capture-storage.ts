@@ -2,6 +2,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AgentObservation, CaptureQualification } from "../browser-agent-state";
 
 export const CAPTURE_BUCKET = "design-dna-captures";
+const THUMB_SIGNED_URL_TTL_SEC = 3600;
+
+export type JobCaptureRow = {
+  id: string;
+  thumb_path: string;
+  section_type: string;
+  label: string;
+  segment_index: number;
+};
 
 export type PersistCaptureInput = {
   jobId: string;
@@ -114,6 +123,35 @@ export async function persistScreenshotCapture(
     label: input.fullPage ? "full-page segment capture" : "viewport capture",
     confidence: 0,
   });
+}
+
+export async function listJobCaptures(
+  supabase: SupabaseClient,
+  jobId: string,
+): Promise<JobCaptureRow[]> {
+  const { data, error } = await supabase
+    .from("design_dna_captures")
+    .select("id, thumb_path, section_type, label, segment_index")
+    .eq("job_id", jobId)
+    .order("segment_index", { ascending: true });
+  if (error) {
+    throw new Error(`list captures failed: ${error.message}`);
+  }
+  return (data ?? []) as JobCaptureRow[];
+}
+
+export async function createCaptureThumbSignedUrl(
+  supabase: SupabaseClient,
+  thumbPath: string,
+  expiresInSec = THUMB_SIGNED_URL_TTL_SEC,
+): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from(CAPTURE_BUCKET)
+    .createSignedUrl(thumbPath, expiresInSec);
+  if (error || !data?.signedUrl) {
+    throw new Error(`thumb signed url failed: ${error?.message ?? "no url"}`);
+  }
+  return data.signedUrl;
 }
 
 /** Observation shape for agent history — no pixels (law L2). */
