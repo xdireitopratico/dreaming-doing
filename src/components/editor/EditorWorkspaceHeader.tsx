@@ -9,7 +9,7 @@ import {
   PreviewDeviceCycleButton,
   type PreviewDevice,
 } from "@/components/editor/PreviewViewportChrome";
-import { previewDeviceWidth } from "@/components/editor/preview-device";
+import { PreviewRouteNav } from "@/components/editor/PreviewRouteNav";
 import {
   InspectorNavControls,
   type InspectorNavControlsProps,
@@ -107,6 +107,17 @@ export function EditorWorkspaceHeader({
             <PreviewDeviceCycleButton
               device={preview!.device}
               onDeviceChange={preview!.onDeviceChange}
+            />
+          </div>
+
+          <div className="forge-workspace-header-url">
+            <PreviewRouteNav
+              variant="chrome"
+              compact
+              files={preview!.files}
+              activePath={preview!.activePath}
+              onNavigate={preview!.onNavigate}
+              devUrl={preview!.devUrl}
             />
           </div>
 

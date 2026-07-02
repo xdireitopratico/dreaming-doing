@@ -11,19 +11,18 @@ import {
 import { getPresetById } from "@/lib/model-catalog";
 import { postAgentRun } from "@/hooks/agent-run/agent-run-connect";
 import { Switch } from "@/components/ui/switch";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
-type ContextUsage = {
-  usageTokens: number;
-  windowTokens: number;
-  percent: number;
-  mode: ContextWindowMode;
-  compacting: boolean;
-} | null | undefined;
+type ContextUsage =
+  | {
+      usageTokens: number;
+      windowTokens: number;
+      percent: number;
+      mode: ContextWindowMode;
+      compacting: boolean;
+    }
+  | null
+  | undefined;
 
 type ContextWindowIndicatorProps = {
   contextUsage?: ContextUsage;
@@ -52,14 +51,11 @@ export function ContextWindowIndicator({
     setPrefs(readContextPrefs(loadAgentPreferences()));
   }, [open]);
 
-  const modelLabel = useMemo(() => {
-    const raw = loadAgentPreferences();
-    const preset = getPresetById(
-      raw.mode === "robin" ? raw.robinPoolModelId : raw.fixedPresetId,
-      raw.userModelEntries,
-    );
-    return preset.label;
-  }, [open]);
+  const rawPrefs = loadAgentPreferences();
+  const modelLabel = getPresetById(
+    rawPrefs.mode === "robin" ? rawPrefs.robinPoolModelId : rawPrefs.fixedPresetId,
+    rawPrefs.userModelEntries,
+  ).label;
 
   const fillPercent = useMemo(() => {
     if (contextUsage?.compacting || compactPending) return 100;
@@ -155,15 +151,15 @@ export function ContextWindowIndicator({
         align="start"
         side="top"
         sideOffset={8}
-        className="w-[192px] border border-[var(--border-forge)]/70 bg-transparent p-0 shadow-none"
+        className="w-[176px] border border-[var(--border-forge)]/70 bg-transparent p-0 shadow-none"
       >
-        <div className="rounded-[14px] border border-[var(--forge-border-strong,rgba(237,239,242,0.14))] bg-[linear-gradient(135deg,#1a1e27,#0b0d12)] p-1.5 shadow-[0_16px_44px_rgba(0,0,0,0.42),0_0_0_1px_rgba(255,182,39,0.04)_inset] backdrop-blur-[22px] backdrop-saturate-[140%]">
+        <div className="rounded-[12px] border border-[var(--forge-border-strong,rgba(237,239,242,0.14))] bg-[linear-gradient(135deg,#1a1e27,#0b0d12)] p-[5px] shadow-[0_14px_36px_rgba(0,0,0,0.4),0_0_0_1px_rgba(255,182,39,0.04)_inset] backdrop-blur-[20px] backdrop-saturate-[140%]">
           <div className="grid gap-1">
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-1">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-1">
               <div className="min-w-0">
                 <label
                   htmlFor="context-window-tokens"
-                  className="mb-0.5 block text-[8px] uppercase tracking-[0.16em] text-[var(--text-muted)]"
+                  className="mb-0.5 block text-[8px] uppercase tracking-[0.18em] text-[var(--text-muted)]"
                 >
                   tokens
                 </label>
@@ -171,7 +167,7 @@ export function ContextWindowIndicator({
                   id="context-window-tokens"
                   type="text"
                   inputMode="numeric"
-                  className="h-7 w-full rounded-md border border-[var(--border-forge)] bg-[var(--bg-base)] px-2 font-mono text-[10px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus:border-[var(--border-active)]"
+                  className="h-6 w-full rounded-md border border-[var(--border-forge)] bg-[var(--bg-base)] px-2 font-mono text-[11px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus:border-[var(--border-active)]"
                   placeholder="128000"
                   value={prefs.windowTokens}
                   onChange={(e) => setPrefs((p) => ({ ...p, windowTokens: e.target.value }))}
@@ -179,30 +175,39 @@ export function ContextWindowIndicator({
                 />
               </div>
 
-              <div className="pb-0.5">
-                <Switch
-                  checked={prefs.mode === "auto"}
-                  disabled={saving}
-                  aria-label={prefs.mode === "auto" ? "Automático" : "Manual"}
-                  title={prefs.mode === "auto" ? "Automático" : "Manual"}
-                  onCheckedChange={(checked) => {
-                    const next: { mode: ContextWindowMode; windowTokens: string } = {
-                      ...prefs,
-                      mode: checked ? "auto" : "manual",
-                    };
-                    setPrefs(next);
-                    void persistPrefs(next);
-                  }}
-                  className={cn(
-                    "h-[15px] w-[27px] border border-[var(--border-forge)] shadow-none",
-                    "data-[state=checked]:bg-[var(--text-accent)] data-[state=unchecked]:bg-[var(--bg-hover)]",
-                    "data-[state=checked]:border-transparent data-[state=unchecked]:border-[var(--border-forge)]",
-                  )}
-                />
+              <div className="min-w-0">
+                <label
+                  htmlFor="context-window-mode"
+                  className="mb-0.5 block text-[8px] uppercase tracking-[0.18em] text-[var(--text-muted)]"
+                >
+                  mode
+                </label>
+                <div className="pt-[1px]">
+                  <Switch
+                    id="context-window-mode"
+                    checked={prefs.mode === "auto"}
+                    disabled={saving}
+                    aria-label={prefs.mode === "auto" ? "Automático" : "Manual"}
+                    title={prefs.mode === "auto" ? "Automático" : "Manual"}
+                    onCheckedChange={(checked) => {
+                      const next: { mode: ContextWindowMode; windowTokens: string } = {
+                        ...prefs,
+                        mode: checked ? "auto" : "manual",
+                      };
+                      setPrefs(next);
+                      void persistPrefs(next);
+                    }}
+                    className={cn(
+                      "h-[15px] w-[27px] border border-[var(--border-forge)] shadow-none",
+                      "data-[state=checked]:bg-[var(--text-accent)] data-[state=unchecked]:bg-[var(--bg-hover)]",
+                      "data-[state=checked]:border-transparent data-[state=unchecked]:border-[var(--border-forge)]",
+                    )}
+                  />
+                </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-1 rounded-md border border-[rgba(237,239,242,0.08)] bg-[rgba(255,255,255,0.03)] px-1.5 py-1">
+            <div className="flex items-center gap-1 rounded-md border border-[rgba(237,239,242,0.08)] bg-[rgba(255,255,255,0.03)] px-1.5 py-[3px]">
               <Brain className="size-2.5 shrink-0 text-[var(--text-accent)]" aria-hidden />
               <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-[var(--bg-hover)]">
                 <div
@@ -214,7 +219,7 @@ export function ContextWindowIndicator({
                   }}
                 />
               </div>
-              <span className="min-w-7 text-right font-mono text-[9px] tabular-nums text-[var(--text-secondary)]">
+              <span className="min-w-7 text-right font-mono text-[9px] tabular-nums text-[var(--text-accent)]">
                 {percentLabel}
               </span>
             </div>
@@ -229,8 +234,8 @@ export function ContextWindowIndicator({
 
               <button
                 type="button"
-                className="forge-composer-send min-w-[70px] px-2 text-[9px] font-semibold"
-                style={{ width: "auto", height: "22px", paddingInline: "8px", borderRadius: "8px" }}
+                className="forge-composer-send min-w-[68px] px-2 text-[9px] font-semibold"
+                style={{ width: "auto", height: "20px", paddingInline: "8px", borderRadius: "7px" }}
                 disabled={saving || isCompacting}
                 onClick={() => void handleCompactNow()}
               >
