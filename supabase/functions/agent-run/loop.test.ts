@@ -1173,11 +1173,11 @@ Deno.test("19 observer validate_ok", async () => {
   assert(ef(events, "validate_ok").length >= 1, `Eventos: ${events.map((e) => e.type).join(",")}`);
 });
 
-Deno.test("20 compressão a cada 5 turnos", async () => {
+Deno.test("20 context_usage emitido durante execução", async () => {
   const { loop, cheap, main, events } = f({
     msgs: [
       { role: "user", content: "Faça alterações" },
-      ...Array.from({ length: 130 }, (_, i) => ({
+      ...Array.from({ length: 20 }, (_, i) => ({
         role: "user" as const,
         content: `Contexto histórico ${i} `.repeat(8),
       })),
@@ -1188,8 +1188,8 @@ Deno.test("20 compressão a cada 5 turnos", async () => {
   main.queue(er("P1", tc("t1", "fs_write", { path: "src/f1.tsx", content: "// 1" })));
   main.queue(tr("Resumo: alterações feitas."));
   await loop.run();
-  const ce = ef(events, "context_compress");
-  assert(ce.length >= 1, `Eventos: ${events.map((e) => e.type).join(",")}`);
+  const usage = ef(events, "context_usage");
+  assert(usage.length >= 1, `Eventos: ${events.map((e) => e.type).join(",")}`);
 });
 
 Deno.test("21 resume sem checkpoint", async () => {

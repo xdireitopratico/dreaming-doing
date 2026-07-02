@@ -41,6 +41,8 @@ export type StreamProcessorRefs = {
   runIdRef: MutableRefObject<string | null>;
   closedRunIdRef: MutableRefObject<string | null>;
   lastSeqRef: MutableRefObject<number>;
+  /** Seq já aplicados à timeline — evita drop falso quando thinking batch avança lastSeq. */
+  appliedSeqsRef: MutableRefObject<Set<number>>;
   activeRunStartedAtMsRef: MutableRefObject<number | null>;
   streamProcessingRef: MutableRefObject<boolean>;
   streamBufferRef: MutableRefObject<AgentStreamRow[]>;
@@ -50,6 +52,18 @@ export function createStreamRowHandlers(
   refs: StreamProcessorRefs,
   setProgress: Dispatch<SetStateAction<AgentProgress>>,
 ) {
+  const markSeqApplied = (seq: number) => {
+    refs.appliedSeqsRef.current.add(seq);
+    refs.lastSeqRef.current = Math.max(refs.lastSeqRef.current, seq);
+  };
+
+  const isDuplicateSeq = (seq: number) => refs.appliedSeqsRef.current.has(seq);
+
+  const resetSeqState = () => {
+    refs.lastSeqRef.current = 0;
+    refs.appliedSeqsRef.current.clear();
+  };
+
   const applyStreamRow = (row: AgentStreamRow): boolean => {
     const event = streamRowToSSEEvent(row);
     const t = event.type;
@@ -64,9 +78,9 @@ export function createStreamRowHandlers(
       return false;
     }
     if (rowRunId && activeId && rowRunId !== activeId && t === "start") {
-      refs.lastSeqRef.current = 0;
+      resetSeqState();
     }
-    if (row.seq <= refs.lastSeqRef.current) {
+    if (isDuplicateSeq(row.seq)) {
       emitStreamingTelemetry("agent.stream_seq_dropped", {
         seq: row.seq,
         lastSeq: refs.lastSeqRef.current,
@@ -81,7 +95,7 @@ export function createStreamRowHandlers(
         gap: row.seq - refs.lastSeqRef.current - 1,
       });
     }
-    refs.lastSeqRef.current = row.seq;
+    markSeqApplied(row.seq);
     emitStreamingTelemetry("agent.stream_seq_processed", {
       seq: row.seq,
       eventType: t,
@@ -115,9 +129,9 @@ export function createStreamRowHandlers(
       drainReorderBuffer();
       return t;
     }
-    // Contabiliza seqs intermediários para telemetry e lastSeqRef ficarem consistentes.
+    // Contabiliza seqs intermediários para telemetry e dedup por appliedSeqs.
     for (const r of rows.slice(0, -1)) {
-      refs.lastSeqRef.current = r.seq;
+      markSeqApplied(r.seq);
       emitStreamingTelemetry("agent.stream_seq_processed", {
         seq: r.seq,
         eventType: r.event_type,
@@ -208,9 +222,9 @@ export function createStreamRowHandlers(
     const activeId = refs.runIdRef.current;
     if (rowRunId && refs.closedRunIdRef.current === rowRunId) return false;
     if (rowRunId && activeId && rowRunId !== activeId && row.event_type === "start") {
-      refs.lastSeqRef.current = 0;
+      resetSeqState();
     }
-    if (row.seq <= refs.lastSeqRef.current) {
+    if (isDuplicateSeq(row.seq)) {
       emitStreamingTelemetry("agent.stream_seq_dropped", {
         seq: row.seq,
         lastSeq: refs.lastSeqRef.current,
@@ -227,6 +241,13 @@ export function createStreamRowHandlers(
     // Qualquer evento não-thinking deve despejar o lote de thinking primeiro,
     // senão lastSeq fica atrasado e o seq do novo evento pode parecer gap/duplicado.
     flushThinkingBatch();
+    // Evento estrutural atrasado (catch-up) — aplica direto em vez de descartar por lastSeq alto.
+    if (!isThinkingTextRow(row) && row.seq < refs.lastSeqRef.current) {
+      const t = applyStreamRow(row);
+      drainReorderBuffer();
+      if (t) clearReorder();
+      return t;
+    }
     // Terminal nunca bufferiza — aplica direto (mesmo com gap) pra não travar o fim do run.
     if (isTerminalEventType(row.event_type) || row.seq === refs.lastSeqRef.current + 1) {
       const t = applyStreamRow(row);

@@ -58,6 +58,7 @@ export function useAgentRun() {
   const progressRef = useRef<AgentProgress>(initialAgentProgress);
   const frozenRunProgressRef = useRef<Map<string, AgentProgress>>(new Map());
   const lastSeqRef = useRef(0);
+  const appliedSeqsRef = useRef(new Set<number>());
   const streamProcessingRef = useRef(false);
   const streamBufferRef = useRef<AgentStreamRow[]>([]);
   const sessionContextRef = useRef<SessionContext | null>(null);
@@ -97,6 +98,7 @@ export function useAgentRun() {
           runIdRef,
           closedRunIdRef,
           lastSeqRef,
+          appliedSeqsRef,
           activeRunStartedAtMsRef,
           streamProcessingRef,
           streamBufferRef,
@@ -112,6 +114,7 @@ export function useAgentRun() {
         runIdRef,
         closedRunIdRef,
         lastSeqRef,
+        appliedSeqsRef,
         pendingQueueCountRef,
         activeRunStartedAtMsRef,
         streamBufferRef,

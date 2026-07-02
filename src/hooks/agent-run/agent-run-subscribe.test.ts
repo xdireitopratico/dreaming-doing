@@ -85,6 +85,7 @@ describe("createRunSubscriptionHandlers", () => {
       runIdRef: { current: null },
       closedRunIdRef: { current: null as string | null },
       lastSeqRef: { current: 0 },
+      appliedSeqsRef: { current: new Set<number>() },
       pendingQueueCountRef: { current: 0 },
       activeRunStartedAtMsRef: { current: null },
       streamBufferRef: { current: [] },

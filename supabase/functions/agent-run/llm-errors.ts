@@ -26,8 +26,18 @@ export function isOverloadError(err: unknown): boolean {
   );
 }
 
+export function isTimeoutError(err: unknown): boolean {
+  const msg = errorMessage(err).toLowerCase();
+  return msg.includes("timeout") || msg.includes("timed out");
+}
+
 export function isRetryableLlmError(err: unknown): boolean {
-  return isRateLimitError(err) || isOverloadError(err) || isConnectionError(err);
+  return (
+    isRateLimitError(err) ||
+    isOverloadError(err) ||
+    isConnectionError(err) ||
+    isTimeoutError(err)
+  );
 }
 
 /**
@@ -65,8 +75,6 @@ export function isConnectionError(err: unknown): boolean {
   return (
     msg.includes("network") ||
     msg.includes("connection") ||
-    msg.includes("timeout") ||
-    msg.includes("timed out") ||
     msg.includes("econnreset") ||
     msg.includes("fetch failed") ||
     msg.includes("broken pipe") ||
@@ -130,6 +138,9 @@ export function friendlyLlmError(err: unknown, robinActive: boolean): string {
     return robinActive
       ? "Limite por minuto atingido nesta chave. O modo ROBIN está tentando a próxima chave do pool…"
       : "Limite por minuto atingido no provedor. Aguarde um pouco ou adicione mais chaves em API Keys (modo ROBIN).";
+  }
+  if (isTimeoutError(err)) {
+    return "O modelo demorou demais para responder. Seu histórico está salvo — use Continuar para retomar.";
   }
   if (isConnectionError(err)) {
     return "Conexão com o modelo instável. Seu histórico está salvo — use Continuar para retomar.";

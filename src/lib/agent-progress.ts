@@ -166,6 +166,14 @@ export interface AgentProgress {
   /** Tarefas atômicas declaradas (build mode via declare_tasks, ou derivadas de plano aprovado).
    *  Alimenta o checklist do mini-card. */
   tasks?: AgentTask[];
+  /** Janela de contexto — uso em tempo real (dot do composer). */
+  contextUsage?: {
+    usageTokens: number;
+    windowTokens: number;
+    percent: number;
+    mode: "manual" | "auto";
+    compacting: boolean;
+  } | null;
 }
 
 export type AgentConnectOptions = {
@@ -421,11 +429,24 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
 
     case "phase": {
       const msg = (data.message as string) ?? prev.message;
+      const phase = (data.phase as string) ?? prev.phase;
+      const compacting = phase === "compact";
       return {
         ...prev,
-        phase: (data.phase as string) ?? prev.phase,
+        phase,
         message: msg,
         statusHint: msg ?? prev.statusHint,
+        contextUsage: prev.contextUsage
+          ? { ...prev.contextUsage, compacting: compacting || prev.contextUsage.compacting }
+          : compacting
+            ? {
+                usageTokens: 0,
+                windowTokens: 0,
+                percent: 0,
+                mode: "manual",
+                compacting: true,
+              }
+            : prev.contextUsage,
         timeline: [...prev.timeline, event],
       };
     }
@@ -496,11 +517,36 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       return { ...prev, tasks, timeline: [...prev.timeline, event] };
     }
 
-    case "context_pressure":
-    case "context_compress":
+    case "context_usage":
       return {
         ...prev,
-        statusHint: (data.message as string) ?? prev.statusHint,
+        contextUsage: {
+          usageTokens: typeof data.usageTokens === "number" ? data.usageTokens : 0,
+          windowTokens: typeof data.windowTokens === "number" ? data.windowTokens : 0,
+          percent: typeof data.percent === "number" ? data.percent : 0,
+          mode: data.mode === "auto" ? "auto" : "manual",
+          compacting: data.compacting === true,
+        },
+        timeline: [...prev.timeline, event],
+      };
+
+    case "context_compact_done":
+      return {
+        ...prev,
+        contextUsage: prev.contextUsage
+          ? {
+              ...prev.contextUsage,
+              usageTokens:
+                typeof data.afterTokens === "number"
+                  ? data.afterTokens
+                  : prev.contextUsage.usageTokens,
+              percent:
+                typeof data.percentAfter === "number"
+                  ? data.percentAfter
+                  : prev.contextUsage.percent,
+              compacting: false,
+            }
+          : prev.contextUsage,
         timeline: [...prev.timeline, event],
       };
 
@@ -915,6 +961,16 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         timeline: [...prev.timeline, event],
       };
     }
+
+    case "run_paused":
+      return {
+        ...prev,
+        autoResuming: false,
+        resumable: true,
+        statusHint:
+          (data.message as string) ?? "Execução pausada — use Continuar para retomar.",
+        timeline: [...prev.timeline, event],
+      };
 
     default:
       return { ...prev, timeline: [...prev.timeline, event] };

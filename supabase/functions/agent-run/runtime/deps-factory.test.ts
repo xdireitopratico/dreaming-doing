@@ -41,7 +41,10 @@ function mockDepsContext(overrides?: Partial<AgentLoopDepsContext>): AgentLoopDe
       getDefinitions: () => [],
       execute: async () => mockToolResult,
     } as unknown as AgentLoopDepsContext["reg"],
-    compression: { compress: async (m) => m } as AgentLoopDepsContext["compression"],
+    compression: {
+      prepareMessages: (m) => m,
+      emitUsage: () => {},
+    } as AgentLoopDepsContext["compression"],
     observer: {} as AgentLoopDepsContext["observer"],
     router: {} as AgentLoopDepsContext["router"],
     robinActive: false,
@@ -181,7 +184,10 @@ function mockHost(overrides?: Partial<AgentLoopHost>): MockHostWithEmitted {
       getDefinitions: () => [],
       execute: async () => mockToolResult,
     } as unknown as AgentLoopHost["reg"],
-    compression: { compress: async (m) => m } as AgentLoopHost["compression"],
+    compression: {
+      prepareMessages: (m) => m,
+      emitUsage: () => {},
+    } as AgentLoopHost["compression"],
     observer: {} as AgentLoopHost["observer"],
     router: {} as AgentLoopHost["router"],
     robinActive: false,

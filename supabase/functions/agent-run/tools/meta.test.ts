@@ -66,6 +66,10 @@ Deno.test("proposedPlanFromToolArgs exige 2-7 passos", () => {
 
 Deno.test("getMetaToolDefinitions e registerMetaTools respeitam planMode", () => {
   assertEquals(getMetaToolDefinitions(false).map((d) => d.name), ["clarify", "declare_tasks"]);
+  assertEquals(
+    getMetaToolDefinitions(false, { contextAuto: true }).map((d) => d.name),
+    ["clarify", "declare_tasks", "session_compact"],
+  );
   assertEquals(getMetaToolDefinitions(true).map((d) => d.name), ["clarify", "create_plan"]);
   const reg = new ToolRegistry();
   registerMetaTools(reg, { planMode: false });

@@ -1,5 +1,5 @@
 // runtime/phases/execute.ts — Loop principal de build/execute (Fase 2.2)
-import { CompressionManager, parallelExecute } from "../../compression.ts";
+import { SessionContextManager, parallelExecute } from "../../compression.ts";
 import type { RuntimeObserver } from "../../observer.ts";
 import type { ModelRouter } from "../../router.ts";
 import { buildExecuteInstruction } from "../../run-context.ts";
@@ -56,7 +56,11 @@ import type { ToolRegistry } from "../../registry.ts";
 import type { PersistFinalOpts } from "./persist.ts";
 import { LoopPhase as LoopPhaseEnum } from "../../types.ts";
 import type { LoopUpdateContext } from "../../loop-status.ts";
-import { friendlyLlmError, shouldFailFastLlmError } from "../../llm-errors.ts";
+import {
+  friendlyLlmError,
+  isTimeoutError,
+  shouldFailFastLlmError,
+} from "../../llm-errors.ts";
 import { designTelemetryEntry } from "../../design-telemetry.ts";
 import { signatureFromDesignField } from "../../design-plan-field.ts";
 import { NarrationPhase } from "./narration.ts";
@@ -111,7 +115,7 @@ export type BuildExecuteDeps = {
   touchedPaths: Set<string>;
   executionModel: LLMProvider;
   reg: ToolRegistry;
-  compression: CompressionManager;
+  compression: SessionContextManager;
   observer: RuntimeObserver;
   router: ModelRouter;
   emitAgentProse: (raw: string, loopStep: number) => void;
@@ -510,6 +514,7 @@ export async function runBuildExecutePhase(
       }
 
       loopStep++;
+      let timeoutRetriedThisStep = false;
       deps.state.currentStepIndex = loopStep;
       deps.state.phase = LoopPhaseEnum.EXECUTE_STEP;
       await deps.touchHeartbeat();
@@ -542,7 +547,44 @@ export async function runBuildExecutePhase(
         deps.emit("phase", { phase: "execute", message: "" });
       }
 
-      const compressed = await deps.compression.compress(deps.state.messages);
+      const readPathsSatisfiedEarly = areReadPathsSatisfied(
+        deps.approvedPlanDesign?.read_paths,
+        deps.designReadPathsDone,
+      );
+      const buildToolPhaseEarly = resolveBuildToolPhase({
+        touchedPathsCount: deps.touchedPaths.size,
+        readPathsSatisfied: readPathsSatisfiedEarly,
+        consecutiveReadOnlyBatches: deps.getConsecutiveNoContentReadSteps(),
+        loopStep,
+        approvedPlanBuild: deps.approvedPlanBuild,
+        hasDesignDirective: !!deps.approvedPlanDesign,
+      });
+      deps.compression.emitUsage(deps.state.messages);
+
+      if (deps.compression.shouldRunCompact(deps.state.messages)) {
+        deps.emit("phase", { phase: "compact", message: "Compactando contexto…" });
+        const designSnapshot = deps.approvedPlanDesign
+          ? JSON.stringify({
+              moment: deps.approvedPlanDesign.moment,
+              techniques: deps.approvedPlanDesign.techniques,
+              voice: deps.approvedPlanDesign.voice,
+            })
+          : undefined;
+        const compacted = await deps.compression.runCompact(deps.state.messages, {
+          mission: deps.originalUserRequest,
+          designSnapshot,
+        });
+        deps.state.messages = compacted.messages;
+        deps.compression.emitUsage(deps.state.messages);
+      } else if (deps.compression.shouldInjectAdvisory(deps.state.messages)) {
+        deps.state.messages.push({
+          role: "system",
+          content: deps.compression.buildAdvisoryMessage(),
+        });
+        deps.compression.markAdvisoryInjected();
+      }
+
+      const compressed = deps.compression.prepareMessages(deps.state.messages);
       const executeInstruction = buildExecuteInstruction(deps.originalUserRequest, {
         loopStep,
         buildFixResume: deps.buildFixResume,
@@ -581,6 +623,7 @@ export async function runBuildExecutePhase(
         consecutiveReadOnlyBatches: deps.getConsecutiveNoContentReadSteps(),
         loopStep,
         approvedPlanBuild: deps.approvedPlanBuild,
+        hasDesignDirective: !!deps.approvedPlanDesign,
       });
       const prevBuildToolPhase = deps.getBuildToolPhase();
       deps.setBuildToolPhase(buildToolPhase);
@@ -611,11 +654,18 @@ export async function runBuildExecutePhase(
         );
       } catch (err: unknown) {
         const friendly = friendlyLlmError(err, deps.robinActive);
-        logger.event("agent.build_llm_error", {
+        const timedOut = isTimeoutError(err);
+        logger.event(timedOut ? "agent.build_llm_timeout" : "agent.build_llm_error", {
           loopStep,
           friendly,
           failFast: shouldFailFastLlmError(err),
+          timedOut,
         });
+        if (timedOut && !timeoutRetriedThisStep) {
+          timeoutRetriedThisStep = true;
+          loopStep--;
+          continue;
+        }
         if (shouldFailFastLlmError(err)) {
           const failMsg = `Erro: ${friendly}`;
           const fastExit = await guardedTerminalExit(deps, loopStep, () =>
@@ -636,16 +686,16 @@ export async function runBuildExecutePhase(
             return zeroWritesResumableExit(deps, loopStep, "llm_retries_exhausted");
           }
           const failMsg = `Erro: ${friendly}`;
-          await deps.saveCheckpoint(LoopPhaseEnum.ERROR, true);
           deps.notifyLoopStatus({ kind: "model_error", errorDetail: friendly });
           return deps.returnResumableWithUserMessage(loopStep, deps.toolsUsed, {
             errorMessage: failMsg,
+            pauseForUser: true,
           });
         }
-        await deps.saveCheckpoint(LoopPhaseEnum.ERROR, true);
         deps.notifyLoopStatus({ kind: "model_error", errorDetail: friendly });
         return deps.returnResumableWithUserMessage(loopStep, deps.toolsUsed, {
           errorMessage: friendly,
+          pauseForUser: true,
         });
       }
 
@@ -696,8 +746,51 @@ export async function runBuildExecutePhase(
         clarify: clarifyCall,
         createPlan: createPlanCall,
         declareTasks: declareTasksCall,
+        sessionCompact: sessionCompactCall,
         execution: execCalls,
       } = splitMetaToolCalls(response.tool_calls ?? []);
+
+      if (sessionCompactCall) {
+        deps.toolsUsed.add("session_compact");
+        deps.emit("phase", { phase: "compact", message: "Compactando contexto…" });
+        const designSnapshot = deps.approvedPlanDesign
+          ? JSON.stringify({
+              moment: deps.approvedPlanDesign.moment,
+              techniques: deps.approvedPlanDesign.techniques,
+              voice: deps.approvedPlanDesign.voice,
+            })
+          : undefined;
+        const compacted = await deps.compression.runCompact(deps.state.messages, {
+          mission: deps.originalUserRequest,
+          designSnapshot,
+        });
+        deps.state.messages = compacted.messages;
+        deps.compression.emitUsage(deps.state.messages);
+        deps.state.messages.push({
+          role: "assistant",
+          content: response.content ?? assistantText,
+          tool_calls: [
+            {
+              id: sessionCompactCall.id,
+              type: "function" as const,
+              function: {
+                name: sessionCompactCall.name,
+                arguments: JSON.stringify(sessionCompactCall.arguments),
+              },
+            },
+          ],
+        });
+        deps.state.messages.push({
+          role: "tool",
+          tool_call_id: sessionCompactCall.id,
+          content: JSON.stringify({
+            ok: true,
+            beforeTokens: compacted.beforeTokens,
+            afterTokens: compacted.afterTokens,
+          }),
+        });
+        continue;
+      }
 
       if (declareTasksCall) {
         deps.toolsUsed.add("declare_tasks");

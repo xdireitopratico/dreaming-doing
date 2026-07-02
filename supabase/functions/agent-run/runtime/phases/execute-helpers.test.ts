@@ -103,6 +103,20 @@ Deno.test("resolveBuildToolPhase — approved build escala para write", () => {
   );
 });
 
+Deno.test("resolveBuildToolPhase — design directive escala após 1 batch read", () => {
+  assertEquals(
+    resolveBuildToolPhase({
+      touchedPathsCount: 0,
+      readPathsSatisfied: false,
+      consecutiveReadOnlyBatches: 1,
+      loopStep: 2,
+      approvedPlanBuild: true,
+      hasDesignDirective: true,
+    }),
+    "write",
+  );
+});
+
 Deno.test("resolveBuildToolPhase — build comum permanece discovery no step 4", () => {
   assertEquals(
     resolveBuildToolPhase({

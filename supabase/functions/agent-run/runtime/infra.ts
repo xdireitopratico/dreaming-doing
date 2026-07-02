@@ -10,7 +10,9 @@ export type ResumableChunkResult = {
   ok: false;
   error: string;
   steps: number;
-  resumable: true;
+  resumable: boolean;
+  awaiting?: boolean;
+  awaitingUser?: Record<string, unknown>;
   buildFix?: boolean;
   toolsUsed: string[];
 };
@@ -18,6 +20,8 @@ export type ResumableChunkResult = {
 export type ResumableExitOptions = {
   buildFix?: boolean;
   errorMessage?: string;
+  /** Pausa para o usuário clicar Continuar — não auto-enfileira próximo chunk. */
+  pauseForUser?: boolean;
 };
 
 export type RunInfraDeps = {
@@ -183,5 +187,27 @@ export async function returnResumableWithUserMessage(
   if (persistFinalFn) {
     await persistFinalFn(prose, { lastFinishOk: false, finished: false });
   }
+
+  if (options?.pauseForUser) {
+    const errMsg = options.errorMessage ?? prose;
+    await infraDeps.saveCheckpoint(infraDeps.getPhase(), true);
+    await touchHeartbeat(infraDeps);
+    infraDeps.emit("run_paused", {
+      type: "run_paused",
+      reason: "llm_error",
+      message: errMsg,
+      resumable: true,
+    });
+    return {
+      ok: false,
+      error: errMsg,
+      steps,
+      resumable: false,
+      awaiting: true,
+      awaitingUser: { type: "llm_resume", message: errMsg },
+      toolsUsed: [...toolsUsed],
+    };
+  }
+
   return returnResumableChunk(infraDeps, steps, toolsUsed, options);
 }

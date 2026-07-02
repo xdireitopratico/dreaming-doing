@@ -3,8 +3,14 @@ import { FORGE_ADMIN_EMAIL } from "../_shared/forge-admin.ts";
 import { applyOpenAiConnectorToken } from "../_shared/provider-wire.ts";
 import { enrichConnectorKeysWithCustomProviders } from "./custom-providers-db.ts";
 
+export type ContextWindowPayload = {
+  mode?: "manual" | "auto";
+  windowTokens?: number;
+};
+
 export type AgentPreferencesPayload = {
   mode?: "auto" | "robin" | "rob" | "fixed";
+  contextWindow?: ContextWindowPayload;
   poolProvider?: string;
   fixedPresetId?: string;
   robinPoolModelId?: string;

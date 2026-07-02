@@ -31,14 +31,17 @@ export function resolveBuildToolPhase(input: {
   consecutiveReadOnlyBatches: number;
   loopStep: number;
   approvedPlanBuild: boolean;
+  hasDesignDirective?: boolean;
 }): BuildToolPhase {
   if (input.touchedPathsCount > 0) return "discovery";
+  const designEscalateBatch =
+    input.approvedPlanBuild && input.hasDesignDirective ? 1 : READ_ONLY_BATCH_ESCALATE;
   if (!input.approvedPlanBuild) {
     if (input.consecutiveReadOnlyBatches >= READ_ONLY_BATCH_ESCALATE) return "write";
     return "discovery";
   }
   if (input.readPathsSatisfied) return "write";
-  if (input.consecutiveReadOnlyBatches >= READ_ONLY_BATCH_ESCALATE) return "write";
+  if (input.consecutiveReadOnlyBatches >= designEscalateBatch) return "write";
   if (input.loopStep >= WRITE_PHASE_MIN_STEP) return "write";
   return "discovery";
 }

@@ -20,6 +20,7 @@ export type RunSubscriptionDeps = {
   runIdRef: MutableRefObject<string | null>;
   closedRunIdRef: MutableRefObject<string | null>;
   lastSeqRef: MutableRefObject<number>;
+  appliedSeqsRef: MutableRefObject<Set<number>>;
   pendingQueueCountRef: MutableRefObject<number>;
   activeRunStartedAtMsRef: MutableRefObject<number | null>;
   streamBufferRef: MutableRefObject<AgentStreamRow[]>;
@@ -224,12 +225,14 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
     deps.setQueueBlockingReason(null);
     if (!isSame && opts?.resetProgress !== false) {
       deps.lastSeqRef.current = 0;
+      deps.appliedSeqsRef.current.clear();
       deps.setProgress({
         ...initialAgentProgress,
         statusHint: "Conectando ao agente…",
       });
     } else if (!isSame) {
       deps.lastSeqRef.current = 0;
+      deps.appliedSeqsRef.current.clear();
     }
 
     deps.setConnected(true);

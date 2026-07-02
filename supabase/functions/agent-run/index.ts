@@ -103,6 +103,34 @@ Deno.serve(async (req) => {
         action: typeof body.action === "string" ? body.action : "run",
       });
 
+      if (body.action === "request_compact") {
+        const runId = body.runId as string | undefined;
+        if (!runId) return json({ error: "runId obrigatório" }, 400);
+
+        const { data: run } = await supabase
+          .from("agent_runs")
+          .select("id, user_id, status, meta")
+          .eq("id", runId)
+          .maybeSingle();
+
+        if (!run || run.user_id !== userData.user.id) {
+          return json({ error: "Run não encontrada" }, 404);
+        }
+        if (run.status === "completed" || run.status === "failed" || run.status === "canceled") {
+          return json({ ok: false, reason: "run_terminal" });
+        }
+
+        const meta = (run.meta ?? {}) as Record<string, unknown>;
+        await supabase
+          .from("agent_runs")
+          .update({
+            meta: { ...meta, compactRequested: true, compactRequestedAt: new Date().toISOString() },
+          })
+          .eq("id", runId);
+
+        return json({ ok: true });
+      }
+
       if (body.action === "cancel") {
         const runId = body.runId as string | undefined;
         if (!runId) return json({ error: "runId obrigatório" }, 400);
@@ -756,7 +784,7 @@ Deno.serve(async (req) => {
           .eq("conversation_id", conversationId)
           .eq("project_id", projectId)
           .eq("user_id", userData.user.id)
-          .in("status", ["running", "failed"])
+          .in("status", ["running", "failed", "awaiting_user"])
           .order("started_at", { ascending: false })
           .limit(1)
           .maybeSingle();

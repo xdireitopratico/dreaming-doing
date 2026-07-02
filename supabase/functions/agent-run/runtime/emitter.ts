@@ -157,26 +157,7 @@ export class RuntimeEmitter {
           data: { message, phase: "execute" },
         });
       }
-      if (type === "context_compress") {
-        this.onStream({
-          type: "alert",
-          data: {
-            level: "info",
-            message: typeof d.message === "string" ? d.message : "Compactando contexto — isso pode levar um minuto",
-            alertId: "context_compress",
-          },
-        });
-      }
-      if (type === "context_pressure") {
-        this.onStream({
-          type: "alert",
-          data: {
-            level: "info",
-            message: typeof d.message === "string" ? d.message : "Contexto grande — otimizando memória",
-            alertId: "context_pressure",
-          },
-        });
-      }
+
       if (type === "background_wait") {
         const eta = typeof d.etaSec === "number" ? d.etaSec : null;
         const url = typeof d.source_url === "string" ? d.source_url : "";

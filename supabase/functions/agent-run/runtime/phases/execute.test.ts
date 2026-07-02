@@ -96,7 +96,17 @@ function buildStubbedExecuteDeps(overrides?: {
       ],
     } as unknown as BuildExecuteDeps["reg"],
     compression: {
-      compress: async (m: ChatMessage[]) => m,
+      emitUsage: () => {},
+      shouldRunCompact: () => false,
+      shouldInjectAdvisory: () => false,
+      markAdvisoryInjected: () => {},
+      buildAdvisoryMessage: () => "",
+      prepareMessages: (m: ChatMessage[]) => m,
+      runCompact: async (m: ChatMessage[]) => ({
+        messages: m,
+        beforeTokens: 0,
+        afterTokens: 0,
+      }),
       recordUsage: () => {},
       getTotalTokens: () => ({ input: 0, output: 0, total: 0 }),
       getEstimatedCostUsd: () => 0,

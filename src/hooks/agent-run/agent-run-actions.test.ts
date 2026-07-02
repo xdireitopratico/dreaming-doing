@@ -25,6 +25,7 @@ describe("createRunActionHandlers", () => {
       runIdRef: { current: null },
       closedRunIdRef: { current: null },
       lastSeqRef: { current: 0 },
+      appliedSeqsRef: { current: new Set<number>() },
       setProgress: (next) => {
         progress = typeof next === "function" ? next(progress) : next;
       },

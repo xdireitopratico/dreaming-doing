@@ -12,6 +12,7 @@ import {
 export const META_CLARIFY_KIND = "meta_clarify";
 export const META_PLAN_KIND = "meta_plan";
 export const META_DECLARE_TASKS_KIND = "meta_declare_tasks";
+export const META_SESSION_COMPACT_KIND = "meta_session_compact";
 
 const VALID_STEP_TYPES = new Set<PlanStepType>([
   "create_file",
@@ -220,10 +221,31 @@ export const DECLARE_TASKS_TOOL: ToolDefinition = {
   },
 };
 
-export function getMetaToolDefinitions(planMode: boolean): ToolDefinition[] {
-  return planMode
-    ? [CLARIFY_TOOL, CREATE_PLAN_TOOL]
-    : [CLARIFY_TOOL, DECLARE_TASKS_TOOL];
+export const SESSION_COMPACT_TOOL: ToolDefinition = {
+  name: "session_compact",
+  description:
+    "Compacta a memória da sessão quando o contexto está grande (~80%+). " +
+    "Preserva missão, arquivos, decisões e tarefas em aberto. " +
+    "Use antes de continuar com novos ciclos de ferramentas.",
+  parameters: {
+    type: "object",
+    properties: {
+      reason: {
+        type: "string",
+        description: "Motivo breve para compactar (opcional).",
+      },
+    },
+  },
+};
+
+export function getMetaToolDefinitions(
+  planMode: boolean,
+  opts?: { contextAuto?: boolean },
+): ToolDefinition[] {
+  if (planMode) return [CLARIFY_TOOL, CREATE_PLAN_TOOL];
+  const base: ToolDefinition[] = [CLARIFY_TOOL, DECLARE_TASKS_TOOL];
+  if (opts?.contextAuto) base.push(SESSION_COMPACT_TOOL);
+  return base;
 }
 
 /** Patch/mutação — ocultas em Plan mode (leitura + shell exploratório permanecem). */
@@ -237,12 +259,17 @@ export function isPlanModePatchTool(name: string): boolean {
 export function mergeExecutionToolDefinitions(
   registryDefs: ToolDefinition[],
   planMode = false,
+  opts?: { contextAuto?: boolean },
 ): ToolDefinition[] {
   if (planMode) return mergePlanModeToolDefinitions(registryDefs);
   const filtered = registryDefs.filter(
-    (d) => d.name !== "clarify" && d.name !== "create_plan" && d.name !== "declare_tasks",
+    (d) =>
+      d.name !== "clarify" &&
+      d.name !== "create_plan" &&
+      d.name !== "declare_tasks" &&
+      d.name !== "session_compact",
   );
-  return [...filtered, ...getMetaToolDefinitions(false)];
+  return [...filtered, ...getMetaToolDefinitions(false, opts)];
 }
 
 /** Fase write do build — só materialização (sem reads). */
@@ -269,37 +296,58 @@ export function splitMetaToolCalls(toolCalls: ToolCall[]): {
   clarify: ToolCall | null;
   createPlan: ToolCall | null;
   declareTasks: ToolCall | null;
+  sessionCompact: ToolCall | null;
   execution: ToolCall[];
 } {
   let clarify: ToolCall | null = null;
   let createPlan: ToolCall | null = null;
   let declareTasks: ToolCall | null = null;
+  let sessionCompact: ToolCall | null = null;
   const execution: ToolCall[] = [];
   for (const call of toolCalls) {
     if (call.name === "clarify") clarify = call;
     else if (call.name === "create_plan") createPlan = call;
     else if (call.name === "declare_tasks") declareTasks = call;
+    else if (call.name === "session_compact") sessionCompact = call;
     else execution.push(call);
   }
-  return { clarify, createPlan, declareTasks, execution };
+  return { clarify, createPlan, declareTasks, sessionCompact, execution };
 }
 
 export function hasMixedMetaAndExecution(toolCalls: ToolCall[] | undefined): boolean {
   if (!toolCalls?.length) return false;
-  const { clarify, createPlan, declareTasks, execution } = splitMetaToolCalls(toolCalls);
+  const { clarify, createPlan, declareTasks, sessionCompact, execution } =
+    splitMetaToolCalls(toolCalls);
   return (
     execution.length > 0 &&
-    (clarify !== null || createPlan !== null || declareTasks !== null)
+    (clarify !== null ||
+      createPlan !== null ||
+      declareTasks !== null ||
+      sessionCompact !== null)
   );
 }
 
-export function registerMetaTools(reg: ToolRegistry, opts: { planMode: boolean }): void {
+export function registerMetaTools(
+  reg: ToolRegistry,
+  opts: { planMode: boolean; contextAuto?: boolean },
+): void {
   reg.register(CLARIFY_TOOL, async (args) => metaClarifyHandler(args));
   if (opts.planMode) {
     reg.register(CREATE_PLAN_TOOL, async (args) => metaPlanHandler(args));
   } else {
     reg.register(DECLARE_TASKS_TOOL, async (args) => metaDeclareTasksHandler(args));
+    if (opts.contextAuto) {
+      reg.register(SESSION_COMPACT_TOOL, async (args) => metaSessionCompactHandler(args));
+    }
   }
+}
+
+async function metaSessionCompactHandler(args: Record<string, unknown>): Promise<ToolResult> {
+  return {
+    toolCallId: "",
+    ok: true,
+    output: { kind: META_SESSION_COMPACT_KIND, ...args },
+  };
 }
 
 async function metaClarifyHandler(args: Record<string, unknown>): Promise<ToolResult> {

@@ -69,7 +69,17 @@ function makeMinimalDeps(overrides: Partial<BuildExecuteDeps> = {}): BuildExecut
     executionModel: { chat: async () => ({ role: "assistant", content: "", tool_calls: [] }) },
     reg: { getDefinitions: () => [] },
     compression: {
-      compress: async (messages: ChatMessage[]) => messages,
+      emitUsage: () => {},
+      shouldRunCompact: () => false,
+      shouldInjectAdvisory: () => false,
+      markAdvisoryInjected: () => {},
+      buildAdvisoryMessage: () => "",
+      prepareMessages: (messages: ChatMessage[]) => messages,
+      runCompact: async (messages: ChatMessage[]) => ({
+        messages,
+        beforeTokens: 0,
+        afterTokens: 0,
+      }),
       getTotalTokens: () => ({ input: 0, output: 0, total: 0 }),
       getEstimatedCostUsd: () => 0,
       recordUsage: () => {},

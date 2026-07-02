@@ -181,7 +181,7 @@ export function createLifecycleHandlers(deps: LifecycleHandlersDeps) {
         return { ok: false, error: msg };
       }
 
-      await deps.subscribeToRun(runId);
+      await deps.subscribeToRun(runId, { resetProgress: !manualResume });
       logEditorTelemetryEvent("agent_run", "connect_ok", "info", runId.slice(0, 8));
       return { ok: true };
     } catch (e) {

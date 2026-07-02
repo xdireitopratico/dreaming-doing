@@ -116,12 +116,21 @@ export type AgentStreamEventData =
       failed?: boolean;
     }
   | {
-      type: "context_pressure";
-      message?: string;
+      type: "context_usage";
+      usageTokens?: number;
+      windowTokens?: number;
+      percent?: number;
+      mode?: "manual" | "auto";
+      compacting?: boolean;
+      source?: "provider" | "estimate";
     }
   | {
-      type: "context_compress";
-      message?: string;
+      type: "context_compact_done";
+      beforeTokens?: number;
+      afterTokens?: number;
+      percentBefore?: number;
+      percentAfter?: number;
+      windowTokens?: number;
     }
   | { type: "rate_limit"; message?: string }
   | { type: "robin_rotate"; message?: string }
@@ -294,8 +303,8 @@ export const AGENT_STREAM_EVENT_TYPES: ReadonlyArray<AgentStreamEventType> = [
   "step_result",
   "step",
   "task",
-  "context_pressure",
-  "context_compress",
+  "context_usage",
+  "context_compact_done",
   "rate_limit",
   "robin_rotate",
   "robin_wait",

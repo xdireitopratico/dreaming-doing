@@ -30,4 +30,6 @@ export type AgentLoopOptions = {
   smokeRun?: boolean;
   resolvedMainCfg?: ProviderConfig;
   preferences?: AgentPreferencesPayload;
+  /** Usuário clicou «Compactar agora» — sinal one-shot via agent_runs.meta. */
+  compactRequested?: boolean;
 };

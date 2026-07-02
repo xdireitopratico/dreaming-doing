@@ -120,11 +120,17 @@ export function llmErrorHint(err: unknown, robinActive: boolean): ErrorHint {
     };
   }
 
-  if (
-    /network|connection|timeout|timed out|econnreset|fetch failed|broken pipe|stream closed/i.test(
-      lower,
-    )
-  ) {
+  if (/timeout|timed out/i.test(lower)) {
+    return {
+      message: "O modelo demorou demais para responder. Estado salvo.",
+      action: "Continuar execução",
+      link: null,
+      severity: "warning",
+      code: "llm.timeout",
+    };
+  }
+
+  if (/network|connection|econnreset|fetch failed|broken pipe|stream closed/i.test(lower)) {
     return {
       message: "Conexão instável. Estado salvo.",
       link: null,

@@ -1,5 +1,5 @@
 // runtime/deps-factory.ts — Factories de deps para fases do loop (Fase 2.2)
-import type { CompressionManager } from "../compression.ts";
+import type { SessionContextManager } from "../compression.ts";
 import type { RuntimeObserver } from "../observer.ts";
 import type { ModelRouter } from "../router.ts";
 import type { LoopUpdateContext } from "../loop-status.ts";
@@ -112,7 +112,7 @@ export type AgentLoopHost = {
   runId: string | null;
   state: AgentState;
   reg: ToolRegistry;
-  compression: CompressionManager;
+  compression: SessionContextManager;
   observer: RuntimeObserver;
   router: ModelRouter;
   robinActive: boolean;
@@ -171,7 +171,7 @@ export type AgentLoopDepsContext = {
   runId: string | null;
   state: AgentState;
   reg: ToolRegistry;
-  compression: CompressionManager;
+  compression: SessionContextManager;
   observer: RuntimeObserver;
   router: ModelRouter;
   robinActive: boolean;
@@ -241,7 +241,7 @@ export type AgentLoopDepsContext = {
   returnResumableWithUserMessage: (
     steps: number,
     toolsUsed: Set<string>,
-    options?: { buildFix?: boolean; errorMessage?: string },
+    options?: { buildFix?: boolean; errorMessage?: string; pauseForUser?: boolean },
     prose?: string,
   ) => Promise<{
     ok: false;

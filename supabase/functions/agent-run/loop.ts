@@ -17,7 +17,7 @@ import { LoopPhase } from "./types.ts";
 type RouterOverrides = { main?: LLMProvider; cheap?: LLMProvider };
 import { ToolRegistry } from "./registry.ts";
 import { ModelRouter } from "./router.ts";
-import { CompressionManager } from "./compression.ts";
+import { SessionContextManager } from "./compression.ts";
 import { RuntimeObserver } from "./observer.ts";
 import { SkillRegistry } from "./skills.ts";
 import {
@@ -67,7 +67,7 @@ export class AgentLoop {
   private llm: LLMProvider;
   private sb: any;
   private router: ModelRouter;
-  private compression: CompressionManager;
+  private compression: SessionContextManager;
   private observer: RuntimeObserver;
   private skills: SkillRegistry;
   private robinActive: boolean;
@@ -130,6 +130,7 @@ export class AgentLoop {
   /** Cache de conteúdo de arquivos para evitar N+1 queries ao Supabase durante execução */
   private fileContentCache: Map<string, string>;
   private preferences: AgentPreferencesPayload | null;
+  private compactRequestedOnStart: boolean;
   private connectorKeys: Record<string, string>;
   /** Últimas skills emitidas — evita repetir o mesmo evento skills em runs subsequentes. */
   private lastEmittedSkills: string[] | null = null;
@@ -156,6 +157,7 @@ export class AgentLoop {
     this.llm = llm;
     this.connectorKeys = injectedKeys ?? {};
     this.preferences = options?.preferences ?? null;
+    this.compactRequestedOnStart = options?.compactRequested === true;
     this.sb = supabase;
     this.state = state;
     this.robinActive = robinActive;
@@ -206,8 +208,10 @@ export class AgentLoop {
     this.observer.setApprovedDesign(this.approvedPlanDesign);
     this.observer.setDesignHistory(options?.designHistory ?? []);
     this.skills = new SkillRegistry();
-    this.compression = new CompressionManager(this.configuredModel(), (type, data) =>
-      this.emitter.emit(type, data),
+    this.compression = new SessionContextManager(
+      this.configuredModel(),
+      this.preferences?.contextWindow ?? undefined,
+      (type, data) => this.emitter.emit(type, data),
     );
     this.bindings = createLoopBindings(this.loopHost(), LOOP_BUDGET_MS);
     this.mutable.buildSession = createCanonicalBuildSession(this.runId, this.approvedPlanBuild);
@@ -345,7 +349,8 @@ export class AgentLoop {
   }
 
   private compressMessages(messages: ChatMessage[]): Promise<ChatMessage[]> {
-    return this.compression.compress(messages);
+    this.compression.emitUsage(messages);
+    return Promise.resolve(this.compression.prepareMessages(messages));
   }
 
   private executeTool(call: Parameters<ToolRegistry["execute"]>[0]) {
@@ -397,6 +402,9 @@ export class AgentLoop {
       this.state.executionLog = [];
     }
     this.compression.reset();
+    if (this.compactRequestedOnStart) {
+      this.compression.requestCompact();
+    }
     this.mutable.consecutiveNoContentReadSteps = 0;
     this.mutable.buildSession = createCanonicalBuildSession(this.runId, this.approvedPlanBuild);
     logger.event("agent.loop_started", {

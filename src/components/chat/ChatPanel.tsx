@@ -276,6 +276,8 @@ export function ChatPanel({
         visualEditsActive={visualEditsActive}
         externalPrompt={externalPrompt}
         onExternalPromptConsumed={onExternalPromptConsumed}
+        contextUsage={agent.progress.contextUsage}
+        activeRunId={agent.activeRunId}
       />
     </div>
   );

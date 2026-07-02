@@ -2045,6 +2045,7 @@
 .forge-composer-row .forge-composer-stop,
 .forge-composer-row .forge-composer-mic,
 .forge-composer-row .forge-composer-add,
+.forge-composer-row .forge-composer-context-window,
 .forge-composer-row .forge-composer-visual-edits,
 .forge-composer-row .forge-composer-mode-trigger {
   flex-shrink: 0;
@@ -2075,6 +2076,39 @@
   background: var(--bg-hover);
   color: var(--text-primary);
   border-color: var(--border-active);
+}
+
+.forge-composer-context-window {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--chat-cta-radius);
+  border: 1px solid color-mix(in srgb, var(--border-forge) 80%, transparent);
+  background: linear-gradient(135deg, #1a1e27, #0b0d12);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.forge-composer-context-window:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-active);
+}
+
+.forge-composer-context-window-dot {
+  display: grid;
+  place-items: center;
+  color: var(--text-secondary);
+}
+
+.forge-composer-context-window-spinner {
+  animation: spin 0.8s linear infinite;
+  color: var(--text-secondary);
 }
 
 .forge-composer-visual-edits {

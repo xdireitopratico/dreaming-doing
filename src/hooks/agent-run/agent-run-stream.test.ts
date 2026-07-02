@@ -12,6 +12,7 @@ function makeRefs(overrides?: Partial<{ runId: string | null; lastSeq: number }>
     runIdRef: { current: overrides?.runId ?? "run-a" },
     closedRunIdRef: { current: null as string | null },
     lastSeqRef: { current: overrides?.lastSeq ?? 0 },
+    appliedSeqsRef: { current: new Set<number>() },
     activeRunStartedAtMsRef: { current: Date.now() - 2000 },
     streamProcessingRef: { current: false },
     streamBufferRef: { current: [] as AgentStreamRow[] },
@@ -50,8 +51,27 @@ describe("freezeWorkingDuration", () => {
 });
 
 describe("createStreamRowHandlers", () => {
+  it("reaplica evento atrasado não visto (seq < lastSeq)", () => {
+    const refs = makeRefs({ lastSeq: 5 });
+    // lastSeq avançou por thinking batch, mas phase 3 nunca foi aplicada.
+    refs.appliedSeqsRef.current = new Set([1, 2, 4, 5]);
+    let progress = initialAgentProgress;
+    const { enqueueStreamRow } = createStreamRowHandlers(refs, (updater) => {
+      progress = typeof updater === "function" ? updater(progress) : updater;
+    });
+
+    enqueueStreamRow({
+      seq: 3,
+      event_type: "phase",
+      payload: { type: "phase", phase: "execute", message: "late phase" },
+      run_id: "run-a",
+    });
+    expect(progress.timeline.some((e) => e.type === "phase")).toBe(true);
+  });
+
   it("descarta seq duplicada", () => {
     const refs = makeRefs({ lastSeq: 3 });
+    refs.appliedSeqsRef.current = new Set([1, 2, 3]);
     let progress = initialAgentProgress;
     const { enqueueStreamRow } = createStreamRowHandlers(refs, (updater) => {
       progress = typeof updater === "function" ? updater(progress) : updater;

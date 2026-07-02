@@ -6,6 +6,7 @@ import {
   isOverloadError,
   isConnectionError,
   isModelNotFoundError,
+  isTimeoutError,
 } from "./llm-errors.ts";
 
 export type ErrorSeverity = "info" | "warning" | "error";
@@ -129,6 +130,16 @@ export function llmErrorHint(err: unknown, robinActive: boolean): ErrorHint {
       link: LINKS.apiModels,
       severity: "warning",
       code: "rate_limit.single_key",
+    };
+  }
+
+  if (isTimeoutError(err)) {
+    return {
+      message: "O modelo demorou demais para responder. O estado foi salvo.",
+      action: "Continuar execução",
+      link: null,
+      severity: "warning",
+      code: "llm.timeout",
     };
   }
 

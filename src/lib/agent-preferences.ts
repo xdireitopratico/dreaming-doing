@@ -16,6 +16,15 @@ import {
 
 export type ModelPowerMode = "auto" | "robin" | "fixed";
 
+export type ContextWindowMode = "manual" | "auto";
+
+export type ContextWindowPrefs = {
+  mode: ContextWindowMode;
+  windowTokens: number;
+};
+
+export const DEFAULT_CONTEXT_WINDOW_TOKENS = 128_000;
+
 export type PoolProviderId = string;
 
 export type { SttProviderId } from "@/lib/stt-config";
@@ -40,6 +49,7 @@ export interface AgentPreferences {
   webSearchFallback?: string;
   webScrapeFallback?: string;
   browserFallback?: string;
+  contextWindow?: ContextWindowPrefs;
 }
 
 export const EMPTY_AGENT_PREFERENCES: AgentPreferences = {};
@@ -180,6 +190,22 @@ export function normalizeAgentPreferences(
     webScrapeFallback:
       typeof raw.webScrapeFallback === "string" ? raw.webScrapeFallback : undefined,
     browserFallback: typeof raw.browserFallback === "string" ? raw.browserFallback : undefined,
+    contextWindow: normalizeContextWindowPrefs(raw.contextWindow),
+  };
+}
+
+function normalizeContextWindowPrefs(raw: unknown): ContextWindowPrefs | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const o = raw as Record<string, unknown>;
+  const mode = o.mode === "auto" ? "auto" : o.mode === "manual" ? "manual" : undefined;
+  const windowTokens =
+    typeof o.windowTokens === "number" && o.windowTokens > 0
+      ? Math.floor(o.windowTokens)
+      : undefined;
+  if (!mode && !windowTokens) return undefined;
+  return {
+    mode: mode ?? "manual",
+    windowTokens: windowTokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS,
   };
 }
 

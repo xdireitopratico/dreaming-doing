@@ -19,6 +19,8 @@ import {
   type StoredMessagePart,
 } from "@/lib/chat-attachments";
 import { enableSkillLocal } from "@/lib/agent-extensions-prefs";
+import { ContextWindowIndicator } from "@/components/chat/ContextWindowIndicator";
+import type { AgentProgress } from "@/lib/agent-progress";
 
 const DRAFT_KEY = "forge:chat-draft";
 
@@ -51,6 +53,8 @@ type ChatComposerProps = {
   visualEditsActive?: boolean;
   externalPrompt?: string | null;
   onExternalPromptConsumed?: () => void;
+  contextUsage?: AgentProgress["contextUsage"];
+  activeRunId?: string | null;
 };
 
 export function ChatComposer({
@@ -68,6 +72,8 @@ export function ChatComposer({
   visualEditsActive,
   externalPrompt,
   onExternalPromptConsumed,
+  contextUsage,
+  activeRunId,
 }: ChatComposerProps) {
   const [text, setText] = useState(() => {
     try {
@@ -372,6 +378,12 @@ export function ChatComposer({
           >
             <Plus className="size-4" />
           </button>
+
+          <ContextWindowIndicator
+            contextUsage={contextUsage}
+            activeRunId={activeRunId}
+            running={running}
+          />
 
           {showVisualEdits && (
             <button

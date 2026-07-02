@@ -169,8 +169,40 @@ function buildLines(timeline: SSEEvent[]): LogLine[] {
         break;
       }
       case "memory":
-      case "context_pressure":
-      case "context_compress":
+      case "context_usage": {
+        const pct = typeof data.percent === "number" ? Math.round(data.percent) : null;
+        const text =
+          pct !== null
+            ? `Contexto ${pct}% da janela`
+            : sanitizeRunText(data.message);
+        if (!text) break;
+        lines.push({
+          id: `${ev.type}-${ts}-${lines.length}`,
+          kind: "info",
+          icon: Loader2,
+          text,
+          ts,
+        });
+        lastLineSig = `${"info"}:${text}:`;
+        break;
+      }
+      case "context_compact_done": {
+        const before = typeof data.beforeTokens === "number" ? data.beforeTokens : null;
+        const after = typeof data.afterTokens === "number" ? data.afterTokens : null;
+        const text =
+          before !== null && after !== null
+            ? `Contexto compactado: ${before.toLocaleString()} → ${after.toLocaleString()} tokens`
+            : "Contexto compactado";
+        lines.push({
+          id: `${ev.type}-${ts}-${lines.length}`,
+          kind: "info",
+          icon: Loader2,
+          text,
+          ts,
+        });
+        lastLineSig = `${"info"}:${text}:`;
+        break;
+      }
       case "rate_limit":
       case "connection_retry":
         {

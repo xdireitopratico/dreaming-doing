@@ -253,6 +253,11 @@ export async function executeAgentJob(
   }
   const preMeta = (pre?.meta ?? {}) as Record<string, unknown>;
   const isSmokeRun = preMeta.smoke === true;
+  const compactRequested = preMeta.compactRequested === true;
+  if (compactRequested) {
+    const { compactRequested: _removed, compactRequestedAt: _at, ...restMeta } = preMeta;
+    await supabase.from("agent_runs").update({ meta: restMeta }).eq("id", agentRunId);
+  }
 
   const effectivePreferences = await resolveEffectiveAgentPreferences(supabase, userId, preMeta);
 
@@ -329,7 +334,8 @@ export async function executeAgentJob(
   }
 
   const reg = new ToolRegistry();
-  registerMetaTools(reg, { planMode });
+  const contextAuto = effectivePreferences?.contextWindow?.mode === "auto";
+  registerMetaTools(reg, { planMode, contextAuto });
   registerDesignTools(reg);
   registerSkillsTools(reg);
   const projectTemplate = (project as { template?: string }).template ?? "vite-react";
@@ -530,6 +536,7 @@ export async function executeAgentJob(
           runId: agentRunId,
           planMode,
           chatMode,
+          compactRequested,
         }
       : {
           resolvedMainCfg: mainCfg,
@@ -558,6 +565,7 @@ export async function executeAgentJob(
           designHistory,
           buildFixResume: preMeta.buildFix === true,
           smokeRun: isSmokeRun,
+          compactRequested,
         },
   });
 

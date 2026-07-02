@@ -20,7 +20,7 @@ export type BuildLlmStreamState = {
   thinkingStreamStartedAt: number | null;
 };
 
-const MODEL_CHAT_TIMEOUT_MS = 90_000;
+const MODEL_CHAT_TIMEOUT_MS = 180_000;
 
 async function withModelChatTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | null = null;
