@@ -10,7 +10,7 @@
     "sync:agent-contract": "node scripts/sync-agent-contract.mjs",
     "check:agent-contract": "node scripts/sync-agent-contract.mjs --check",
     "check:agent-run-terminal": "node scripts/check-agent-run-terminal.mjs",
-    "test:agent-run": "cd supabase/functions/agent-run && deno test --allow-env --allow-read --allow-net runtime/turn-opening.test.ts runtime/phases/execute.test.ts runtime/phases/closure-paths.test.ts runtime/terminal-user-message.test.ts runtime/validation-policy.test.ts runtime/stream-allowlist.test.ts runtime/operation-pause.test.ts runtime/no-redispatch.test.ts runtime/retrial-policy.test.ts runtime/infra.test.ts loop-status.test.ts",
+    "test:agent-run": "cd supabase/functions/agent-run && deno test --allow-env --allow-read --allow-net runtime/turn-opening.test.ts runtime/phases/execute.test.ts runtime/phases/closure-paths.test.ts runtime/terminal-user-message.test.ts runtime/validation-policy.test.ts runtime/stream-allowlist.test.ts runtime/operation-pause.test.ts runtime/operation-pause-gate.test.ts runtime/no-redispatch.test.ts runtime/retrial-policy.test.ts runtime/infra.test.ts loop-status.test.ts",
     "dev": "vite dev",
     "build": "cross-env VERCEL=1 vite build",
     "build:cloudflare": "vite build",

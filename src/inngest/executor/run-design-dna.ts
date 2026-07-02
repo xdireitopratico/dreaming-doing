@@ -34,10 +34,25 @@ import {
   operationWallExceeded,
   parseRunOperationMeta,
   remainingOperationMs,
+  type OperationReportKind,
   type RunOperationMeta,
 } from "@/lib/agent-operation-contract";
+import { postDesignDnaOperationReport } from "./design-dna-operation-report.ts";
 
 const OPERATION_RESUME_BUFFER_MS = 120_000;
+
+async function reportDesignDnaExit(
+  supabase: SupabaseClient,
+  jobId: string,
+  meta: RunOperationMeta,
+  input: { kind: OperationReportKind; summary: string; steps?: number },
+): Promise<void> {
+  await postDesignDnaOperationReport(supabase, jobId, meta, input);
+}
+
+function hotlWallIsTerminal(meta: RunOperationMeta): boolean {
+  return meta.mode === "hotl";
+}
 
 export async function executeDesignDnaJob(
   supabase: SupabaseClient,
@@ -270,9 +285,10 @@ export async function executeDesignDnaJob(
 
   for (let i = startIndex; i < urls.length; i++) {
     if (operationWallExceeded(operationMeta)) {
+      const wallMsg = "Operation wall exceeded";
       const errorRecord = {
         scope: "job",
-        error: "Operation wall exceeded",
+        error: wallMsg,
         code: "operation_wall",
       };
       errors.push(errorRecord);
@@ -284,19 +300,25 @@ export async function executeDesignDnaJob(
         blockedCount,
         libraryPersistedCount,
       });
+      await reportDesignDnaExit(supabase, jobId, operationMeta, {
+        kind: "timeout",
+        summary: wallMsg,
+        steps: results.length,
+      });
       return {
         ok: false,
         status: "failed",
         jobId,
         resumable: false,
         canceled: false,
-        error: "Operation wall exceeded",
+        error: wallMsg,
         urlsCompleted: results.length,
         durationMs: Date.now() - startMs,
       };
     }
 
     if (remainingOperationMs(operationMeta) < OPERATION_RESUME_BUFFER_MS) {
+      const nearMsg = "Operation wall nearly exhausted";
       await saveJobCheckpoint(supabase, jobId, {
         currentUrlIndex: i,
         results,
@@ -304,6 +326,23 @@ export async function executeDesignDnaJob(
         blockedCount,
         libraryPersistedCount,
       });
+      if (hotlWallIsTerminal(operationMeta)) {
+        await reportDesignDnaExit(supabase, jobId, operationMeta, {
+          kind: "timeout",
+          summary: nearMsg,
+          steps: results.length,
+        });
+        return {
+          ok: false,
+          status: results.length > 0 ? "completed" : "failed",
+          jobId,
+          resumable: false,
+          canceled: false,
+          error: nearMsg,
+          urlsCompleted: results.length,
+          durationMs: Date.now() - startMs,
+        };
+      }
       return {
         ok: false,
         status: results.length > 0 ? "completed" : "failed",
@@ -535,6 +574,12 @@ export async function executeDesignDnaJob(
       error: terminal.jobError ?? null,
     })
     .eq("id", jobId);
+
+  await reportDesignDnaExit(supabase, jobId, operationMeta, {
+    kind: terminal.ok ? "exit" : "error",
+    summary: terminal.jobError ?? (terminal.ok ? "Extração concluída" : "Extração falhou"),
+    steps: libraryPersistedCount,
+  });
 
   return {
     ok: terminal.ok,

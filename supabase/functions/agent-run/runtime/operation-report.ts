@@ -19,8 +19,3 @@ export function appendHotlReport(
 ): string {
   return withHotlReport(closing, meta, ctx);
 }
-
-/** HOTL no wall → saída terminal com report; cooperative → pausa (Continuar emergência). */
-export function hotlWallIsTerminal(meta: RunOperationMeta): boolean {
-  return meta.mode === "hotl";
-}

@@ -12,6 +12,12 @@ import {
 } from "./plan-turn.ts";
 import type { ChatMessage, LLMProvider } from "../../types.ts";
 import type { OperationPauseResult, PauseReason } from "../infra.ts";
+import type { RunOperationMeta } from "../../../_shared/agent-contract-operation.ts";
+import {
+  buildHotlTerminalText,
+  reportKindForPauseReason,
+  shouldCooperativePause,
+} from "../operation-pause-gate.ts";
 
 export type ChatTurnDeps = PlanTurnFinishDeps & {
   robinActive: boolean;
@@ -19,6 +25,7 @@ export type ChatTurnDeps = PlanTurnFinishDeps & {
   messages: ChatMessage[];
   streamState: PlanModeStreamState;
   emit: PlanTurnEmit;
+  getRunOperationMeta: () => RunOperationMeta;
   pauseOperationForUser: (input: {
     reason: PauseReason;
     message: string;
@@ -44,12 +51,37 @@ function buildChatUserPrompt(originalUserRequest: string, messages: ChatMessage[
   ].join("\n\n");
 }
 
+async function finishChatTerminal(
+  deps: ChatTurnDeps,
+  text: string,
+  ok: boolean,
+): Promise<PlanTurnRunResult> {
+  deps.emit("assistant_text", { text, final: true });
+  await deps.persistFinal(text, { lastFinishOk: ok, conversational: true });
+  await deps.clearCheckpoint();
+  deps.emit("finish", { ok, awaiting: false, resumable: false });
+  if (ok) {
+    deps.emit("done", { summary: text, conversational: true });
+    return { ok: true, summary: text, steps: 0, toolsUsed: [] };
+  }
+  return { ok: false, error: text, steps: 0, toolsUsed: [] };
+}
+
 async function returnRecoverableChatChunk(
   deps: ChatTurnDeps,
   summary: string,
-  error?: string,
+  _error?: string,
 ): Promise<PlanTurnRunResult> {
   const message = summary.trim() || "Erro no modo Chat.";
+  const meta = deps.getRunOperationMeta();
+  if (!shouldCooperativePause(meta, "llm_error")) {
+    const text = buildHotlTerminalText(message, meta, {
+      kind: reportKindForPauseReason("llm_error"),
+      steps: 0,
+      touchedPaths: [],
+    });
+    return finishChatTerminal(deps, text, false);
+  }
   return deps.pauseOperationForUser({
     reason: "llm_error",
     message,
@@ -137,15 +169,11 @@ export async function runChatModeAgentTurn(
       final: true,
     });
   }
-  deps.emit("assistant_text", { text, final: true });
-  await deps.persistFinal(text, { lastFinishOk: true, conversational: true });
-  await deps.clearCheckpoint();
-  deps.emit("done", { summary: text, conversational: true });
-
-  return {
-    ok: true,
-    summary: text,
+  const meta = deps.getRunOperationMeta();
+  const finalText = buildHotlTerminalText(text, meta, {
+    kind: "exit",
     steps: 0,
-    toolsUsed: [],
-  };
+    touchedPaths: [],
+  });
+  return finishChatTerminal(deps, finalText, true);
 }

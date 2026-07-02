@@ -68,6 +68,12 @@ function mockChatTurnDeps(): ChatTurnDeps & {
     get pauseOperationCalls() {
       return pauseOperationCalls;
     },
+    getRunOperationMeta: () => ({
+      mode: "cooperative" as const,
+      startedAt: new Date().toISOString(),
+      wallMs: 60 * 60 * 1000,
+      reportOnExit: false,
+    }),
     pauseOperationForUser: async (input: {
       reason: PauseReason;
       message: string;

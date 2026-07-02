@@ -88,7 +88,12 @@ import {
 } from "../validation-policy.ts";
 import { classifyLlmLoopRetrial } from "../retrial-policy.ts";
 import type { RunOperationMeta } from "../../../_shared/agent-contract-operation.ts";
-import { appendHotlReport, hotlWallIsTerminal } from "../operation-report.ts";
+import { appendHotlReport } from "../operation-report.ts";
+import {
+  buildHotlTerminalText,
+  reportKindForPauseReason,
+  shouldCooperativePause,
+} from "../operation-pause-gate.ts";
 
 export type BuildExecuteDeps = {
   robinActive: boolean;
@@ -238,19 +243,51 @@ function zeroDeliveryLoopBackNeeded(deps: BuildExecuteDeps): boolean {
   });
 }
 
+async function pauseOrTerminalBuild(
+  deps: BuildExecuteDeps,
+  loopStep: number,
+  input: {
+    reason: PauseReason;
+    message: string;
+    toolsUsed?: Set<string>;
+  },
+  terminalOpts?: { ok?: boolean; buildFailed?: boolean; canceled?: boolean },
+): Promise<PlanTurnRunResult> {
+  const meta = deps.getRunOperationMeta();
+  const toolsUsed = input.toolsUsed ?? deps.toolsUsed;
+  if (!shouldCooperativePause(meta, input.reason)) {
+    const closing = buildHotlTerminalText(input.message, meta, {
+      kind: reportKindForPauseReason(input.reason),
+      steps: loopStep,
+      touchedPaths: [...deps.touchedPaths],
+    });
+    return emitClosingAndPersist(deps, loopStep, {
+      closing,
+      ok: terminalOpts?.ok ?? false,
+      error: input.message,
+      buildFailed: terminalOpts?.buildFailed,
+      canceled: terminalOpts?.canceled,
+    });
+  }
+  await deps.saveCheckpoint(LoopPhaseEnum.DECIDE_NEXT, true);
+  return deps.pauseOperationForUser({
+    reason: input.reason,
+    message: input.message,
+    steps: loopStep,
+    toolsUsed,
+  });
+}
+
 async function pauseAtStepLimit(
   deps: BuildExecuteDeps,
   loopStep: number,
 ): Promise<PlanTurnRunResult | null> {
   if (loopStep < deps.maxStepsLimit) return null;
-  await deps.saveCheckpoint(LoopPhaseEnum.DECIDE_NEXT, true);
-  return deps.pauseOperationForUser({
+  return pauseOrTerminalBuild(deps, loopStep, {
     reason: "step_limit",
     message: deps.requiresFinalBuildGate()
       ? "Limite de passos atingido com build pendente — continue quando estiver pronto."
       : "Limite de passos atingido — continue quando estiver pronto.",
-    steps: loopStep,
-    toolsUsed: deps.toolsUsed,
   });
 }
 
@@ -536,25 +573,9 @@ export async function runBuildExecutePhase(
           userRequest: deps.originalUserRequest,
         }).catch(() => "");
         const message = prose || "Limite de tempo da operação — continue quando estiver pronto.";
-        const meta = deps.getRunOperationMeta();
-        if (hotlWallIsTerminal(meta)) {
-          const closing = appendHotlReport(message, meta, {
-            kind: "timeout",
-            summary: message,
-            steps: loopStep,
-            touchedPaths: [...deps.touchedPaths],
-          });
-          return emitClosingAndPersist(deps, loopStep, {
-            closing,
-            ok: false,
-            error: "Timeout da operação",
-          });
-        }
-        return deps.pauseOperationForUser({
+        return pauseOrTerminalBuild(deps, loopStep, {
           reason: "operation_wall",
           message,
-          steps: loopStep,
-          toolsUsed: deps.toolsUsed,
         });
       }
 
@@ -721,11 +742,9 @@ export async function runBuildExecutePhase(
         }
         const failMsg = `Erro: ${friendly}`;
         deps.notifyLoopStatus({ kind: "model_error", errorDetail: friendly });
-        return deps.pauseOperationForUser({
+        return pauseOrTerminalBuild(deps, loopStep, {
           reason: "llm_exhausted",
           message: failMsg,
-          steps: loopStep,
-          toolsUsed: deps.toolsUsed,
         });
       }
 
@@ -1231,13 +1250,11 @@ export async function runBuildExecutePhase(
 
       if (loopStep >= deps.maxStepsLimit && !agentTextComplete) {
         await deps.saveCheckpoint(LoopPhaseEnum.DECIDE_NEXT, true);
-        return deps.pauseOperationForUser({
+        return pauseOrTerminalBuild(deps, loopStep, {
           reason: "step_limit",
           message: deps.requiresFinalBuildGate()
             ? "Limite de passos atingido com build pendente — continue quando estiver pronto."
             : "Limite de passos atingido — continue quando estiver pronto.",
-          steps: loopStep,
-          toolsUsed: deps.toolsUsed,
         });
       }
 
@@ -1334,29 +1351,16 @@ export async function runBuildExecutePhase(
     }
 
     if (deps.platformLimitExceeded()) {
-      const message =
-        "Limite de tempo da operação com build pendente — continue quando estiver pronto.";
-      const meta = deps.getRunOperationMeta();
-      if (hotlWallIsTerminal(meta)) {
-        const closing = appendHotlReport(message, meta, {
-          kind: "timeout",
-          summary: message,
-          steps: loopStep,
-          touchedPaths: [...deps.touchedPaths],
-        });
-        return emitClosingAndPersist(deps, loopStep, {
-          closing,
-          ok: false,
-          error: "Timeout da operação",
-          buildFailed: true,
-        });
-      }
-      return deps.pauseOperationForUser({
-        reason: "operation_wall",
-        message,
-        steps: loopStep,
-        toolsUsed: deps.toolsUsed,
-      });
+      return pauseOrTerminalBuild(
+        deps,
+        loopStep,
+        {
+          reason: "operation_wall",
+          message:
+            "Limite de tempo da operação com build pendente — continue quando estiver pronto.",
+        },
+        { buildFailed: true },
+      );
     }
 
     deps.state.messages.push({

@@ -34,6 +34,7 @@ export async function runChatModeAgentTurnForHost(
     streamState: host.planStreamState,
     emit: finishDeps.emit,
     pauseOperationForUser: host.bindings.pauseOperationForUser,
+    getRunOperationMeta: () => host.bindings.deps().getRunOperationMeta(),
     onActivity: host.onActivity,
   };
 

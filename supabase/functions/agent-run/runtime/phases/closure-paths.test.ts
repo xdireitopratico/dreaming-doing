@@ -314,6 +314,12 @@ Deno.test("chat-turn — erro LLM emite assistant_text via pauseOperationForUser
       messages: [],
       streamState: { llmResponseWasStreamed: false, thinkingStreamStartedAt: null },
       emit: (t, d) => events.push({ type: t, data: d as Record<string, unknown> }),
+      getRunOperationMeta: () => ({
+        mode: "cooperative" as const,
+        startedAt: new Date().toISOString(),
+        wallMs: 60 * 60 * 1000,
+        reportOnExit: false,
+      }),
       pauseOperationForUser: async (input: PauseInput) => {
         const text = input.message || "erro";
         events.push({ type: "assistant_text", data: { text, final: true } });
@@ -349,7 +355,7 @@ Deno.test("chat-turn — erro LLM emite assistant_text via pauseOperationForUser
   assert(persisted.length > 0);
 });
 
-Deno.test("structural — execute.ts plan-turn.ts chat-turn.ts use pauseOperationForUser not bare chunk", () => {
+Deno.test("structural — phases route pause through operation gate", () => {
   const fs = (globalThis as { Deno?: { readTextFileSync: (url: URL) => string } }).Deno?.readTextFileSync;
   if (!fs) return;
   const execSrc = fs(new URL("./execute.ts", import.meta.url));
@@ -358,13 +364,10 @@ Deno.test("structural — execute.ts plan-turn.ts chat-turn.ts use pauseOperatio
   const bareExec = /return\s+deps\.returnResumableChunk\s*\(/.test(execSrc);
   const barePlan = /return\s+deps\.returnResumableChunk\s*\(/.test(planSrc);
   const bareChat = /return\s+deps\.returnResumableChunk\s*\(/.test(chatSrc);
-  const pauseExec = /deps\.pauseOperationForUser\s*\(/.test(execSrc);
-  const pausePlan = /deps\.pauseOperationForUser\s*\(/.test(planSrc);
-  const pauseChat = /deps\.pauseOperationForUser\s*\(/.test(chatSrc);
   assertEquals(bareExec, false, "execute.ts must not call bare returnResumableChunk");
   assertEquals(barePlan, false, "plan-turn.ts must not call bare returnResumableChunk");
   assertEquals(bareChat, false, "chat-turn.ts must not call bare returnResumableChunk");
-  assertEquals(pauseExec, true, "execute.ts must call pauseOperationForUser");
-  assertEquals(pausePlan, true, "plan-turn.ts must call pauseOperationForUser");
-  assertEquals(pauseChat, true, "chat-turn.ts must call pauseOperationForUser");
+  assertEquals(/pauseOrTerminalBuild/.test(execSrc), true, "execute.ts must use pauseOrTerminalBuild");
+  assertEquals(/pauseOrTerminalPlan/.test(planSrc), true, "plan-turn.ts must use pauseOrTerminalPlan");
+  assertEquals(/shouldCooperativePause/.test(chatSrc), true, "chat-turn.ts must use operation gate");
 });

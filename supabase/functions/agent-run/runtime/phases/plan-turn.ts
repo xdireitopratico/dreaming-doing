@@ -38,7 +38,11 @@ import { LoopPhase } from "../../types.ts";
 import { enrichProposedPlanDesign } from "../../plan-design-enrich.ts";
 import type { OperationPauseResult, PauseReason } from "../infra.ts";
 import type { RunOperationMeta } from "../../../_shared/agent-contract-operation.ts";
-import { appendHotlReport, hotlWallIsTerminal } from "../operation-report.ts";
+import {
+  buildHotlTerminalText,
+  reportKindForPauseReason,
+  shouldCooperativePause,
+} from "../operation-pause-gate.ts";
 
 export const MAX_PLAN_EXPLORE = 10;
 
@@ -210,8 +214,33 @@ export async function finishClarify(
   };
 }
 
+async function pauseOrTerminalPlan(
+  deps: PlanTurnDeps,
+  finishDeps: PlanTurnFinishDeps,
+  step: number,
+  toolsUsed: Set<string>,
+  input: { reason: PauseReason; message: string },
+): Promise<PlanTurnRunResult> {
+  const meta = deps.getRunOperationMeta();
+  if (!shouldCooperativePause(meta, input.reason)) {
+    const closing = buildHotlTerminalText(input.message, meta, {
+      kind: reportKindForPauseReason(input.reason),
+      steps: step,
+      touchedPaths: [],
+    });
+    return finishPlanModeFailure(finishDeps, closing, step, [...toolsUsed], input.message);
+  }
+  return deps.pauseOperationForUser({
+    reason: input.reason,
+    message: input.message,
+    steps: step,
+    toolsUsed,
+  });
+}
+
 async function returnRecoverablePlanChunk(input: {
   deps: PlanTurnDeps;
+  finishDeps: PlanTurnFinishDeps;
   toolsUsed: Set<string>;
   step: number;
   message: string;
@@ -222,11 +251,9 @@ async function returnRecoverablePlanChunk(input: {
     role: "user",
     content: input.prompt ?? text,
   });
-  return input.deps.pauseOperationForUser({
+  return pauseOrTerminalPlan(input.deps, input.finishDeps, input.step, input.toolsUsed, {
     reason: "llm_error",
     message: text,
-    steps: input.step,
-    toolsUsed: input.toolsUsed,
   });
 }
 
@@ -440,22 +467,9 @@ export async function runPlanModeAgentTurn(
 
   for (let step = 0; step < MAX_PLAN_EXPLORE; step++) {
     if (deps.platformLimitExceeded()) {
-      const message = "Limite de tempo da operação — continue o plano quando estiver pronto.";
-      const meta = deps.getRunOperationMeta();
-      if (hotlWallIsTerminal(meta)) {
-        const closing = appendHotlReport(message, meta, {
-          kind: "timeout",
-          summary: message,
-          steps: step,
-          touchedPaths: [],
-        });
-        return finishPlanModeFailure(finishDeps, closing, step, [...toolsUsed], "Timeout da operação");
-      }
-      return deps.pauseOperationForUser({
+      return pauseOrTerminalPlan(deps, finishDeps, step, toolsUsed, {
         reason: "operation_wall",
-        message,
-        steps: step,
-        toolsUsed,
+        message: "Limite de tempo da operação — continue o plano quando estiver pronto.",
       });
     }
 
@@ -491,6 +505,7 @@ export async function runPlanModeAgentTurn(
       finishDeps.llmResponseWasStreamed = deps.getLlmResponseWasStreamed();
       return await returnRecoverablePlanChunk({
         deps,
+        finishDeps,
         toolsUsed,
         step,
         message,
@@ -505,6 +520,7 @@ export async function runPlanModeAgentTurn(
       const safe = "O modelo não produziu resposta visível. Reformule o pedido ou retome o plano.";
       return await returnRecoverablePlanChunk({
         deps,
+        finishDeps,
         toolsUsed,
         step,
         message: safe,
@@ -558,6 +574,7 @@ export async function runPlanModeAgentTurn(
         if (!proposed) {
           return await returnRecoverablePlanChunk({
             deps,
+            finishDeps,
             toolsUsed,
             step,
             message: "create_plan inválido — envie summary e steps válidos antes de continuar.",
@@ -591,6 +608,7 @@ export async function runPlanModeAgentTurn(
       if (resolution.kind === "hard_failure") {
         return await returnRecoverablePlanChunk({
           deps,
+          finishDeps,
           toolsUsed,
           step,
           message: resolution.message,
@@ -607,6 +625,7 @@ export async function runPlanModeAgentTurn(
       if (resolution.kind === "invalid_markdown") {
         return await returnRecoverablePlanChunk({
           deps,
+          finishDeps,
           toolsUsed,
           step,
           message: "Plano no chat inválido — use create_plan com 2–7 passos.",
@@ -618,6 +637,7 @@ export async function runPlanModeAgentTurn(
         const safe = "O agente não produziu texto visível nesta tentativa. Reformule ou retome para continuar o plano.";
         return await returnRecoverablePlanChunk({
           deps,
+          finishDeps,
           toolsUsed,
           step,
           message: safe,
@@ -651,6 +671,7 @@ export async function runPlanModeAgentTurn(
       }
       return await returnRecoverablePlanChunk({
         deps,
+        finishDeps,
         toolsUsed,
         step,
         message: done,
@@ -725,6 +746,7 @@ export async function runPlanModeAgentTurn(
   }
   return await returnRecoverablePlanChunk({
     deps,
+    finishDeps,
     toolsUsed,
     step: MAX_PLAN_EXPLORE,
     message: "Limite de exploração no modo Plan — tente create_plan ou clarify.",
