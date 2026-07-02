@@ -1,5 +1,6 @@
 import type { AgentState } from "./types.ts";
 import { LoopPhase } from "./types.ts";
+import { AGENT_MAX_STEPS } from "./runtime/loop-config.ts";
 import type { CanonicalBuildSession } from "./runtime/build-session.ts";
 
 export type OperationSnapshot = {
@@ -111,9 +112,7 @@ export function deserializeCheckpointState(raw: Record<string, unknown>): Loaded
   const maxStepsLimit =
     typeof raw.maxStepsLimit === "number" && raw.maxStepsLimit > 0
       ? raw.maxStepsLimit
-      : ({ 1: 50, 2: 60, 3: 70, 4: 85, 5: 100 } as const)[
-          complexityScore as 1 | 2 | 3 | 4 | 5
-        ] ?? 60;
+      : AGENT_MAX_STEPS;
 
   const state: AgentState = {
     projectId,

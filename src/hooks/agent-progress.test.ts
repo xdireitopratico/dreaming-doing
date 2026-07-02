@@ -385,17 +385,8 @@ describe("Session 2.0 — contrato agent_run", () => {
     vi.restoreAllMocks();
   });
 
-  describe("B1 — step sem plan:true atualiza progresso (build normal)", () => {
-    it("step sem plan atualiza currentStep/totalSteps (build não-planejado)", () => {
-      const next = applyAgentProgressEvent(
-        { ...base, finished: false },
-        ev("step", { current: 7, total: 60 }),
-      );
-      expect(next.currentStep).toBe(7);
-      expect(next.totalSteps).toBe(60);
-    });
-
-    it("step com plan:true continua atualizando (plan aprovado)", () => {
+  describe("B1 — step com plan:true atualiza progresso do checklist", () => {
+    it("step com plan:true atualiza currentStep/totalSteps (plan aprovado)", () => {
       const next = applyAgentProgressEvent(
         { ...base, finished: false },
         ev("step", { current: 3, total: 5, plan: true }),

@@ -14,8 +14,9 @@ Deno.test("resolveLoopOriginalUserRequest — planSummary em build aprovado", ()
 });
 
 Deno.test("resolveMaxStepsLimit — checkpoint vence default", () => {
-  assertEquals(resolveMaxStepsLimit({ maxSteps: 20, maxStepsFromCheckpoint: 40 }), 40);
-  assertEquals(resolveMaxStepsLimit({ maxSteps: 20 }), 20);
+  assertEquals(resolveMaxStepsLimit({ maxSteps: 100, maxStepsFromCheckpoint: 40 }), 40);
+  assertEquals(resolveMaxStepsLimit({}), 100);
+  assertEquals(resolveMaxStepsLimit({ maxSteps: 50 }), 50);
 });
 
 Deno.test("resolveSkipConversationalGate — approvedPlanBuild default true", () => {

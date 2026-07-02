@@ -567,8 +567,6 @@ export async function runBuildExecutePhase(
           deps.setLastExecutePhaseMessage(stepMessage);
         }
       } else {
-        deps.state.totalSteps = deps.maxStepsLimit;
-        deps.emit("step", { current: loopStep, total: deps.maxStepsLimit });
         deps.emit("phase", { phase: "execute", message: "" });
       }
 

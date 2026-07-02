@@ -1,4 +1,5 @@
 // agent-fsm.ts — Máquina de estados do agente.
+import { AGENT_MAX_STEPS } from "./runtime/loop-config.ts";
 // Define estados, transições, e valida se uma transição é permitida.
 // Persiste a cada transição no DB via callback.
 
@@ -92,7 +93,7 @@ export const transitions: Record<
       return mkState("building", {
         plan: null,
         stepIndex: 0,
-        maxSteps: 20,
+        maxSteps: AGENT_MAX_STEPS,
         classification: s.classification,
       });
     }
@@ -123,7 +124,7 @@ export const transitions: Record<
       return mkState("building", {
         plan: null,
         stepIndex: 0,
-        maxSteps: 20,
+        maxSteps: AGENT_MAX_STEPS,
         classification: s.classification,
       });
     }
@@ -147,7 +148,7 @@ export const transitions: Record<
       return mkState("building", {
         plan: e.data ?? s.plan,
         stepIndex: 0,
-        maxSteps: 20,
+        maxSteps: AGENT_MAX_STEPS,
         classification: s.classification,
       });
     }

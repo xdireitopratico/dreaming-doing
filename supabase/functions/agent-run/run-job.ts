@@ -31,6 +31,7 @@ import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { loadCheckpoint } from "./checkpoint.ts";
 import { buildSandboxEnv } from "./sandbox-env.ts";
 import { remainingPlatformMs } from "./runtime/platform-deadline.ts";
+import { AGENT_MAX_STEPS } from "./runtime/loop-config.ts";
 import { buildDesignDirectiveBlock } from "./design-directive.ts";
 import {
   autoResolveDesignField,
@@ -528,7 +529,7 @@ export async function executeAgentJob(
       ? {
           resolvedMainCfg: mainCfg,
           preferences,
-          maxSteps: 14,
+          maxSteps: AGENT_MAX_STEPS,
           tasteStart: true,
           sessionAddon: sessionExt.addon,
           userSkillNames: sessionExt.skillNames,

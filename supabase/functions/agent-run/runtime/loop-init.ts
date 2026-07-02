@@ -1,4 +1,5 @@
 // runtime/loop-init.ts — Resolução de request e defaults do loop (Fase 2.4)
+import { AGENT_MAX_STEPS } from "./loop-config.ts";
 import { extractOriginalUserRequest } from "../run-context.ts";
 import type { ChatMessage } from "../types.ts";
 import type { AgentLoopOptions } from "./loop-options.ts";
@@ -14,7 +15,7 @@ export function resolveLoopOriginalUserRequest(
 }
 
 export function resolveMaxStepsLimit(options?: AgentLoopOptions): number {
-  const base = options?.maxSteps ?? 20;
+  const base = options?.maxSteps ?? AGENT_MAX_STEPS;
   const fromCheckpoint = options?.maxStepsFromCheckpoint;
   if (fromCheckpoint && fromCheckpoint > 0) return fromCheckpoint;
   return base;

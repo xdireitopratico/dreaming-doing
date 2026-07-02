@@ -1,7 +1,7 @@
 // runtime/phases/orchestrator.ts — Routing do run() (Fase 2.2)
 import { deriveClassificationFromPrompt, type ClassificationResult } from "../../router.ts";
 import { resumeStepStart } from "../../checkpoint.ts";
-import { calculateMaxSteps } from "../loop-config.ts";
+import { AGENT_MAX_STEPS } from "../loop-config.ts";
 import type { IntentAnalysis, LLMProvider, LoopPhase } from "../../types.ts";
 import { LoopPhase as LoopPhaseEnum } from "../../types.ts";
 import type { PlanTurnRunResult, PlanTurnEmit } from "./plan-turn.ts";
@@ -117,7 +117,7 @@ export async function runAgentOrchestrator(
       scope: [],
       complexity: "medium",
     };
-    deps.setMaxStepsLimit(calculateMaxSteps(classification.complexity));
+    deps.setMaxStepsLimit(AGENT_MAX_STEPS);
     deps.applyAutoModelForComplexity(classification.complexity);
     executionModel = deps.configuredModel();
 

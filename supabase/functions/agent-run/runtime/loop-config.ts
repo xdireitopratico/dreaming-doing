@@ -47,15 +47,11 @@ export function readLoopBudgetMsFromRuntime(): number {
 
 export const THINKING_STREAM_CAP_MS = 45_000;
 
-export function calculateMaxSteps(complexity: 1 | 2 | 3 | 4 | 5): number {
-  const limits: Record<1 | 2 | 3 | 4 | 5, number> = {
-    1: 50,
-    2: 60,
-    3: 70,
-    4: 85,
-    5: 100,
-  };
-  return limits[complexity] ?? 60;
+/** Fusível único do loop de build — independente de complexidade. */
+export const AGENT_MAX_STEPS = 100;
+
+export function calculateMaxSteps(_complexity?: 1 | 2 | 3 | 4 | 5): number {
+  return AGENT_MAX_STEPS;
 }
 
 export function calculateMaxTokens(complexity: 1 | 2 | 3 | 4 | 5): number {

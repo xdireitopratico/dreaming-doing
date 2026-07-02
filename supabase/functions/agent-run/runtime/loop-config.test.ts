@@ -1,5 +1,6 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
+  AGENT_MAX_STEPS,
   calculateMaxSteps,
   calculateMaxTokens,
   capMetaSize,
@@ -27,8 +28,14 @@ Deno.test("resolveLoopBudgetMs — edge vs inngest", () => {
   assertEquals(resolveLoopBudgetMs({ agentLoopBudgetMs: "120000" }), 120_000);
 });
 
-Deno.test("calculateMaxSteps e calculateMaxTokens por complexidade", () => {
+Deno.test("calculateMaxSteps — fusível único 100", () => {
+  assertEquals(AGENT_MAX_STEPS, 100);
+  assertEquals(calculateMaxSteps(1), 100);
+  assertEquals(calculateMaxSteps(3), 100);
   assertEquals(calculateMaxSteps(5), 100);
+});
+
+Deno.test("calculateMaxTokens por complexidade", () => {
   assertEquals(calculateMaxTokens(5), 32768);
 });
 
