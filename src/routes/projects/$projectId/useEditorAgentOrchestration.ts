@@ -129,15 +129,8 @@ export function useEditorAgentOrchestration({
 
   // ─── Sync running state — slot live enquanto há run ativa (mesmo antes do realtime conectar) ──
   useEffect(() => {
-    setRunning(
-      agent.sessionStage === "pending" ||
-        agent.sessionStage === "running" ||
-        agent.sessionStage === "reconnecting",
-    );
-  }, [
-    agent.sessionStage,
-    setRunning,
-  ]);
+    setRunning(agent.sessionStage === "pending" || agent.sessionStage === "running");
+  }, [agent.sessionStage, setRunning]);
 
   // ─── Realtime events → logs ─────────────────────────────────────────
   useEffect(() => {

@@ -60,10 +60,10 @@ describe("resolveAgentSessionStage", () => {
 });
 
 describe("isAgentSessionRunning", () => {
-  it("considera pending, running e reconnecting como estados de execucao", () => {
+  it("considera apenas pending e running como execucao global do editor", () => {
     expect(isAgentSessionRunning("pending")).toBe(true);
     expect(isAgentSessionRunning("running")).toBe(true);
-    expect(isAgentSessionRunning("reconnecting")).toBe(true);
+    expect(isAgentSessionRunning("reconnecting")).toBe(false);
     expect(isAgentSessionRunning("materializing")).toBe(false);
   });
 });

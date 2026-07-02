@@ -58,5 +58,5 @@ export function resolveAgentSessionStage(input: AgentSessionStageInput): AgentSe
 }
 
 export function isAgentSessionRunning(stage: AgentSessionStage): boolean {
-  return stage === "pending" || stage === "running" || stage === "reconnecting";
+  return stage === "pending" || stage === "running";
 }

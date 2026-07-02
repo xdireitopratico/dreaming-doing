@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NavigateOptions } from "@tanstack/react-router";
 
 import { supabase } from "@/integrations/supabase/client";
-import { removeRealtimeChannel } from "@/lib/supabase-realtime";
+import { removeRealtimeChannel, subscribePostgresChanges } from "@/lib/supabase-realtime";
 import type { ChatMessage } from "@/lib/chat-types";
 import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
 import { collapseForgeUiBundle } from "@/lib/file-tree-display";
@@ -65,6 +65,30 @@ export function useEditorPageData({ projectId, search, agent, navigate }: UseEdi
 
   /** Só bloqueia no 1º load (sem cache). Inclui conversation para não flashar empty state. */
   const chatMessagesLoading = conversationPending || (!!conversation?.id && messagesPending);
+
+  useEffect(() => {
+    const conversationId = conversation?.id;
+    if (!conversationId) return;
+
+    const channel = subscribePostgresChanges({
+      channelName: `conversation-messages-${conversationId}`,
+      table: "messages",
+      filter: `conversation_id=eq.${conversationId}`,
+      onChange: ({ eventType, new: nextRow, old: prevRow }) => {
+        const nextMeta = (nextRow.meta ?? {}) as Record<string, unknown>;
+        const prevMeta = (prevRow.meta ?? {}) as Record<string, unknown>;
+        const assistantInserted = eventType === "INSERT" && nextRow.role === "assistant";
+        const queuedChanged = nextMeta.queued !== prevMeta.queued;
+        const rowDeleted = eventType === "DELETE";
+
+        if (assistantInserted || queuedChanged || rowDeleted) {
+          void qc.invalidateQueries({ queryKey: ["messages", conversationId] });
+        }
+      },
+    });
+
+    return () => removeRealtimeChannel(channel);
+  }, [conversation?.id, qc]);
 
   const { data: files } = useQuery({
     queryKey: ["files", projectId],
