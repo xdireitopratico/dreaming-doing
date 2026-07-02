@@ -27,9 +27,7 @@ export function shouldRestoreLiveRun(input: {
   const isLive = input.status === "running" || input.status === "pending";
   if (!isLive || input.canceledAt) return false;
 
-  const heartbeat = input.heartbeatAt ?? input.startedAt ?? null;
-  if (isActivityFresh(heartbeat, SNAPSHOT_HEARTBEAT_FRESH_MS)) return true;
+  if (isActivityFresh(input.heartbeatAt, SNAPSHOT_HEARTBEAT_FRESH_MS)) return true;
 
-  const lastActivity = input.lastStreamAt ?? heartbeat;
-  return isActivityFresh(lastActivity, SNAPSHOT_STREAM_FRESH_MS);
+  return isActivityFresh(input.lastStreamAt, SNAPSHOT_STREAM_FRESH_MS);
 }

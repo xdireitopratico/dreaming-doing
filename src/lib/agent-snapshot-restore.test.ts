@@ -32,6 +32,18 @@ describe("shouldRestoreLiveRun", () => {
     ).toBe(true);
   });
 
+  it("não restaura run pendente só porque o started_at é recente", () => {
+    expect(
+      shouldRestoreLiveRun({
+        status: "pending",
+        canceledAt: null,
+        heartbeatAt: null,
+        startedAt: new Date(now - 5_000).toISOString(),
+        lastStreamAt: null,
+      }),
+    ).toBe(false);
+  });
+
   it("não restaura run terminal", () => {
     expect(
       shouldRestoreLiveRun({
