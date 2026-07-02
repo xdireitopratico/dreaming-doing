@@ -9,12 +9,8 @@ export const READ_ONLY_TOOLS = [
   "fs_glob",
 ] as const;
 
-export const READ_ONLY_BATCH_ESCALATE = 2;
-export const WRITE_PHASE_MIN_STEP = 4;
 export const EXECUTE_MAX_RETRIES = 3;
 export const EXECUTE_MAX_LLM_RETRIES = 3;
-
-export type BuildToolPhase = "discovery" | "write";
 
 export function areReadPathsSatisfied(
   readPaths: string[] | undefined,
@@ -23,27 +19,6 @@ export function areReadPathsSatisfied(
   const required = (readPaths ?? []).map(normalizeDesignReadPath).filter(Boolean);
   if (required.length === 0) return true;
   return required.every((p) => readsDone.has(p));
-}
-
-export function resolveBuildToolPhase(input: {
-  touchedPathsCount: number;
-  readPathsSatisfied: boolean;
-  consecutiveReadOnlyBatches: number;
-  loopStep: number;
-  approvedPlanBuild: boolean;
-  hasDesignDirective?: boolean;
-}): BuildToolPhase {
-  if (input.touchedPathsCount > 0) return "discovery";
-  const designEscalateBatch =
-    input.approvedPlanBuild && input.hasDesignDirective ? 1 : READ_ONLY_BATCH_ESCALATE;
-  if (!input.approvedPlanBuild) {
-    if (input.consecutiveReadOnlyBatches >= READ_ONLY_BATCH_ESCALATE) return "write";
-    return "discovery";
-  }
-  if (input.readPathsSatisfied) return "write";
-  if (input.consecutiveReadOnlyBatches >= designEscalateBatch) return "write";
-  if (input.loopStep >= WRITE_PHASE_MIN_STEP) return "write";
-  return "discovery";
 }
 
 const UI_PATCH_RE = /\.(tsx|jsx|css)$/i;
@@ -147,10 +122,9 @@ export function updateReadOnlyTracker(
   consecutive: number,
   response: ChatResponse,
   assistantText: string,
-  toolPhase: BuildToolPhase,
   hadThinkingActivity: boolean,
 ): ReadOnlyTrackerUpdate {
-  if (toolPhase === "write" || hadThinkingActivity) {
+  if (hadThinkingActivity) {
     return { consecutive: 0 };
   }
 

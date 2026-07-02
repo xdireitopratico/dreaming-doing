@@ -17,14 +17,11 @@ import {
   formatClarifyMessage,
   extractClarifyQuestions,
   hasMixedMetaAndExecution,
-  mergeWriteModeToolDefinitions,
   splitMetaToolCalls,
 } from "../../tools/meta.ts";
 import { isAndroidNativePath, isBuildCommand } from "../loop-config.ts";
 import type { PlanTurnRunResult, PlanTurnEmit } from "./plan-turn.ts";
 import {
-  areReadPathsSatisfied,
-  assertDesignReadsDone,
   buildStructuredToolContent,
   computeFilePreDiff,
   computeForceTools,
@@ -35,12 +32,16 @@ import {
   isUiPatchCall,
   normalizeDesignReadPath,
   recordDesignReadPath,
-  resolveBuildToolPhase,
   shouldEnforceNoToolCalls,
   shouldSuggestStackFork,
   updateReadOnlyTracker,
-  type BuildToolPhase,
 } from "./execute-helpers.ts";
+import {
+  evaluateReadGate,
+  evaluateTurnGuidePreTurn,
+  evaluateZeroWritesExit,
+  ZERO_WRITES_RESUME_MESSAGE,
+} from "../turn-guide.ts";
 import type {
   AgentState,
   ChatMessage,
@@ -101,12 +102,8 @@ export type BuildExecuteDeps = {
   setToolsInvoked: (value: boolean) => void;
   getConsecutiveNoContentReadSteps: () => number;
   setConsecutiveNoContentReadSteps: (value: number) => void;
-  getBuildToolPhase: () => BuildToolPhase;
-  setBuildToolPhase: (phase: BuildToolPhase) => void;
   getReadGateBlockCount: () => number;
   setReadGateBlockCount: (count: number) => void;
-  getForceWriteAttempted: () => boolean;
-  setForceWriteAttempted: (value: boolean) => void;
   getLlmResponseWasStreamed: () => boolean;
   getLastExecutePhaseMessage: () => string | null;
   setLastExecutePhaseMessage: (value: string | null) => void;
@@ -218,30 +215,8 @@ function applyNoToolCallsEnforcement(
   return false;
 }
 
-const FORCE_WRITE_USER_MESSAGE =
-  "Leitura suficiente. Implemente agora com fs_write ou fs_edit.";
-const ZERO_WRITES_RESUME_MESSAGE =
-  "Ainda não materializei arquivos — use Continuar para forçar implementação.";
-
 function needsZeroWritesProtection(deps: BuildExecuteDeps): boolean {
   return deps.approvedPlanBuild && deps.touchedPaths.size === 0;
-}
-
-function prepareForceWriteTurn(deps: BuildExecuteDeps): boolean {
-  if (!needsZeroWritesProtection(deps)) return false;
-  if (deps.getForceWriteAttempted()) return false;
-  deps.setForceWriteAttempted(true);
-  deps.setBuildToolPhase("write");
-  deps.setConsecutiveNoContentReadSteps(0);
-  deps.state.messages.push({
-    role: "user",
-    content: FORCE_WRITE_USER_MESSAGE,
-  });
-  logger.event("agent.build_force_write_turn", {
-    loopStep: deps.state.currentStepIndex,
-    readOnlyBatches: deps.getConsecutiveNoContentReadSteps(),
-  });
-  return true;
 }
 
 async function zeroWritesResumableExit(
@@ -252,7 +227,6 @@ async function zeroWritesResumableExit(
   logger.event("agent.build_zero_writes_exit", {
     context,
     loopStep,
-    phase: deps.getBuildToolPhase(),
     readOnlyBatches: deps.getConsecutiveNoContentReadSteps(),
   });
   await deps.saveCheckpoint(LoopPhaseEnum.ERROR, true);
@@ -269,11 +243,15 @@ async function guardedTerminalExit(
   if (!needsZeroWritesProtection(deps)) {
     return exit();
   }
-  if (!deps.getForceWriteAttempted()) {
-    prepareForceWriteTurn(deps);
-    return null;
+  const zeroWrites = evaluateZeroWritesExit({
+    approvedPlanBuild: deps.approvedPlanBuild,
+    touchedPathsCount: deps.touchedPaths.size,
+    loopStep,
+  });
+  if (zeroWrites.action === "pause_zero_writes") {
+    return zeroWritesResumableExit(deps, loopStep, "terminal_zero_writes");
   }
-  return zeroWritesResumableExit(deps, loopStep, "terminal_after_force_write");
+  return null;
 }
 
 /** Produz fechamento final garantido via choke point central — NUNCA retorna vazio. */
@@ -547,18 +525,14 @@ export async function runBuildExecutePhase(
         deps.emit("phase", { phase: "execute", message: "" });
       }
 
-      const readPathsSatisfiedEarly = areReadPathsSatisfied(
-        deps.approvedPlanDesign?.read_paths,
-        deps.designReadPathsDone,
-      );
-      const buildToolPhaseEarly = resolveBuildToolPhase({
-        touchedPathsCount: deps.touchedPaths.size,
-        readPathsSatisfied: readPathsSatisfiedEarly,
+      const preTurnGuide = evaluateTurnGuidePreTurn({
         consecutiveReadOnlyBatches: deps.getConsecutiveNoContentReadSteps(),
-        loopStep,
-        approvedPlanBuild: deps.approvedPlanBuild,
-        hasDesignDirective: !!deps.approvedPlanDesign,
+        touchedPathsCount: deps.touchedPaths.size,
       });
+      if (preTurnGuide.action === "nudge_stall") {
+        deps.emit("explore", { message: preTurnGuide.message });
+      }
+
       deps.compression.emitUsage(deps.state.messages);
 
       if (deps.compression.shouldRunCompact(deps.state.messages)) {
@@ -613,34 +587,6 @@ export async function runBuildExecutePhase(
         approvedPlanBuild: deps.approvedPlanBuild,
       });
 
-      const readPathsSatisfied = areReadPathsSatisfied(
-        deps.approvedPlanDesign?.read_paths,
-        deps.designReadPathsDone,
-      );
-      const buildToolPhase = resolveBuildToolPhase({
-        touchedPathsCount: deps.touchedPaths.size,
-        readPathsSatisfied,
-        consecutiveReadOnlyBatches: deps.getConsecutiveNoContentReadSteps(),
-        loopStep,
-        approvedPlanBuild: deps.approvedPlanBuild,
-        hasDesignDirective: !!deps.approvedPlanDesign,
-      });
-      const prevBuildToolPhase = deps.getBuildToolPhase();
-      deps.setBuildToolPhase(buildToolPhase);
-      if (buildToolPhase === "write" && prevBuildToolPhase === "discovery") {
-        deps.emit("phase", { phase: "execute", message: "Implementando…" });
-        deps.state.messages.push({
-          role: "user",
-          content: FORCE_WRITE_USER_MESSAGE,
-        });
-      }
-
-      const writeModeTools =
-        buildToolPhase === "write"
-          ? mergeWriteModeToolDefinitions(deps.reg.getDefinitions())
-          : undefined;
-      const effectiveForceTools = buildToolPhase === "write" ? true : forceTools;
-
       let response: ChatResponse | null = null;
       try {
         deps.maybeEmitSilenceHeartbeat();
@@ -649,8 +595,8 @@ export async function runBuildExecutePhase(
           deps.executionModel,
           executeInstruction,
           compressed,
-          effectiveForceTools,
-          writeModeTools,
+          forceTools,
+          deps.reg.getDefinitions(),
         );
       } catch (err: unknown) {
         const friendly = friendlyLlmError(err, deps.robinActive);
@@ -681,8 +627,12 @@ export async function runBuildExecutePhase(
         }
         const retries = await deps.bumpLlmRetries();
         if (retries >= EXECUTE_MAX_LLM_RETRIES) {
-          if (prepareForceWriteTurn(deps)) continue;
-          if (needsZeroWritesProtection(deps)) {
+          const zeroWrites = evaluateZeroWritesExit({
+            approvedPlanBuild: deps.approvedPlanBuild,
+            touchedPathsCount: deps.touchedPaths.size,
+            loopStep,
+          });
+          if (zeroWrites.action === "pause_zero_writes") {
             return zeroWritesResumableExit(deps, loopStep, "llm_retries_exhausted");
           }
           const failMsg = `Erro: ${friendly}`;
@@ -719,7 +669,6 @@ export async function runBuildExecutePhase(
         deps.getConsecutiveNoContentReadSteps(),
         response,
         assistantText,
-        buildToolPhase,
         hadThinkingActivity,
       );
       deps.setConsecutiveNoContentReadSteps(readOnlyUpdate.consecutive);
@@ -874,7 +823,7 @@ export async function runBuildExecutePhase(
       if (!response.tool_calls || response.tool_calls.length === 0) {
         if (
           shouldEnforceNoToolCalls({
-            forceTools: effectiveForceTools,
+            forceTools,
             narrationOnlyStep,
             llmResponseWasStreamed: deps.getLlmResponseWasStreamed(),
             approvedPlanBuild: deps.approvedPlanBuild,
@@ -931,33 +880,31 @@ export async function runBuildExecutePhase(
 
       const liveMsgId = await deps.persistAssistantStep(response);
 
-      let readGate = assertDesignReadsDone({
+      const readGateDecision = evaluateReadGate({
         readPaths: deps.approvedPlanDesign?.read_paths,
         readsDone: deps.designReadPathsDone,
         patchCalls: response.tool_calls,
+        readGateBlockCount: deps.getReadGateBlockCount(),
       });
-      if (!readGate.ok) {
-        const blockCount = deps.getReadGateBlockCount() + 1;
-        deps.setReadGateBlockCount(blockCount);
-        if (blockCount >= 2) {
-          for (const p of readGate.missing) {
-            deps.designReadPathsDone.add(normalizeDesignReadPath(p));
-          }
-          logger.event("design.read_gate_relaxed", {
-            missing: readGate.missing,
-            blockCount,
-          });
-          readGate = { ok: true, missing: [], message: "" };
+      if (readGateDecision.action === "read_gate_relaxed") {
+        const relaxedBlockCount = deps.getReadGateBlockCount() + 1;
+        for (const p of readGateDecision.missing) {
+          deps.designReadPathsDone.add(normalizeDesignReadPath(p));
         }
-      }
-      if (!readGate.ok) {
+        deps.setReadGateBlockCount(0);
+        logger.event("design.read_gate_relaxed", {
+          missing: readGateDecision.missing,
+          blockCount: relaxedBlockCount,
+        });
+      } else if (readGateDecision.action === "block_read_gate") {
+        deps.setReadGateBlockCount(deps.getReadGateBlockCount() + 1);
         deps.state.executionLog = appendExecutionLogEntry(
           deps.state.executionLog,
-          designTelemetryEntry("read_paths_gate", false, readGate.message),
+          designTelemetryEntry("read_paths_gate", false, readGateDecision.message),
         );
         deps.state.messages.push({
           role: "user",
-          content: readGate.message,
+          content: readGateDecision.message,
         });
         if (liveMsgId) {
           await deps.updateAssistantStep(liveMsgId, response, [], loopStep);

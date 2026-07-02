@@ -71,12 +71,8 @@ function buildStubbedExecuteDeps(overrides?: {
     setToolsInvoked: () => {},
     getConsecutiveNoContentReadSteps: () => 0,
     setConsecutiveNoContentReadSteps: () => {},
-    getBuildToolPhase: () => "discovery" as const,
-    setBuildToolPhase: () => {},
     getReadGateBlockCount: () => 0,
     setReadGateBlockCount: () => {},
-    getForceWriteAttempted: () => false,
-    setForceWriteAttempted: () => {},
     getLlmResponseWasStreamed: () => false,
     getLastExecutePhaseMessage: () => null,
     setLastExecutePhaseMessage: () => {},
@@ -277,9 +273,10 @@ Deno.test("execute phase with ALL empty LLM responses (content:null, no tools) s
   assert(result.ok === true || result.resumable === true || result.error === undefined || !String(result.error || "").includes("não respondeu"));
 });
 
-Deno.test("approved build — escala read-only para write tools e materializa arquivo", async () => {
+Deno.test("approved build — mantém tools completas e materializa arquivo", async () => {
   let calls = 0;
   const toolSets: string[][] = [];
+  const fullToolNames = ["fs_edit", "fs_read", "fs_read_many", "fs_write", "shell_exec"];
   const deps = buildStubbedExecuteDeps({
     llmChat: async (_model, _instruction, _history, _forceTools, tools) => {
       calls += 1;
@@ -323,11 +320,10 @@ Deno.test("approved build — escala read-only para write tools e materializa ar
   } as unknown as BuildExecuteDeps["reg"];
 
   const result = await runBuildExecutePhase(deps, 0);
-  const writePhaseCall = toolSets.find((names) =>
-    names.length > 0 && names.every((n) => n === "fs_edit" || n === "fs_write" || n === "shell_exec")
+  assert(
+    toolSets.every((names) => names.join(",") === fullToolNames.join(",")),
+    `expected full tools every turn, got: ${JSON.stringify(toolSets)}`,
   );
-
-  assert(writePhaseCall, `expected write-only tools, got: ${JSON.stringify(toolSets)}`);
   assert(deps.touchedPaths.size > 0, "approved build must materialize at least one file");
   assert(result.ok === true || result.resumable === true);
 });
