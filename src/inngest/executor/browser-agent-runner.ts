@@ -18,6 +18,7 @@ import {
 import { sanitizeObservationForEvidence } from "./deep-capture/sanitize";
 import {
   takeScreenshot,
+  capturePageSegments,
   navigateTo,
   scrollPage,
   analyzeElement,
@@ -27,8 +28,11 @@ import {
   evaluateJs,
 } from "./browser-cdp-tools";
 
+type SegmentRaw = { segmentIndex: number; scrollY: number; base64: string };
+
 export type CdpTools = {
   takeScreenshot: typeof takeScreenshot;
+  capturePageSegments: typeof capturePageSegments;
   navigateTo: typeof navigateTo;
   scrollPage: typeof scrollPage;
   analyzeElement: typeof analyzeElement;
@@ -52,32 +56,91 @@ export type SynthesizerFn = (
 export type FetchInstructionsFn = (jobId: string) => Promise<UserInstruction[]>;
 export type MarkInstructionsConsumedFn = (jobId: string) => Promise<void>;
 
+async function persistSegmentBatch(
+  supabase: SupabaseClient,
+  ctx: BrowserAgentContext,
+  pageUrl: string,
+  segments: SegmentRaw[],
+): Promise<AgentObservation> {
+  const captures: Array<{
+    captureId: string;
+    segmentIndex: number;
+    scrollY: number;
+    storagePath: string;
+    byteSize: number;
+  }> = [];
+
+  for (const seg of segments) {
+    const persisted = await persistScreenshotCapture(supabase, {
+      jobId: ctx.jobId,
+      pageUrl,
+      pngBase64: seg.base64,
+      segmentIndex: seg.segmentIndex,
+      scrollY: seg.scrollY,
+      fullPage: true,
+    });
+    captures.push({
+      captureId: persisted.captureId,
+      segmentIndex: seg.segmentIndex,
+      scrollY: seg.scrollY,
+      storagePath: persisted.storagePath,
+      byteSize: persisted.byteSize,
+    });
+    await appendJobEvent(supabase, ctx.jobId, "capture_qualified", {
+      captureId: persisted.captureId,
+      label: `page fold ${seg.segmentIndex + 1}`,
+      storagePath: persisted.storagePath,
+      pageUrl,
+      byteSize: persisted.byteSize,
+      segmentIndex: seg.segmentIndex,
+      scrollY: seg.scrollY,
+    });
+  }
+
+  return {
+    type: "capture_segments",
+    url: pageUrl,
+    segmentCount: captures.length,
+    captures,
+    timestamp: new Date().toISOString(),
+  };
+}
+
 async function finalizeObservation(
   supabase: SupabaseClient,
   ctx: BrowserAgentContext,
   action: AgentAction,
   observation: AgentObservation,
 ): Promise<AgentObservation> {
+  const pageUrl = observation.url ?? ctx.url;
+
+  if (observation.type === "capture_segments") {
+    const rawSegments = (observation as AgentObservation & { segments?: SegmentRaw[] }).segments;
+    if (Array.isArray(rawSegments) && rawSegments.length > 0) {
+      return persistSegmentBatch(supabase, ctx, pageUrl, rawSegments);
+    }
+    return observation;
+  }
+
   if (
     action.type === "screenshot" &&
     typeof observation.screenshot === "string" &&
     observation.screenshot.length > 0
   ) {
-    const pageUrl = observation.url ?? ctx.url;
     const persisted = await persistScreenshotCapture(supabase, {
       jobId: ctx.jobId,
       pageUrl,
       pngBase64: observation.screenshot,
-      fullPage: action.params.fullPage === true,
+      fullPage: false,
     });
     await appendJobEvent(supabase, ctx.jobId, "capture_qualified", {
       captureId: persisted.captureId,
-      label: action.params.fullPage ? "full-page segment capture" : "viewport capture",
+      label: "viewport capture",
       storagePath: persisted.storagePath,
       pageUrl,
       byteSize: persisted.byteSize,
     });
-    return captureObservationFromPersist(pageUrl, persisted, action.params.fullPage === true);
+    return captureObservationFromPersist(pageUrl, persisted, false);
   }
   return observation;
 }
@@ -100,11 +163,31 @@ async function executeAction(
       return { type: "navigate", url: action.params.url, result: res, timestamp: ts };
     }
     case "screenshot": {
-      const res = await tools.takeScreenshot(
-        ctx.sandboxId,
-        ctx.sandboxAccessToken,
-        action.params.fullPage,
-      );
+      if (action.params.fullPage === true) {
+        const segRes = await tools.capturePageSegments(ctx.sandboxId, ctx.sandboxAccessToken);
+        if (segRes.error) {
+          return {
+            type: "capture_segments",
+            url: currentUrl.url,
+            error: segRes.error,
+            segments: [],
+            scrollHeight: segRes.scrollHeight,
+            viewportHeight: segRes.viewportHeight,
+            segmentCount: 0,
+            timestamp: ts,
+          };
+        }
+        return {
+          type: "capture_segments",
+          url: currentUrl.url,
+          segments: segRes.segments,
+          scrollHeight: segRes.scrollHeight,
+          viewportHeight: segRes.viewportHeight,
+          segmentCount: segRes.segmentCount,
+          timestamp: ts,
+        };
+      }
+      const res = await tools.takeScreenshot(ctx.sandboxId, ctx.sandboxAccessToken, false);
       return { type: "screenshot", url: currentUrl.url, screenshot: res.base64, result: res, timestamp: ts };
     }
     case "scroll": {
@@ -278,6 +361,7 @@ export async function runBrowserAgent(
 export function createDefaultCdpTools(): CdpTools {
   return {
     takeScreenshot,
+    capturePageSegments,
     navigateTo,
     scrollPage,
     analyzeElement,

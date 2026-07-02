@@ -36,6 +36,7 @@ describe("runBrowserAgent", () => {
     const tools = {
       getUrl: vi.fn().mockResolvedValue({ url: "https://example.com" }),
       takeScreenshot: vi.fn().mockResolvedValue({ base64: "abc" }),
+      capturePageSegments: vi.fn(),
     };
 
     let step = 0;
@@ -108,6 +109,7 @@ describe("runBrowserAgent", () => {
     const tools = {
       getUrl: vi.fn().mockResolvedValue({ url: "https://example.com" }),
       takeScreenshot: vi.fn().mockRejectedValue(new Error("screenshot failed")),
+      capturePageSegments: vi.fn(),
     };
     const planner = vi.fn().mockResolvedValue({
       thought: "screenshot",
@@ -135,10 +137,84 @@ describe("runBrowserAgent", () => {
     }
   });
 
+  it("fullPage screenshot uses capturePageSegments and qualifies each fold", async () => {
+    const tools = {
+      getUrl: vi.fn().mockResolvedValue({ url: "https://example.com" }),
+      takeScreenshot: vi.fn().mockResolvedValue({ base64: "" }),
+      capturePageSegments: vi.fn().mockResolvedValue({
+        segments: [
+          { segmentIndex: 0, scrollY: 0, base64: "seg0" },
+          { segmentIndex: 1, scrollY: 800, base64: "seg1" },
+        ],
+        scrollHeight: 1600,
+        viewportHeight: 800,
+        segmentCount: 2,
+      }),
+    };
+
+    const planner = vi.fn().mockResolvedValue({
+      thought: "full page segments",
+      action: { type: "screenshot", params: { fullPage: true } },
+      done: true,
+    });
+
+    const synthesizer = vi.fn().mockResolvedValue({
+      name: "Example",
+      source_url: "https://example.com",
+      category: "full_page",
+      layout: null,
+      color: null,
+      typography: null,
+      motion: null,
+      interaction: null,
+      component: null,
+      implementation_notes: null,
+      quality_score: 8,
+      quality_source: "deep_agent",
+      serves_domains: [],
+      compatible_languages: [],
+      compatible_moods: [],
+      extracted_at: new Date().toISOString(),
+    });
+
+    const ctx = createAgentContext({
+      jobId: "job-seg",
+      url: "https://example.com",
+      categories: ["hero"],
+      depth: "deep",
+      userId: "user-1",
+      sandboxId: "sb-1",
+      sandboxAccessToken: "token",
+      maxSteps: 5,
+      extractionScope: snapshotExtractionScope(["hero"]),
+    });
+
+    const result = await runBrowserAgent(
+      ctx,
+      {} as SupabaseClient,
+      tools as any,
+      planner as any,
+      synthesizer as any,
+      async () => [],
+      async () => {},
+    );
+
+    expect(result.ok).toBe(true);
+    expect(tools.capturePageSegments).toHaveBeenCalledTimes(1);
+    expect(tools.takeScreenshot).toHaveBeenCalledTimes(1);
+    expect(mockAppendEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      "job-seg",
+      "capture_qualified",
+      expect.objectContaining({ segmentIndex: 0 }),
+    );
+  });
+
   it("consumes pending instructions before planning", async () => {
     const tools = {
       getUrl: vi.fn().mockResolvedValue({ url: "https://example.com" }),
       takeScreenshot: vi.fn().mockResolvedValue({ base64: "" }),
+      capturePageSegments: vi.fn(),
     };
 
     let seenInstructions: unknown[] = [];

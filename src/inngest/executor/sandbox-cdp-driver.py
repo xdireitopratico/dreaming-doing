@@ -12,6 +12,7 @@ import argparse
 import asyncio
 import base64
 import json
+import math
 import sys
 import urllib.request
 
@@ -66,11 +67,52 @@ async def run_action(payload: dict) -> dict:
         return await with_page(cdp_port, do)
 
     if action == "screenshot":
-        full_page = bool(payload.get("fullPage", False))
+        # Viewport only — full page uses capture_page_segments (law L8).
+        async def do(page):
+            data = await page.screenshot(type="png", full_page=False)
+            return {"base64": base64.b64encode(data).decode("ascii")}
+
+        return await with_page(cdp_port, do)
+
+    if action == "capture_page_segments":
+        max_segments = int(payload.get("maxSegments", 50))
 
         async def do(page):
-            data = await page.screenshot(type="png", full_page=full_page)
-            return {"base64": base64.b64encode(data).decode("ascii")}
+            metrics = await page.evaluate(
+                """() => ({
+                  scrollHeight: document.documentElement.scrollHeight,
+                  viewportHeight: window.innerHeight,
+                })"""
+            )
+            sh = int(metrics.get("scrollHeight") or 0)
+            vh = max(int(metrics.get("viewportHeight") or 720), 1)
+            num_segs = max(1, math.ceil(sh / vh))
+            num_segs = min(num_segs, max_segments)
+
+            segments = []
+            step = sh // max(num_segs, 1)
+            for i in range(num_segs):
+                y = i * step
+                await page.evaluate("(y) => window.scrollTo(0, y)", y)
+                await asyncio.sleep(0.3)
+                data = await page.screenshot(type="png", full_page=False)
+                segments.append(
+                    {
+                        "segmentIndex": i,
+                        "scrollY": y,
+                        "base64": base64.b64encode(data).decode("ascii"),
+                    }
+                )
+
+            await page.evaluate("() => window.scrollTo(0, 0)")
+            await asyncio.sleep(0.2)
+
+            return {
+                "segments": segments,
+                "scrollHeight": sh,
+                "viewportHeight": vh,
+                "segmentCount": len(segments),
+            }
 
         return await with_page(cdp_port, do)
 

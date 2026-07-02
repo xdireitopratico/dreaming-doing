@@ -32,6 +32,17 @@ export type AgentObservation = {
   thumbPath?: string;
   byteSize?: number;
   qualification?: CaptureQualification;
+  segmentCount?: number;
+  scrollHeight?: number;
+  viewportHeight?: number;
+  segments?: Array<{ segmentIndex: number; scrollY: number; base64?: string }>;
+  captures?: Array<{
+    captureId: string;
+    segmentIndex: number;
+    scrollY: number;
+    storagePath?: string;
+    byteSize?: number;
+  }>;
   error?: string;
   timestamp?: string;
 };

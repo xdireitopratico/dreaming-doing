@@ -17,6 +17,18 @@ export function sanitizeObservationForEvidence(obs: AgentObservation): Record<st
   if (typeof copy.thumbPath === "string") {
     copy.thumbPath = `[thumb:${copy.thumbPath}]`;
   }
+  if (Array.isArray(copy.segments)) {
+    copy.segments = (copy.segments as Array<Record<string, unknown>>).map((seg) => {
+      const s = { ...seg };
+      if (typeof s.base64 === "string" && s.base64.length > OMIT_THRESHOLD_CHARS) {
+        s.base64 = `[base64 omitted, ${s.base64.length} chars]`;
+      }
+      return s;
+    });
+  }
+  if (Array.isArray(copy.captures)) {
+    copy.captures = (copy.captures as Array<Record<string, unknown>>).map((c) => ({ ...c }));
+  }
   if (copy.result && typeof copy.result === "object" && copy.result !== null) {
     const result = { ...(copy.result as Record<string, unknown>) };
     if (typeof result.base64 === "string" && result.base64.length > OMIT_THRESHOLD_CHARS) {

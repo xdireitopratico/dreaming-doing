@@ -18,7 +18,7 @@ export type AgentPlan = {
 export function buildAgentPrompt(ctx: BrowserAgentContext, screenshotBase64?: string): string {
   const toolList = [
     { name: "navigate", params: { url: "string" }, use: "ir para uma URL" },
-    { name: "screenshot", params: { fullPage: "boolean (opcional)" }, use: "capturar tela do viewport" },
+    { name: "screenshot", params: { fullPage: "boolean (opcional)" }, use: "viewport (fullPage=true segmenta a página em dobras — N prints qualificados)" },
     { name: "scroll", params: { y: "number" }, use: "scrollar para posição Y" },
     { name: "click", params: { selector: "string" }, use: "clicar em elemento" },
     { name: "type", params: { selector: "string", text: "string" }, use: "digitar em input" },

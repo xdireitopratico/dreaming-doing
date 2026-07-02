@@ -8,27 +8,68 @@
 import { errorMessage } from "@/lib/error-utils";
 import { runSandboxCdpAction } from "./sandbox-browser-driver";
 import { PREVIEW_PORT } from "./design-dna-preview";
+import type { CapturePageSegmentsResult } from "./deep-capture/page-segments";
 
 const E2B_DOMAIN =
   (typeof process !== "undefined" ? process.env.E2B_DOMAIN : undefined) ||
   "e2b.app";
 const NAVIGATE_TIMEOUT_MS = 60_000;
 
+/** Viewport capture only. fullPage=true must use capturePageSegments (G-CAP-4). */
 export async function takeScreenshot(
   sandboxId: string,
   accessToken: string | null,
   fullPage = false,
 ): Promise<{ base64: string; error?: string }> {
+  if (fullPage) {
+    return {
+      base64: "",
+      error: "fullPage screenshot redirects to capturePageSegments — never single PNG blob",
+    };
+  }
   const res = await runSandboxCdpAction<{ base64?: string }>(
     sandboxId,
     accessToken,
-    { action: "screenshot", fullPage },
+    { action: "screenshot" },
     { timeoutMs: 90_000 },
   );
   if (!res.ok) return { base64: "", error: res.error };
   return {
     base64: res.data.base64 ?? "",
     error: res.data.base64 ? undefined : "Screenshot data missing",
+  };
+}
+
+/** Scroll-height segments (Refero-style) — one viewport PNG per fold. */
+export async function capturePageSegments(
+  sandboxId: string,
+  accessToken: string | null,
+  opts?: { maxSegments?: number },
+): Promise<CapturePageSegmentsResult> {
+  const res = await runSandboxCdpAction<CapturePageSegmentsResult>(
+    sandboxId,
+    accessToken,
+    {
+      action: "capture_page_segments",
+      maxSegments: opts?.maxSegments ?? 50,
+    },
+    { timeoutMs: 180_000 },
+  );
+  if (!res.ok) {
+    return {
+      segments: [],
+      scrollHeight: 0,
+      viewportHeight: 0,
+      segmentCount: 0,
+      error: res.error,
+    };
+  }
+  const data = res.data;
+  return {
+    segments: data.segments ?? [],
+    scrollHeight: data.scrollHeight ?? 0,
+    viewportHeight: data.viewportHeight ?? 0,
+    segmentCount: data.segmentCount ?? data.segments?.length ?? 0,
   };
 }
 
@@ -145,6 +186,7 @@ export async function evaluateJs(
 export function createDefaultCdpTools() {
   return {
     takeScreenshot,
+    capturePageSegments,
     navigateTo,
     scrollPage,
     analyzeElement,
