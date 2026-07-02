@@ -26,11 +26,6 @@ import { resolveAllocateSandbox } from "./run-context.ts";
 import { logger } from "../_shared/logger.ts";
 import { appendStreamEvent } from "../_shared/agent-stream.ts";
 import { ensureTerminalRunMessage } from "../_shared/ensure-terminal-message.ts";
-import {
-  agentRuntimeV2WorkerEnabled,
-  resolveJobGenerationForChunk,
-  shadowCompleteJob,
-} from "../_shared/agent-jobs.ts";
 import { transitionRun } from "../_shared/run-lifecycle.ts";
 import type { AgentRunStatus } from "../_shared/agent-contract-events.ts";
 
@@ -111,27 +106,6 @@ export async function executeAgentRun(
     .eq("id", runId)
     .maybeSingle();
   const runMeta = (preCheck?.meta ?? {}) as Record<string, unknown>;
-  const jobGeneration = await resolveJobGenerationForChunk(supabase, runId, {
-    planMode,
-    chatMode,
-    resume: resumeParam,
-    planSourceRunId: params.planSourceRunId ?? null,
-  });
-
-  if (agentRuntimeV2WorkerEnabled() && jobGeneration == null) {
-    const msg = "Worker mode: nenhum agent_job disponível para este chunk";
-    await transitionRun(supabase, runId, "failed", { error: msg });
-    return {
-      ok: false,
-      runId,
-      mode: runMode,
-      resumable: false,
-      canceled: false,
-      error: msg,
-      stepsCompleted: 0,
-      durationMs: Date.now() - startMs,
-    };
-  }
 
   const effectivePreferences = await resolveEffectiveAgentPreferences(
     supabase,
@@ -495,20 +469,6 @@ export async function executeAgentRun(
       buildFailed: !planMode,
     });
   }
-
-  await shadowCompleteJob(
-    supabase,
-    runId,
-    jobGeneration,
-    {
-      ok: result.ok,
-      canceled: result.canceled,
-      steps: result.steps,
-      error: result.error ?? null,
-      awaiting: isAwaiting,
-    },
-    result.ok && !result.canceled,
-  );
 
   logger.info("agent_run.executed", {
     runId,

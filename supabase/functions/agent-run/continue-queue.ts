@@ -18,7 +18,7 @@ import {
   resolveAgentProvider,
   resolveEffectiveAgentPreferences,
 } from "./run-setup.ts";
-import { enqueueAgentJobOnDispatch } from "../_shared/agent-jobs.ts";
+
 import { transitionRun } from "../_shared/run-lifecycle.ts";
 
 type InngestEventName =
@@ -257,13 +257,6 @@ export async function handleContinueQueue(
     });
     return { continued: false, reason: "inngest_failed" };
   }
-
-  await enqueueAgentJobOnDispatch(supabase, agentRunId, {
-    planMode,
-    chatMode,
-    continuedFromQueue: true,
-    eventName,
-  });
 
   await appendStreamEvent(supabase, agentRunId, "start", {
     type: "start",

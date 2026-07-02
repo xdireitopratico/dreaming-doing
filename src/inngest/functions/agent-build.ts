@@ -39,19 +39,6 @@ export const agentBuildFunction = inngest.createFunction(
       await markRunFinal(runId, "running");
     });
 
-    await step.run("lease-agent-job", async () => {
-      const { agentRuntimeV2WorkerEnabled, leaseQueuedAgentJob } = await import(
-        "./agent-jobs.ts"
-      );
-      const gen = await leaseQueuedAgentJob(getSupabaseAdmin(), runId);
-      if (agentRuntimeV2WorkerEnabled() && gen == null) {
-        throw new NonRetriableError(
-          `Worker mode: nenhum agent_job queued para run ${runId.slice(0, 8)}`,
-        );
-      }
-      return gen;
-    });
-
     const final = await runAgentLoopWithResume(
       step as Parameters<typeof runAgentLoopWithResume>[0],
       { ...payload, planMode: false, chatMode: false },

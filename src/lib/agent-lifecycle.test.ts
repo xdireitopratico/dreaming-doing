@@ -1,13 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  canTransitionJobStatus,
-  canTransitionRunStatus,
-  isAgentJobsEnabled,
-  isAgentRuntimeV2ShadowEnabled,
-  isAgentRuntimeV2WorkerEnabled,
-  parseAgentRuntimeV2Mode,
-  partitionRunExtras,
-} from "@forge/agent-contract/lifecycle";
+import { canTransitionRunStatus, partitionRunExtras } from "@forge/agent-contract/lifecycle";
 
 describe("partitionRunExtras", () => {
   it("separa colunas e meta", () => {
@@ -53,38 +45,5 @@ describe("canTransitionRunStatus", () => {
 
   it("canceled permanece terminal", () => {
     expect(canTransitionRunStatus("canceled", "completed")).toBe(false);
-  });
-});
-
-describe("canTransitionJobStatus", () => {
-  it("queued → leased → completed", () => {
-    expect(canTransitionJobStatus("queued", "leased")).toBe(true);
-    expect(canTransitionJobStatus("leased", "completed")).toBe(true);
-  });
-
-  it("leased → queued (re-queue após lease expirado)", () => {
-    expect(canTransitionJobStatus("leased", "queued")).toBe(true);
-  });
-});
-
-describe("AgentRuntimeV2 mode", () => {
-  it("parseAgentRuntimeV2Mode", () => {
-    expect(parseAgentRuntimeV2Mode("worker")).toBe("worker");
-    expect(parseAgentRuntimeV2Mode("shadow")).toBe("shadow");
-    expect(parseAgentRuntimeV2Mode("")).toBe("off");
-  });
-
-  it("isAgentJobsEnabled — shadow, worker e legacy", () => {
-    expect(isAgentJobsEnabled("shadow")).toBe(true);
-    expect(isAgentJobsEnabled("worker")).toBe(true);
-    expect(isAgentJobsEnabled("1")).toBe(true);
-    expect(isAgentJobsEnabled("")).toBe(false);
-    expect(isAgentRuntimeV2ShadowEnabled("worker")).toBe(true);
-  });
-
-  it("isAgentRuntimeV2WorkerEnabled — só worker", () => {
-    expect(isAgentRuntimeV2WorkerEnabled("worker")).toBe(true);
-    expect(isAgentRuntimeV2WorkerEnabled("shadow")).toBe(false);
-    expect(isAgentRuntimeV2WorkerEnabled("")).toBe(false);
   });
 });

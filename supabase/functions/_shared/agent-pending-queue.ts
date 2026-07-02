@@ -3,7 +3,7 @@
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
-/** Gap sem eventos após checkpoint = run entre chunks (não bloqueia fila). */
+/** Gap sem eventos de stream antes de considerar run stale para fila do usuário. */
 export const CHUNK_HANDOFF_GAP_MS = 90 * 1000;
 import { appendStreamEvent } from "./agent-stream.ts";
 import { logger } from "./logger.ts";
