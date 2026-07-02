@@ -462,6 +462,12 @@ Deno.test("e3b71248 — reads + shell JSON no prose não completa em 2 steps", a
   const result = await runBuildExecutePhase(deps, 0);
 
   assertEquals(result.ok, false);
-  assertEquals(result.awaiting, true);
-  assert(llmCalls > 2, "must retry after blocked text_only, not complete in 2 LLM turns");
+  assert(llmCalls > 2, "must retry in-loop after blocked text_only, not complete in 2 LLM turns");
+  // Camada B até fusível — Continuar só no step_limit, não no meio do trabalho.
+  if (result.awaiting === true) {
+    assertEquals(
+      (result as { awaitingUser?: { type?: string } }).awaitingUser?.type,
+      "step_limit",
+    );
+  }
 });

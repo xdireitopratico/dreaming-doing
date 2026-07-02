@@ -40,9 +40,8 @@ import {
 import {
   evaluateReadGate,
   evaluateTurnGuidePreTurn,
-  evaluateZeroWritesExit,
-  shouldPauseZeroDelivery,
-  ZERO_WRITES_RESUME_MESSAGE,
+  shouldLoopBackForZeroDelivery,
+  ZERO_DELIVERY_LOOP_BACK_MESSAGE,
 } from "../turn-guide.ts";
 import { attemptOpeningProse } from "../turn-opening.ts";
 import type {
@@ -229,22 +228,44 @@ function needsZeroWritesProtection(deps: BuildExecuteDeps): boolean {
   return deps.approvedPlanBuild && deps.touchedPaths.size === 0;
 }
 
-async function zeroWritesResumableExit(
+function zeroDeliveryLoopBackNeeded(deps: BuildExecuteDeps): boolean {
+  return shouldLoopBackForZeroDelivery({
+    actionableIntent: isActionableIntent(deps.state.intent?.type),
+    touchedPathsCount: deps.touchedPaths.size,
+  });
+}
+
+async function pauseAtStepLimit(
+  deps: BuildExecuteDeps,
+  loopStep: number,
+): Promise<PlanTurnRunResult | null> {
+  if (loopStep < deps.maxStepsLimit) return null;
+  await deps.saveCheckpoint(LoopPhaseEnum.DECIDE_NEXT, true);
+  return deps.pauseOperationForUser({
+    reason: "step_limit",
+    message: deps.requiresFinalBuildGate()
+      ? "Limite de passos atingido com build pendente — continue quando estiver pronto."
+      : "Limite de passos atingido — continue quando estiver pronto.",
+    steps: loopStep,
+    toolsUsed: deps.toolsUsed,
+  });
+}
+
+function applyZeroDeliveryLoopBack(
   deps: BuildExecuteDeps,
   loopStep: number,
   context: string,
-): Promise<PlanTurnRunResult> {
-  logger.event("agent.build_zero_writes_exit", {
+): void {
+  logger.event("agent.build_zero_delivery_loop_back", {
     context,
     loopStep,
     readOnlyBatches: deps.getConsecutiveNoContentReadSteps(),
   });
-  await deps.saveCheckpoint(LoopPhaseEnum.ERROR, true);
-  return deps.pauseOperationForUser({
-    reason: "step_limit",
-    message: ZERO_WRITES_RESUME_MESSAGE,
-    steps: loopStep,
-    toolsUsed: deps.toolsUsed,
+  deps.setForceToolsNext(true);
+  deps.setToolMissCount(0);
+  deps.state.messages.push({
+    role: "user",
+    content: ZERO_DELIVERY_LOOP_BACK_MESSAGE,
   });
 }
 
@@ -260,18 +281,15 @@ async function guardedTerminalExit(
   loopStep: number,
   exit: () => Promise<PlanTurnRunResult>,
 ): Promise<PlanTurnRunResult | null> {
-  if (!needsZeroWritesProtection(deps)) {
-    return exit();
+  if (
+    needsZeroWritesProtection(deps) &&
+    deps.touchedPaths.size === 0 &&
+    loopStep < deps.maxStepsLimit
+  ) {
+    applyZeroDeliveryLoopBack(deps, loopStep, "terminal_zero_writes");
+    return null;
   }
-  const zeroWrites = evaluateZeroWritesExit({
-    approvedPlanBuild: deps.approvedPlanBuild,
-    touchedPathsCount: deps.touchedPaths.size,
-    loopStep,
-  });
-  if (zeroWrites.action === "pause_zero_writes") {
-    return zeroWritesResumableExit(deps, loopStep, "terminal_zero_writes");
-  }
-  return null;
+  return exit();
 }
 
 /** Produz fechamento final garantido via choke point central — NUNCA retorna vazio. */
@@ -490,9 +508,11 @@ export async function runBuildExecutePhase(
     );
   }
 
-  while (!finalGateOk) {
-    agentTextComplete = false;
-    while (loopStep < deps.maxStepsLimit) {
+  let summarizeReady = false;
+  while (!summarizeReady) {
+    while (!finalGateOk) {
+      agentTextComplete = false;
+      while (loopStep < deps.maxStepsLimit) {
       if (deps.platformLimitExceeded()) {
         const prose = await resolveClosureText({
           messages: deps.state.messages,
@@ -669,14 +689,6 @@ export async function runBuildExecutePhase(
             content: friendly,
           });
           continue;
-        }
-        const zeroWrites = evaluateZeroWritesExit({
-          approvedPlanBuild: deps.approvedPlanBuild,
-          touchedPathsCount: deps.touchedPaths.size,
-          loopStep,
-        });
-        if (zeroWrites.action === "pause_zero_writes") {
-          return zeroWritesResumableExit(deps, loopStep, "llm_retries_exhausted");
         }
         const failMsg = `Erro: ${friendly}`;
         deps.notifyLoopStatus({ kind: "model_error", errorDetail: friendly });
@@ -1201,6 +1213,12 @@ export async function runBuildExecutePhase(
       }
 
     if (!deps.requiresFinalBuildGate()) {
+      if (zeroDeliveryLoopBackNeeded(deps)) {
+        const stepPause = await pauseAtStepLimit(deps, loopStep);
+        if (stepPause) return stepPause;
+        applyZeroDeliveryLoopBack(deps, loopStep, "pre_gate_zero_delivery");
+        continue;
+      }
       finalGateOk = true;
       continue;
     }
@@ -1300,15 +1318,17 @@ export async function runBuildExecutePhase(
       content: formatBuildFeedback(finalObservation.feedback, finalObservation.checks),
     });
     deps.notifyLoopStatus({ kind: "build_fix" });
-  }
+    }
 
-  if (
-    shouldPauseZeroDelivery({
-      actionableIntent: isActionableIntent(deps.state.intent?.type),
-      touchedPathsCount: deps.touchedPaths.size,
-    })
-  ) {
-    return zeroWritesResumableExit(deps, loopStep, "summarize_zero_writes");
+    if (zeroDeliveryLoopBackNeeded(deps)) {
+      const stepPause = await pauseAtStepLimit(deps, loopStep);
+      if (stepPause) return stepPause;
+      applyZeroDeliveryLoopBack(deps, loopStep, "pre_summarize_zero_delivery");
+      finalGateOk = false;
+      continue;
+    }
+
+    summarizeReady = true;
   }
 
   deps.state.phase = LoopPhaseEnum.SUMMARIZE;

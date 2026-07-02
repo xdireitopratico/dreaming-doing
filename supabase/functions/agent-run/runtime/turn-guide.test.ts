@@ -2,11 +2,10 @@ import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   evaluateReadGate,
   evaluateTurnGuidePreTurn,
-  evaluateZeroWritesExit,
-  shouldPauseZeroDelivery,
+  shouldLoopBackForZeroDelivery,
+  ZERO_DELIVERY_LOOP_BACK_MESSAGE,
   READ_GATE_RELAX_AFTER,
   READ_ONLY_STALL_THRESHOLD,
-  ZERO_WRITES_MIN_STEP,
 } from "./turn-guide.ts";
 import type { ToolCall } from "../types.ts";
 
@@ -80,43 +79,18 @@ Deno.test("evaluateReadGate — passa quando paths lidos", () => {
   assertEquals(decision.action, "proceed");
 });
 
-Deno.test("shouldPauseZeroDelivery — intent acionável sem arquivos", () => {
+Deno.test("shouldLoopBackForZeroDelivery — intent acionável sem arquivos", () => {
   assertEquals(
-    shouldPauseZeroDelivery({ actionableIntent: true, touchedPathsCount: 0 }),
+    shouldLoopBackForZeroDelivery({ actionableIntent: true, touchedPathsCount: 0 }),
     true,
   );
   assertEquals(
-    shouldPauseZeroDelivery({ actionableIntent: false, touchedPathsCount: 0 }),
+    shouldLoopBackForZeroDelivery({ actionableIntent: false, touchedPathsCount: 0 }),
     false,
   );
 });
 
-Deno.test("evaluateZeroWritesExit — approved build step>=N zero touched pausa", () => {
-  const decision = evaluateZeroWritesExit({
-    approvedPlanBuild: true,
-    touchedPathsCount: 0,
-    loopStep: ZERO_WRITES_MIN_STEP,
-  });
-  assertEquals(decision.action, "pause_zero_writes");
-  if (decision.action === "pause_zero_writes") {
-    assertEquals(decision.message.includes("Continuar"), true);
-  }
-});
-
-Deno.test("evaluateZeroWritesExit — abaixo do step mínimo continua", () => {
-  const decision = evaluateZeroWritesExit({
-    approvedPlanBuild: true,
-    touchedPathsCount: 0,
-    loopStep: ZERO_WRITES_MIN_STEP - 1,
-  });
-  assertEquals(decision.action, "proceed");
-});
-
-Deno.test("evaluateZeroWritesExit — com arquivos tocados segue", () => {
-  const decision = evaluateZeroWritesExit({
-    approvedPlanBuild: true,
-    touchedPathsCount: 1,
-    loopStep: ZERO_WRITES_MIN_STEP,
-  });
-  assertEquals(decision.action, "proceed");
+Deno.test("ZERO_DELIVERY_LOOP_BACK_MESSAGE — pede tool_calls nativas", () => {
+  assertEquals(ZERO_DELIVERY_LOOP_BACK_MESSAGE.includes("tool_calls"), true);
+  assertEquals(ZERO_DELIVERY_LOOP_BACK_MESSAGE.includes("Continuar"), false);
 });

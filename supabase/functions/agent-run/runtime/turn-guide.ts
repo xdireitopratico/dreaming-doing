@@ -4,10 +4,12 @@ import type { ToolCall } from "../types.ts";
 
 export const READ_ONLY_STALL_THRESHOLD = 3;
 export const READ_GATE_RELAX_AFTER = 2;
-export const ZERO_WRITES_MIN_STEP = 6;
 
-export const ZERO_WRITES_RESUME_MESSAGE =
-  "Ainda não materializei arquivos — use Continuar para forçar implementação.";
+/** Feedback camada B — loop continua na mesma invocação, sem awaiting_user. */
+export const ZERO_DELIVERY_LOOP_BACK_MESSAGE =
+  "Leituras concluídas, mas nenhum arquivo foi materializado. " +
+  "Implemente agora com fs_write, fs_edit ou shell_exec via tool_calls nativas — " +
+  "não responda só em texto nem JSON no content.";
 
 const STALL_NUDGE_MESSAGE =
   "Várias leituras seguidas sem escrita — implemente com fs_write ou fs_edit no próximo turno.";
@@ -16,8 +18,7 @@ export type TurnGuideDecision =
   | { action: "proceed" }
   | { action: "block_read_gate"; message: string; missing: string[] }
   | { action: "read_gate_relaxed"; missing: string[] }
-  | { action: "nudge_stall"; message: string }
-  | { action: "pause_zero_writes"; message: string };
+  | { action: "nudge_stall"; message: string };
 
 export function evaluateTurnGuidePreTurn(input: {
   consecutiveReadOnlyBatches: number;
@@ -56,24 +57,10 @@ export function evaluateReadGate(input: {
   };
 }
 
-export function shouldPauseZeroDelivery(input: {
+/** Build acionável sem entrega — corrigir in-loop (camada B), não pausar com Continuar. */
+export function shouldLoopBackForZeroDelivery(input: {
   actionableIntent: boolean;
   touchedPathsCount: number;
 }): boolean {
   return input.actionableIntent && input.touchedPathsCount === 0;
-}
-
-export function evaluateZeroWritesExit(input: {
-  approvedPlanBuild: boolean;
-  touchedPathsCount: number;
-  loopStep: number;
-}): TurnGuideDecision {
-  if (
-    input.approvedPlanBuild &&
-    input.touchedPathsCount === 0 &&
-    input.loopStep >= ZERO_WRITES_MIN_STEP
-  ) {
-    return { action: "pause_zero_writes", message: ZERO_WRITES_RESUME_MESSAGE };
-  }
-  return { action: "proceed" };
 }
