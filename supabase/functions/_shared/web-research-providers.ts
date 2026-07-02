@@ -776,6 +776,10 @@ export async function scrapeWebPage(
     }
   };
 
+  if (prefs.singleProvider) {
+    return await run(provider);
+  }
+
   const attempts = [provider, fallback];
   if (fallback !== "http" && mode !== "screenshot") attempts.push("http");
   const dedupedAttempts = attempts.filter(
@@ -1066,6 +1070,8 @@ export type WebProviderPrefs = {
   primary?: string;
   /** Fallback (segundo provider). Default vira "jina" se não configurado. */
   fallback?: string;
+  /** Fail closed: apenas o provider primário (Design DNA SHALLOW canônico). */
+  singleProvider?: boolean;
   /** Base URL do SearXNG (se aplicável). */
   searxngBaseUrl?: string;
   /** Parser desejado para higienização final do conteúdo. */

@@ -1,21 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { errorMessage } from "@/lib/error-utils";
-import { cleanHtmlDocument, htmlToMarkdownDocument } from "@/lib/html-hygiene";
 import { normalizePresetId } from "@/lib/preset-contract";
 import { getPresetById } from "@/lib/model-catalog";
 import type { ModelTier } from "@/lib/model-catalog";
-import { scrapeWebPage } from "../../../supabase/functions/_shared/web-research-providers.ts";
 import { BUILTIN_RUNTIME } from "../../../supabase/functions/_shared/provider-wire.ts";
-import { finalizeDocumentMarkdown } from "../../../supabase/functions/_shared/document-sanitize.ts";
 import {
   CATEGORY_PROMPTS,
   MASTER_EXTRACTION_PROMPT,
   type ExtractionCategory,
 } from "../../../supabase/functions/extract-design-dna/prompts.ts";
-import { referoScrape } from "./refero/refero-router.ts";
-import { validateDNA } from "./refero/dna-validator.ts";
-import type { ReferoScrapeResult } from "./refero/refero-types.ts";
-import { multiPassExtractDNA, type LLmChatFn } from "./refero/llm-multi-pass.ts";
+import type { LLmChatFn } from "./refero/llm-multi-pass.ts";
 
 export type DesignDnaExtractionInput = {
   url: string;
@@ -47,6 +41,9 @@ export type DesignDnaExtractionResult = {
   confidence: number;
   notes: string[];
   blockedReason: string | null;
+  /** DNA rejeitado pelo validador estrutural (score < 40/100). */
+  validationRejected?: boolean;
+  validationScore?: number;
 };
 
 export type LLMConfig = {
@@ -85,7 +82,7 @@ function safeJsonParse(text: string): Record<string, unknown> {
 
 
 
-async function loadWebSecrets(supabase: SupabaseClient, userId: string): Promise<WebSecrets> {
+export async function loadWebSecrets(supabase: SupabaseClient, userId: string): Promise<WebSecrets> {
   const secrets: WebSecrets = {};
 
   const envFallbacks: Record<string, string | undefined> = {
@@ -176,7 +173,7 @@ const LLM_DEFAULT_MODEL: Record<string, string> = {
 };
 
 /** Carrega agent_preferences do user (SSOT: profiles.agent_preferences). */
-async function loadAgentPreferences(
+export async function loadAgentPreferences(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<{
@@ -630,6 +627,19 @@ function geminiChat(
   });
 }
 
+/** Dispatcher LLM para multiPassExtractDNA (openai / anthropic / gemini). */
+export function createLlmChatDispatcher(cfg: LLMConfig): LLmChatFn {
+  return (systemPrompt, userContent, screenshot) => {
+    if (cfg.protocol === "anthropic") {
+      return anthropicChat(cfg, systemPrompt, userContent, screenshot);
+    }
+    if (cfg.protocol === "gemini") {
+      return geminiChat(cfg, systemPrompt, userContent, screenshot);
+    }
+    return openAiChat(cfg, systemPrompt, userContent, screenshot);
+  };
+}
+
 async function llmExtractDNA(
   url: string,
   markdown: string,
@@ -720,324 +730,20 @@ Extraia o DesignDNA deste site.`;
   };
 }
 
+
+/**
+ * Extração SHALLOW canônica (Gate G3).
+ * DEEP usa browser agent em run-design-dna.ts — não passa por aqui.
+ */
 export async function extractDesignDnaForUrl(
   supabase: SupabaseClient,
   input: DesignDnaExtractionInput,
 ): Promise<DesignDnaExtractionResult> {
-  const complexity: "low" | "high" = input.depth === "deep" ? "high" : "low";
-  const [webSecrets, resolvedLlm, prefs] = await Promise.all([
-    loadWebSecrets(supabase, input.userId),
-    resolveLLMConfig(supabase, input.userId, complexity),
-    loadAgentPreferences(supabase, input.userId),
-  ]);
-  const llmConfig: LLMConfig | null = resolvedLlm
-    ? {
-        apiKey: resolvedLlm.apiKey,
-        baseUrl: resolvedLlm.baseUrl,
-        model: resolvedLlm.model,
-        label: resolvedLlm.label,
-        protocol: resolvedLlm.protocol,
-      }
-    : null;
-
-  const providerTrace: string[] = [];
-  const notes: string[] = [];
-
-  if (!resolvedLlm) {
-    notes.push("⚠️ no LLM configured — configure LLM in /api-models for extraction");
-  } else {
-    providerTrace.push(`llm:${resolvedLlm.label} (${resolvedLlm.resolvedFrom})`);
-  }
-
-  // ── REFERO: Unified scrape via strategy router ──
-  const hasSandbox = !!input.sandboxId;
-  const hasLlm = !!resolvedLlm;
-
-  let scrapeResult: ReferoScrapeResult;
-  try {
-    scrapeResult = await referoScrape(
-      supabase,
-      {
-        url: input.url,
-        depth: input.depth,
-        categories: input.categories,
-        userId: input.userId,
-        sandboxId: input.sandboxId,
-        sandboxAccessToken: input.sandboxAccessToken,
-      },
-      webSecrets,
-      {
-        primary: prefs?.webScrapeProvider ?? "jina",
-        fallback: prefs?.webScrapeFallback,
-      },
-      hasLlm,
-      hasSandbox,
+  if (input.depth === "deep") {
+    throw new Error(
+      "extractDesignDnaForUrl é SHALLOW-only. Extração DEEP usa browser agent (run-design-dna).",
     );
-
-    // Normalize: ensure all array/object fields exist (strategy returns may be partial)
-    scrapeResult.cssData = {
-      byTag: scrapeResult.cssData?.byTag ?? {},
-      gridSystems: scrapeResult.cssData?.gridSystems ?? [],
-      flexPatterns: scrapeResult.cssData?.flexPatterns ?? [],
-      designTokens: scrapeResult.cssData?.designTokens ?? {},
-      colorPalette: scrapeResult.cssData?.colorPalette ?? [],
-    };
-    scrapeResult.viewports = scrapeResult.viewports ?? [];
-    scrapeResult.sections = scrapeResult.sections ?? [];
-    scrapeResult.components = scrapeResult.components ?? [];
-    scrapeResult.fontFaces = scrapeResult.fontFaces ?? [];
-    scrapeResult.animations = scrapeResult.animations ?? [];
-    scrapeResult.screenshots = scrapeResult.screenshots ?? [];
-    scrapeResult.customProperties = scrapeResult.customProperties ?? {};
-    scrapeResult.trace = scrapeResult.trace ?? [];
-
-    // Add refero trace to provider trace
-    for (const t of scrapeResult.trace) {
-      providerTrace.push(`refero:${t}`);
-    }
-    providerTrace.push(`refero: strategy=${scrapeResult.strategy}, provider=${scrapeResult.provider}, duration=${scrapeResult.durationMs}ms`);
-
-    notes.push(`REFERO: ${scrapeResult.strategy} via ${scrapeResult.provider} in ${Math.round(scrapeResult.durationMs / 1000)}s`);
-  } catch (scrapeErr) {
-    // REFERO failed — fall back to legacy scrapeWebPage
-    notes.push(`⚠️ REFERO router failed: ${errorMessage(scrapeErr)} — falling back to legacy scrape`);
-    providerTrace.push("refero:error");
-
-    const scrapeProvider = prefs?.webScrapeProvider ?? "jina";
-    const scrapeFallback = prefs?.webScrapeFallback;
-
-    let markdownContent = "";
-    let htmlContent = "";
-    try {
-      const mdRes = await scrapeWebPage(
-        { url: input.url, format: "markdown", mode: "read", provider: scrapeProvider, only_main_content: true },
-        webSecrets,
-        { primary: scrapeProvider, fallback: scrapeFallback },
-      );
-      markdownContent = String(mdRes.content ?? "");
-      providerTrace.push(`fallback:markdown via ${String(mdRes.provider ?? "unknown")}`);
-    } catch { providerTrace.push("fallback:markdown:error"); }
-
-    try {
-      const htmlRes = await scrapeWebPage(
-        { url: input.url, format: "html", mode: "read", provider: scrapeProvider, only_main_content: false },
-        webSecrets,
-        { primary: scrapeProvider, fallback: scrapeFallback },
-      );
-      htmlContent = String(htmlRes.content ?? "");
-      providerTrace.push(`fallback:html via ${String(htmlRes.provider ?? "unknown")}`);
-    } catch { providerTrace.push("fallback:html:error"); }
-
-    scrapeResult = {
-      provider: scrapeProvider,
-      strategy: "multi-provider",
-      markdown: markdownContent,
-      html: htmlContent,
-      title: "",
-      screenshots: [],
-      screenshotBase64: "",
-      screenshotFullBase64: "",
-      viewports: [],
-      cssData: { byTag: {}, gridSystems: [], flexPatterns: [], designTokens: {}, colorPalette: [] },
-      sections: [],
-      components: [],
-      fontFaces: [],
-      animations: [],
-      customProperties: {},
-      viewport: { width: 1280, height: 800, devicePixelRatio: 2, scrollHeight: 800 },
-      durationMs: 0,
-      trace: ["fallback:legacy-scrape"],
-    };
   }
-
-  // ── HTML hygiene ──
-  const rawMarkdown = scrapeResult.markdown.trim();
-  const rawHtml = scrapeResult.html.trim();
-  const cleaned = cleanHtmlDocument(rawHtml);
-  const cleanHtml = cleaned.cleanHtml;
-  const cleanText = cleaned.cleanText;
-  const cleanMarkdown = htmlToMarkdownDocument(rawHtml);
-  const cleanedMarkdown = finalizeDocumentMarkdown(cleanMarkdown || cleanText, {
-    maxChars: 24_000,
-  }).markdown;
-  const contentHygiene = {
-    title: cleaned.title || scrapeResult.title,
-    rootSelector: cleaned.rootSelector,
-    rawMarkdownChars: rawMarkdown.length,
-    cleanMarkdownChars: cleanedMarkdown.length,
-    rawHtmlChars: rawHtml.length,
-    cleanHtmlChars: cleanHtml.length,
-  };
-
-  // ── Build enriched markdown from refero data ──
-  let enrichedMarkdown = rawMarkdown || cleanedMarkdown;
-  const screenshots = scrapeResult.screenshots ?? [];
-  const screenshotBase64 = scrapeResult.screenshotBase64 ?? "";
-  let screenshotUrl = screenshotBase64
-    ? `data:image/png;base64,${screenshotBase64}`
-    : scrapeResult.screenshotFullBase64
-      ? `data:image/png;base64,${scrapeResult.screenshotFullBase64}`
-      : `https://image.thum.io/get/width/1280/crop/720/fullpage/${encodeURIComponent(input.url)}`;
-
-  // Append enhanced refero data to markdown
-  const referoExtras: string[] = [];
-  if (scrapeResult.cssData.gridSystems.length > 0) {
-    referoExtras.push(`\n\n## Grid Systems (${scrapeResult.cssData.gridSystems.length} found)\n${JSON.stringify(scrapeResult.cssData.gridSystems)}`);
-  }
-  if (scrapeResult.cssData.flexPatterns.length > 0) {
-    referoExtras.push(`\n\n## Flex Patterns (${scrapeResult.cssData.flexPatterns.length} found)\n${JSON.stringify(scrapeResult.cssData.flexPatterns.slice(0, 20))}`);
-  }
-  if (scrapeResult.cssData.designTokens && Object.keys(scrapeResult.cssData.designTokens).length > 0) {
-    referoExtras.push(`\n\n## Design Tokens (${Object.keys(scrapeResult.cssData.designTokens).length} found)\n${JSON.stringify(scrapeResult.cssData.designTokens)}`);
-  }
-  if (scrapeResult.fontFaces.length > 0) {
-    referoExtras.push(`\n\n## Font Faces (${scrapeResult.fontFaces.length} loaded)\n${JSON.stringify(scrapeResult.fontFaces)}`);
-  }
-  if (scrapeResult.sections.length > 0) {
-    referoExtras.push(`\n\n## Page Sections (${scrapeResult.sections.length} detected)\n${JSON.stringify(scrapeResult.sections.map(s => ({ type: s.type, selector: s.selector, y: s.yPosition, height: s.height, text: s.textSummary.slice(0, 100) })))}`);
-  }
-  if (scrapeResult.components.length > 0) {
-    referoExtras.push(`\n\n## DOM Components (${scrapeResult.components.length} detected)\n${JSON.stringify(scrapeResult.components.map(c => ({ type: c.componentType, selector: c.selector, anatomy: c.anatomy, count: c.patternCount })))}`);
-  }
-  if (scrapeResult.viewports.length > 0) {
-    referoExtras.push(`\n\n## Responsive Viewports (${scrapeResult.viewports.length} captured)\n${JSON.stringify(scrapeResult.viewports.map(v => ({ label: v.label, width: v.width, height: v.height })))}`);
-  }
-  if (scrapeResult.customProperties && Object.keys(scrapeResult.customProperties).length > 0) {
-    referoExtras.push(`\n\n## Deep Custom Properties (${Object.keys(scrapeResult.customProperties).length})\n${JSON.stringify(scrapeResult.customProperties)}`);
-  }
-  if (referoExtras.length > 0) {
-    enrichedMarkdown += referoExtras.join("");
-  }
-
-  if (!enrichedMarkdown.trim()) {
-    notes.push("markdown empty after scrape");
-  }
-
-  // ── Confidence score (weighted average of 6 real metrics) ──
-  const hasMultiViewport = scrapeResult.viewports.length > 0;
-  const hasCssData = scrapeResult.cssData.gridSystems.length > 0 || scrapeResult.cssData.flexPatterns.length > 0;
-  const hasComponents = scrapeResult.components.length > 0;
-  const hasSections = scrapeResult.sections.length > 0;
-  const hasScreenshot = !!screenshotBase64;
-  const contentDensity = Math.min(1, (enrichedMarkdown.length + cleanHtml.length) / 40000);
-
-  // 6 metrics, each scored 0-100:
-  const metrics = {
-    // M1: Content depth — how much raw material the LLM has to work with
-    contentDepth: Math.round(contentDensity * 100),
-    // M2: Visual evidence — screenshot available (binary but weighted high)
-    visualEvidence: hasScreenshot ? 80 : 10,
-    // M3: Structural data — CSS grid/flex/design tokens extracted
-    structuralData: hasCssData ? 90 : 15,
-    // M4: Component coverage — DOM components detected
-    componentCoverage: hasComponents ? Math.min(100, scrapeResult.components.length * 15) : 10,
-    // M5: Section mapping — page sections detected
-    sectionMapping: hasSections ? Math.min(100, scrapeResult.sections.length * 20) : 10,
-    // M6: Extraction mode — deep mode inherently has more signal
-    modeQuality: input.depth === "deep" ? 85 : 45,
-  };
-
-  // Weighted average: content (25%) + visual (15%) + structural (20%) + component (15%) + section (10%) + mode (15%)
-  const confidence = Math.min(99, Math.round(
-    metrics.contentDepth * 0.25 +
-    metrics.visualEvidence * 0.15 +
-    metrics.structuralData * 0.20 +
-    metrics.componentCoverage * 0.15 +
-    metrics.sectionMapping * 0.10 +
-    metrics.modeQuality * 0.15
-  ));
-
-  notes.push(`confidence: ${confidence}/99 (depth=${metrics.contentDepth}, visual=${metrics.visualEvidence}, struct=${metrics.structuralData}, comp=${metrics.componentCoverage}, sect=${metrics.sectionMapping}, mode=${metrics.modeQuality})`);
-
-  // ── LLM Extraction: Multi-pass (5 specialized passes + synthesis) ──
-  let dna: Record<string, unknown> | null = null;
-
-  if (llmConfig) {
-    // Build a callLlm dispatcher that delegates to the proven 120s-timeout
-    // protocol-specific chat functions. This ensures multi-pass uses the
-    // EXACT same transport as the single-pass fallback path.
-    const callLlm: LLmChatFn = (systemPrompt, userContent, screenshot) => {
-      if (llmConfig.protocol === "anthropic") return anthropicChat(llmConfig, systemPrompt, userContent, screenshot);
-      if (llmConfig.protocol === "gemini") return geminiChat(llmConfig, systemPrompt, userContent, screenshot);
-      return openAiChat(llmConfig, systemPrompt, userContent, screenshot);
-    };
-
-    const mpResult = await multiPassExtractDNA({
-      llmConfig,
-      callLlm,
-      url: input.url,
-      markdown: enrichedMarkdown.slice(0, 30000),
-      screenshot: screenshotUrl,
-      categories: input.categories,
-      isDeep: input.depth === "deep" && screenshots.length > 0,
-    });
-
-    dna = mpResult.dna;
-
-    // Add multi-pass trace info
-    providerTrace.push(`llm: multi-pass mode=${mpResult.mode}, ${mpResult.succeededCount} ok, ${mpResult.failedCount} fail, ${Math.round(mpResult.totalDurationMs / 1000)}s`);
-
-    if (mpResult.passes.length > 0) {
-      for (const p of mpResult.passes) {
-        const status = p.error ? `FAIL (${p.error.slice(0, 60)})` : `OK (${Object.keys(p.data).length} fields, ${p.durationMs}ms)`;
-        providerTrace.push(`llm: pass[${p.category}] ${status}`);
-      }
-    }
-
-    if (!dna) {
-      // Build a detailed error with per-pass failure reasons for diagnosis
-      const passErrors = mpResult.passes
-        .filter((p) => p.error)
-        .map((p) => `${p.category}: ${p.error}`)
-        .join("; ");
-      const detail = passErrors
-        ? `Pass errors: ${passErrors}. Mode: ${mpResult.mode}, OK: ${mpResult.succeededCount}, FAIL: ${mpResult.failedCount}, ${Math.round(mpResult.totalDurationMs / 1000)}s. LLM: ${llmConfig.label} (${llmConfig.protocol})`
-        : `All ${mpResult.passes.length} passes returned empty data. Mode: ${mpResult.mode}, LLM: ${llmConfig.label} (${llmConfig.protocol})`;
-      throw new Error(`LLM extraction failed — no DNA generated. ${detail}`);
-    }
-  } else {
-    throw new Error("LLM extraction failed — no LLM configured. Configure LLM in /api-models.");
-  }
-
-  // ── DNA Validation ──
-  const validationResult = validateDNA({
-    dna,
-    screenshotAvailable: !!screenshotBase64,
-    multiViewportAvailable: hasMultiViewport,
-    cssDataAvailable: hasCssData,
-    componentsFromDOM: scrapeResult.components.length,
-    sectionsDetected: scrapeResult.sections.length,
-    scrapeProviderCount: 1,
-  });
-
-  if (validationResult.issues.length > 0) {
-    notes.push(`DNA validation: ${validationResult.issues.slice(0, 3).join("; ")}`);
-  }
-  if (validationResult.autoFixes.length > 0) {
-    notes.push(`DNA auto-fixes: ${validationResult.autoFixes.join("; ")}`);
-  }
-  providerTrace.push(`refero: validation score=${validationResult.validation.score}/100`);
-
-  // If DNA was auto-fixed, use the fixed version
-  const finalDna = validationResult.fixed ? validationResult.dna : dna;
-
-  if (validationResult.reject) {
-    notes.push(`⚠️ DNA rejected by validator (score=${validationResult.validation.score}/100) — below threshold`);
-  }
-
-  return {
-    dna: finalDna,
-    rawMarkdown,
-    cleanMarkdown: cleanedMarkdown,
-    rawHtml,
-    cleanHtml,
-    contentHygiene,
-    screenshotUrl,
-    screenshotBase64: screenshotBase64 || undefined,
-    screenshots,
-    providerTrace,
-    confidence,
-    notes,
-    blockedReason: null,
-  };
+  const { runShallowExtraction } = await import("./shallow-extraction.ts");
+  return runShallowExtraction(supabase, input);
 }
