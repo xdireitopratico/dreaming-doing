@@ -3,7 +3,11 @@
  * Manter LEGACY_PRESET_ALIASES em sync com o frontend.
  */
 
-export const PLATFORM_ROBIN_TASTE_PRESET_ID = "pool-nemotron-ultra-550b";
+/** Modelo fixo do Taste (onboarding) — NÃO é default do ROBIN do usuário. */
+export const TASTE_PLATFORM_MODEL_PRESET_ID = "pool-nemotron-ultra-550b";
+
+/** @deprecated Use TASTE_PLATFORM_MODEL_PRESET_ID — só Taste, nunca BYOK/ROBIN user. */
+export const PLATFORM_ROBIN_TASTE_PRESET_ID = TASTE_PLATFORM_MODEL_PRESET_ID;
 
 export function slugToPresetId(slug: string): string {
   return slug.trim().replace(/\//g, "--").replace(/\./g, "-");
@@ -16,9 +20,9 @@ export const LEGACY_PRESET_ALIASES: Record<string, string> = {
   "xai-grok3": "xai--grok-4-3",
   "groq-llama70": "pool-groq-flash",
   "pool-groq-flash": "pool-groq-flash",
-  "nvidia-llama70": PLATFORM_ROBIN_TASTE_PRESET_ID,
+  "nvidia-llama70": "nvidia--nemotron-3-ultra-550b",
   "pool-nemotron-super": "nvidia--nemotron-3-super-120b",
-  "nvidia/nemotron-3-ultra-550b-a55b": PLATFORM_ROBIN_TASTE_PRESET_ID,
+  "nvidia/nemotron-3-ultra-550b-a55b": "nvidia--nemotron-3-ultra-550b",
   "nvidia/nemotron-3-ultra-550b": "nvidia--nemotron-3-ultra-550b",
   "nvidia/nemotron-3-super-120b-a12b": "nvidia--nemotron-3-super-120b",
   "nvidia/nemotron-3-super-120b": "nvidia--nemotron-3-super-120b",

@@ -3,6 +3,7 @@
 import {
   normalizePresetId,
   PLATFORM_ROBIN_TASTE_PRESET_ID,
+  TASTE_PLATFORM_MODEL_PRESET_ID,
 } from "./preset-contract.ts";
 import {
   customProviderBaseUrlKey,
@@ -284,7 +285,7 @@ const PRESETS: Record<string, PresetWire> = {
   "ollama--mistral": ollama("mistral", "Mistral"),
 };
 
-export { PLATFORM_ROBIN_TASTE_PRESET_ID };
+export { TASTE_PLATFORM_MODEL_PRESET_ID, PLATFORM_ROBIN_TASTE_PRESET_ID };
 
 export function getPresetWire(id?: string): PresetWire | null {
   const key = normalizePresetId(id);
@@ -406,22 +407,34 @@ export function resolveModelFromPreferences(
   return null;
 }
 
-export function defaultRobinModel(
-  poolProvider: string,
-  modelPresetId?: string,
+/** Taste isolado — pool NVIDIA do admin, modelo fixo da plataforma. Nunca BYOK. */
+export function getTastePlatformPresetWire(): PresetWire {
+  const wire = PRESETS[TASTE_PLATFORM_MODEL_PRESET_ID];
+  if (!wire) throw new Error("Taste: preset da plataforma ausente no catálogo.");
+  return wire;
+}
+
+/**
+ * ROBIN do usuário — fail-closed: sem robinPoolModelId válido, erro explícito.
+ * O sistema NÃO escolhe modelo (nem Nemotron, nem Groq flash).
+ */
+export function resolveUserRobinModel(
+  modelPresetId: string | undefined,
   userModels?: UserModelEntryPayload[],
 ): PresetWire {
-  if (modelPresetId) {
-    const p = resolveWireFromPresetId(modelPresetId, userModels) ?? getPresetWire(modelPresetId);
-    if (p) return p;
+  const id = modelPresetId?.trim();
+  if (!id) {
+    throw new Error(
+      "ROBIN: selecione um modelo em Api & Models (/api-models). O sistema não define modelo por você.",
+    );
   }
-  if (poolProvider === "nvidia") return PRESETS[PLATFORM_ROBIN_TASTE_PRESET_ID]!;
-  if (poolProvider === "groq") {
-    const groq = PRESETS["pool-groq-flash"];
-    if (!groq) throw new Error("Preset pool Groq ausente");
-    return groq;
+  const wire = resolveWireFromPresetId(id, userModels) ?? getPresetWire(id);
+  if (!wire) {
+    throw new Error(
+      `ROBIN: modelo "${id}" não encontrado. Ajuste robinPoolModelId em Api & Models (/api-models).`,
+    );
   }
-  throw new Error(
-    `Selecione um modelo para o pool ${poolProvider} em Modelos → ROBIN.`,
-  );
+  return wire;
 }
+
+

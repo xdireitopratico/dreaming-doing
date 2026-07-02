@@ -1,14 +1,11 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import {
-  normalizePresetId,
-  PLATFORM_ROBIN_TASTE_PRESET_ID,
-} from "./preset-contract.ts";
-import { getPresetWire } from "./model-presets.ts";
+import { normalizePresetId } from "./preset-contract.ts";
+import { getPresetWire, resolveUserRobinModel } from "./model-presets.ts";
 
-Deno.test("normalizePresetId — slug API NVIDIA → pool ROBIN", () => {
+Deno.test("normalizePresetId — slug API NVIDIA → preset catálogo (não Taste)", () => {
   assertEquals(
     normalizePresetId("nvidia/nemotron-3-ultra-550b-a55b"),
-    PLATFORM_ROBIN_TASTE_PRESET_ID,
+    "nvidia--nemotron-3-ultra-550b",
   );
   assertEquals(getPresetWire("nvidia/nemotron-3-ultra-550b-a55b")?.model, "nvidia/nemotron-3-ultra-550b-a55b");
 });
@@ -29,4 +26,15 @@ Deno.test("normalizePresetId — pool-nemotron-super aponta para Super 120B", ()
 
 Deno.test("normalizePresetId — qwen NVIDIA legado", () => {
   assertEquals(normalizePresetId("nvidia/qwen3.5-397b-a17b"), "qwen--qwen3-5-397b-a17b");
+});
+
+Deno.test("resolveUserRobinModel — fail-closed sem robinPoolModelId", () => {
+  let threw = false;
+  try {
+    resolveUserRobinModel(undefined);
+  } catch (e) {
+    threw = true;
+    assertEquals((e as Error).message.includes("ROBIN"), true);
+  }
+  assertEquals(threw, true);
 });

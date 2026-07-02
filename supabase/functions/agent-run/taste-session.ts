@@ -3,7 +3,7 @@ import { createLLMProvider } from "./adapters/llm.ts";
 import type { ChatMessage, ChatResponse } from "./types.ts";
 import { buildChatHistory } from "./memory.ts";
 import { loadForgeTrialRobinPool } from "./connector-keys.ts";
-import { defaultRobinModel, PLATFORM_ROBIN_TASTE_PRESET_ID } from "../_shared/model-presets.ts";
+import { getTastePlatformPresetWire } from "../_shared/model-presets.ts";
 import { TASTE_CONCIERGE_SYSTEM } from "./prompts-taste.ts";
 import { buildProvider, type ProviderConfig } from "./providers.ts";
 import { normalizeNimBaseUrl, normalizeNvidiaApiModel } from "../_shared/nvidia-model.ts";
@@ -15,7 +15,7 @@ export async function loadTasteNvidiaConfig(supabase: SupabaseClient): Promise<P
   if (poolKeys.length === 0) {
     throw new Error("Taste: o administrador precisa cadastrar o pool NVIDIA em API Keys (/api).");
   }
-  const wire = defaultRobinModel("nvidia", PLATFORM_ROBIN_TASTE_PRESET_ID);
+  const wire = getTastePlatformPresetWire();
   return {
     provider: wire.provider,
     apiKey: poolKeys[0]!,

@@ -12,7 +12,7 @@ import {
 } from "../agent-run/connector-keys.ts";
 import { detectVisionSupport } from "../agent-run/providers.ts";
 import {
-  defaultRobinModel,
+  resolveUserRobinModel,
   resolveAutoForComplexity,
   resolveModelFromPreferences,
 } from "./model-presets.ts";
@@ -109,8 +109,7 @@ function resolveLlmFromPreferences(
   if (mode === "robin") {
     const poolProvider = preferences.poolProvider?.trim();
     if (!poolProvider) return null;
-    const wire = defaultRobinModel(
-      poolProvider,
+    const wire = resolveUserRobinModel(
       preferences.robinPoolModelId,
       preferences.userModelEntries,
     );

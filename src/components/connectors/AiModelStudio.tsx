@@ -41,7 +41,7 @@ import {
   normalizePresetId,
   resolveStudioSelectedEnv,
   userModelPresetId,
-  PLATFORM_ROBIN_TASTE_PRESET_ID,
+
   type AiEnvId,
   type ModelEnvId,
   type UserModelEntry,
@@ -394,8 +394,7 @@ export function AiModelStudio({ connectorRows, keysSectionHref = "/api" }: AiMod
       patch({
         mode: "robin",
         poolProvider: selectedEnv === "nvidia" ? "nvidia" : "groq",
-        robinPoolModelId:
-          selectedEnv === "nvidia" ? PLATFORM_ROBIN_TASTE_PRESET_ID : "pool-groq-flash",
+        robinPoolModelId: undefined,
       });
       if (selectedEnv !== "groq" && selectedEnv !== "nvidia") {
         setSelectedEnv("nvidia");

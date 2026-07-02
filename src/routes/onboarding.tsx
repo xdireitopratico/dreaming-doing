@@ -499,7 +499,7 @@ function ModelStep({
               ...prefs,
               mode: "robin",
               poolProvider: "nvidia",
-              robinPoolModelId: "pool-nemotron-ultra-550b",
+              robinPoolModelId: undefined,
             })
           }
         />

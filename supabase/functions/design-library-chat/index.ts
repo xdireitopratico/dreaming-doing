@@ -25,7 +25,7 @@ import { forgeOrigin } from "../_shared/cors.ts";
 import {
   resolveAutoForComplexity,
   resolveModelFromPreferences,
-  defaultRobinModel,
+  resolveUserRobinModel,
 } from "../_shared/model-presets.ts";
 
 const corsHeaders = {
@@ -171,7 +171,7 @@ async function resolveLLMConfig(
       const poolKeys = await loadConnectorPools(supabase, targetUserId, poolProvider);
       if (poolKeys.length === 0) return null;
       const robinPresetId = typeof prefs.robinPoolModelId === "string" ? prefs.robinPoolModelId : undefined;
-      const wire = defaultRobinModel(poolProvider, robinPresetId, userModelEntries);
+      const wire = resolveUserRobinModel(robinPresetId, userModelEntries);
       const key = poolKeys[0]!;
       return {
         apiKey: key,

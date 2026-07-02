@@ -5,7 +5,6 @@ import { CODING_MODEL_PRESETS } from "@/lib/model-catalog";
 import {
   LEGACY_PRESET_ALIASES,
   normalizePresetId,
-  PLATFORM_ROBIN_TASTE_PRESET_ID,
   slugToPresetId,
 } from "@/lib/preset-contract";
 
@@ -38,7 +37,7 @@ describe("preset-contract", () => {
 
   it("normaliza slugs API NVIDIA e ROBIN legados", () => {
     expect(normalizePresetId("nvidia/nemotron-3-ultra-550b-a55b")).toBe(
-      PLATFORM_ROBIN_TASTE_PRESET_ID,
+      "nvidia--nemotron-3-ultra-550b",
     );
     expect(normalizePresetId("nvidia/nemotron-3-super-120b")).toBe("nvidia--nemotron-3-super-120b");
     expect(normalizePresetId("pool-nemotron-super")).toBe("nvidia--nemotron-3-super-120b");

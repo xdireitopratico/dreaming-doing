@@ -1,5 +1,5 @@
 import type { AgentPreferences } from "@/lib/agent-preferences";
-import { getPresetById, PLATFORM_ROBIN_TASTE_PRESET_ID } from "@/lib/model-catalog";
+import { getPresetById } from "@/lib/model-catalog";
 import { isAgentPreferencesConfigured } from "@/lib/agent-setup";
 
 export type ReadinessLevel = "ok" | "warn" | "error";
@@ -142,8 +142,7 @@ export function buildEditorReadiness(input: {
   const usesNemotron =
     prefs.mode === "robin" &&
     prefs.poolProvider === "nvidia" &&
-    (prefs.robinPoolModelId === PLATFORM_ROBIN_TASTE_PRESET_ID ||
-      prefs.robinPoolModelId?.includes("nemotron"));
+    prefs.robinPoolModelId?.includes("nemotron");
   if (usesNemotron && nvidia.connected) {
     items.push({
       level: "ok",

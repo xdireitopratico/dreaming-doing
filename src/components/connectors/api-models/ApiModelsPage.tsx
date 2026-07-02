@@ -32,7 +32,7 @@ import {
   type ForgeModelPreset,
   type UserModelEntry,
   userModelPresetId,
-  PLATFORM_ROBIN_TASTE_PRESET_ID,
+
 } from "@/lib/model-catalog";
 import {
   saveAiProviderKey,
@@ -612,12 +612,10 @@ export function ApiModelsPage() {
         const poolProviders = allProviders().filter((p) => p.supportsPool && connected[p.id]);
         const target =
           poolProviders.find((p) => p.id === selectedEnv)?.id ?? poolProviders[0]?.id ?? "nvidia";
-        const defaultModelId =
-          target === "nvidia" ? PLATFORM_ROBIN_TASTE_PRESET_ID : "pool-groq-flash";
         patchPrefs({
           mode: "robin",
           poolProvider: target,
-          robinPoolModelId: defaultModelId,
+          robinPoolModelId: undefined,
         });
         setSelectedEnv(target);
         return;

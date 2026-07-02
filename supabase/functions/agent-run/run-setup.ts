@@ -14,8 +14,8 @@ import {
 } from "./connector-keys.ts";
 import { type ProviderConfig, detectVisionSupport } from "./providers.ts";
 import {
-  defaultRobinModel,
-  PLATFORM_ROBIN_TASTE_PRESET_ID,
+  getTastePlatformPresetWire,
+  resolveUserRobinModel,
   resolveAutoForComplexity,
   resolveModelFromPreferences,
 } from "../_shared/model-presets.ts";
@@ -87,7 +87,7 @@ export function robinProviderConfig(
       `Modo ROBIN ativo, mas nenhuma chave no pool ${poolProvider}. Adicione chaves em /api → Adicionar ao pool.`,
     );
   }
-  const wire = defaultRobinModel(poolProvider, modelPresetId, userModels);
+  const wire = resolveUserRobinModel(modelPresetId, userModels);
   return finalizeProviderConfig({
     provider: wire.provider,
     apiKey: keys[0]!,
@@ -247,7 +247,15 @@ export async function resolveAgentProvider(
       );
     }
     const robinPool = new RobinKeyPool(poolKeys);
-    const mainCfg = robinProviderConfig("nvidia", poolKeys, PLATFORM_ROBIN_TASTE_PRESET_ID);
+    const tasteWire = getTastePlatformPresetWire();
+    const mainCfg = finalizeProviderConfig({
+      provider: tasteWire.provider,
+      apiKey: poolKeys[0]!,
+      model: tasteWire.model,
+      baseUrl: tasteWire.baseUrl,
+      label: `Taste · ${tasteWire.label} (${poolKeys.length} chaves)`,
+      supportsVision: detectVisionSupport(tasteWire.provider, tasteWire.model),
+    });
     if (input.tasteStartLabelPrefix) {
       mainCfg.label = `Start Project · Taste · ${mainCfg.label.replace(/^ROBIN · /, "")}`;
     }
@@ -264,8 +272,7 @@ export async function resolveAgentProvider(
     const robinPoolProvider = poolProvider!;
     const poolKeys = await loadConnectorPools(supabase, userId, robinPoolProvider);
     const robinPool = new RobinKeyPool(poolKeys);
-    const wire = defaultRobinModel(
-      robinPoolProvider,
+    const wire = resolveUserRobinModel(
       preferences?.robinPoolModelId,
       preferences?.userModelEntries,
     );

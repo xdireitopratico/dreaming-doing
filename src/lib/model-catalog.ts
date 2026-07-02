@@ -7,11 +7,15 @@
 import { providerWire } from "@/lib/ai-provider-registry";
 import {
   normalizePresetId as normalizePresetIdContract,
-  PLATFORM_ROBIN_TASTE_PRESET_ID,
+  TASTE_PLATFORM_MODEL_PRESET_ID,
   slugToPresetId,
 } from "@/lib/preset-contract";
 
-export { normalizePresetIdContract as normalizePresetId, PLATFORM_ROBIN_TASTE_PRESET_ID };
+export {
+  normalizePresetIdContract as normalizePresetId,
+  TASTE_PLATFORM_MODEL_PRESET_ID,
+  PLATFORM_ROBIN_TASTE_PRESET_ID,
+} from "@/lib/preset-contract";
 
 export type AiEnvId =
   | "alibaba"
@@ -679,12 +683,12 @@ const NATIVE_POOL: ForgeModelPreset[] = [
     secretKey: "GROQ_API_KEY",
   },
   {
-    id: PLATFORM_ROBIN_TASTE_PRESET_ID,
+    id: TASTE_PLATFORM_MODEL_PRESET_ID,
     env: "nvidia",
     model: "nvidia/nemotron-3-ultra-550b-a55b",
     openRouterSlug: "nvidia/nemotron-3-ultra-550b",
     label: "NVIDIA · Nemotron 3 Ultra (550B)",
-    description: "Gosto FORGE — pool ROBIN NVIDIA",
+    description: "Taste da plataforma (onboarding) — não é default do usuário",
     tier: "pool",
     brand: "NVIDIA",
     rank: 91,
