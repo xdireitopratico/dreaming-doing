@@ -22,7 +22,6 @@ type UseAgentSessionCoordinatorParams = {
   projectId: string;
   conversation: { id: string } | null | undefined;
   agent: AgentRun;
-  running: boolean;
   tasteQuota: TasteQuota;
   runAgent: (
     explicitKind?: ForgeSessionKind,

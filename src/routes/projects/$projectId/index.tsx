@@ -16,6 +16,7 @@ import { usePreviewBoot } from "@/hooks/usePreviewBoot";
 import { usePreviewIdle } from "@/hooks/usePreviewIdle";
 import { useEditorTelemetry } from "@/hooks/useEditorTelemetry";
 import { useVisualEditor } from "@/hooks/useVisualEditor";
+import { useActiveRun } from "@/hooks/useActiveRun";
 import type { VisualEditGroup } from "@/components/editor/visual-editor/types";
 import { useFileDrop, useWorkspacePresets } from "@/hooks/useWorkspacePresets";
 
@@ -84,7 +85,6 @@ function EditorPage() {
   const [activeView, setActiveView] = useState<"code" | "preview" | "diff">("preview");
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
   const [openTabs, setOpenTabs] = useState<Tab[]>([]);
-  const [running, setRunning] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
   const [logPanelOpen, setLogPanelOpen] = useState(false);
@@ -126,6 +126,7 @@ function EditorPage() {
   const previewIframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const agent = useAgentRun();
+  const activeRun = useActiveRun(agent);
   useWorkspacePresets();
 
   const pageData = useEditorPageData({
@@ -181,7 +182,7 @@ function EditorPage() {
     previewReady,
     e2bConnected,
     previewBoot,
-    running,
+    running: activeRun.running,
     activeView,
     setActiveView,
     activeFilePath,
@@ -221,8 +222,7 @@ function EditorPage() {
     files,
     agent,
     qc: pageData.qc,
-    running,
-    setRunning,
+    liveRunActive: activeRun.running,
     logs,
     setLogs,
     logPanelOpen,
@@ -305,7 +305,7 @@ function EditorPage() {
           tasteChatRemaining,
           tasteStartRemaining,
           connectedKinds,
-          running,
+          running: activeRun.running,
           agentConnected: agent.connected,
           agentProgress: agent.progress,
           devUrl,
@@ -327,7 +327,8 @@ function EditorPage() {
       projectId={projectId}
       conversationId={conversation?.id ?? null}
       projectName={project?.name}
-      running={running}
+      running={activeRun.running}
+      turnActive={activeRun.turnActive}
       agent={agent}
       mainView={mainView}
       onMainViewChange={handleMainViewChange}

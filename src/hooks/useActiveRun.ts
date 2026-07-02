@@ -1,7 +1,12 @@
-import { useMemo } from "react";
 import type { AgentProgress } from "@/lib/agent-progress";
 import type { useAgentRun } from "@/hooks/useAgentRun";
-import { isAgentSessionRunning, type AgentSessionStage } from "@/lib/agent-session-stage";
+import { type AgentSessionStage } from "@/lib/agent-session-stage";
+import {
+  isEditorExecutionLiveRun,
+  isEditorExecutionTurnActive,
+  resolveEditorExecutionStage,
+  type EditorExecutionStage,
+} from "@/lib/editor-execution-state";
 
 export type ActiveRunState = {
   progress: AgentProgress;
@@ -10,12 +15,21 @@ export type ActiveRunState = {
   connected: boolean;
   isPendingRun: boolean;
   sessionStage: AgentSessionStage;
-  /** Agente com run ativa e ainda não terminal/aguardando usuário. */
+  executionStage: EditorExecutionStage;
+  /** Turno ativo no editor: submitting local ou run viva já evidenciada. */
+  turnActive: boolean;
+  /** Run viva materializada/evidenciada — única fase que pode armar Stop. */
   running: boolean;
+  submitting: boolean;
 };
 
 export function selectActiveRun(agent: ReturnType<typeof useAgentRun>): ActiveRunState {
-  const running = isAgentSessionRunning(agent.sessionStage);
+  const executionStage = resolveEditorExecutionStage({
+    activeRunId: agent.activeRunId,
+    progress: agent.progress,
+  });
+  const running = isEditorExecutionLiveRun(executionStage);
+  const turnActive = isEditorExecutionTurnActive(executionStage);
 
   return {
     progress: agent.progress,
@@ -24,21 +38,14 @@ export function selectActiveRun(agent: ReturnType<typeof useAgentRun>): ActiveRu
     connected: agent.connected,
     isPendingRun: agent.isPendingRun,
     sessionStage: agent.sessionStage,
+    executionStage,
+    turnActive,
     running,
+    submitting: executionStage === "submitting",
   };
 }
 
 /** Facade tipada do slice de run ativa — UI não depende de frozenRuns. */
 export function useActiveRun(agent: ReturnType<typeof useAgentRun>): ActiveRunState {
-  return useMemo(
-    () => selectActiveRun(agent),
-    [
-      agent.progress,
-      agent.activeRunId,
-      agent.activeRunStartedAtMs,
-      agent.connected,
-      agent.isPendingRun,
-      agent.sessionStage,
-    ],
-  );
+  return selectActiveRun(agent);
 }

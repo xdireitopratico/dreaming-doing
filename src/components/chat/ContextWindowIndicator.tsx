@@ -46,6 +46,7 @@ export function ContextWindowIndicator({
   const [prefs, setPrefs] = useState(() => readContextPrefs(loadAgentPreferences()));
   const [saving, setSaving] = useState(false);
   const [compactPending, setCompactPending] = useState(false);
+  const [lastKnownPercent, setLastKnownPercent] = useState(0);
 
   useEffect(() => {
     setPrefs(readContextPrefs(loadAgentPreferences()));
@@ -56,13 +57,22 @@ export function ContextWindowIndicator({
     rawPrefs.mode === "robin" ? rawPrefs.robinPoolModelId : rawPrefs.fixedPresetId,
     rawPrefs.userModelEntries,
   ).label;
+  const usagePercent = contextUsage?.percent;
+  const isServerCompacting = contextUsage?.compacting === true;
 
   const fillPercent = useMemo(() => {
-    if (contextUsage?.compacting || compactPending) return 100;
-    const p = contextUsage?.percent;
+    if (isServerCompacting || compactPending) return 100;
+    const p = usagePercent;
     if (typeof p === "number" && p >= 0) return Math.min(100, p);
-    return 0;
-  }, [contextUsage, compactPending]);
+    return lastKnownPercent;
+  }, [compactPending, isServerCompacting, lastKnownPercent, usagePercent]);
+
+  useEffect(() => {
+    const p = usagePercent;
+    if (typeof p === "number" && p >= 0) {
+      setLastKnownPercent(Math.min(100, p));
+    }
+  }, [usagePercent]);
 
   const isCompacting = contextUsage?.compacting === true || compactPending;
   const percentLabel = contextUsage || isCompacting ? `${Math.round(fillPercent)}%` : "—";
@@ -151,15 +161,15 @@ export function ContextWindowIndicator({
         align="start"
         side="top"
         sideOffset={8}
-        className="w-[176px] border border-[var(--border-forge)]/70 bg-transparent p-0 shadow-none"
+        className="w-[152px] border border-[var(--border-forge)]/70 bg-transparent p-0 shadow-none"
       >
-        <div className="rounded-[12px] border border-[var(--forge-border-strong,rgba(237,239,242,0.14))] bg-[linear-gradient(135deg,#1a1e27,#0b0d12)] p-[5px] shadow-[0_14px_36px_rgba(0,0,0,0.4),0_0_0_1px_rgba(255,182,39,0.04)_inset] backdrop-blur-[20px] backdrop-saturate-[140%]">
-          <div className="grid gap-1">
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-1">
+        <div className="rounded-[11px] border border-[var(--forge-border-strong,rgba(237,239,242,0.14))] bg-[linear-gradient(135deg,#1a1e27,#0b0d12)] p-1 shadow-[0_12px_30px_rgba(0,0,0,0.38),0_0_0_1px_rgba(255,182,39,0.04)_inset] backdrop-blur-[18px] backdrop-saturate-[140%]">
+          <div className="grid gap-[3px]">
+            <div className="grid grid-cols-[minmax(0,1.25fr)_minmax(0,0.95fr)] gap-1">
               <div className="min-w-0">
                 <label
                   htmlFor="context-window-tokens"
-                  className="mb-0.5 block text-[8px] uppercase tracking-[0.18em] text-[var(--text-muted)]"
+                  className="mb-0.5 block text-[7px] uppercase tracking-[0.18em] text-[var(--text-muted)]"
                 >
                   tokens
                 </label>
@@ -167,7 +177,7 @@ export function ContextWindowIndicator({
                   id="context-window-tokens"
                   type="text"
                   inputMode="numeric"
-                  className="h-6 w-full rounded-md border border-[var(--border-forge)] bg-[var(--bg-base)] px-2 font-mono text-[11px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus:border-[var(--border-active)]"
+                  className="h-[22px] w-full rounded-md border border-[var(--border-forge)] bg-[var(--bg-base)] px-1.5 font-mono text-[11px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus:border-[var(--border-active)]"
                   placeholder="128000"
                   value={prefs.windowTokens}
                   onChange={(e) => setPrefs((p) => ({ ...p, windowTokens: e.target.value }))}
@@ -178,7 +188,7 @@ export function ContextWindowIndicator({
               <div className="min-w-0">
                 <label
                   htmlFor="context-window-mode"
-                  className="mb-0.5 block text-[8px] uppercase tracking-[0.18em] text-[var(--text-muted)]"
+                  className="mb-0.5 block text-[7px] uppercase tracking-[0.18em] text-[var(--text-muted)]"
                 >
                   mode
                 </label>
@@ -198,7 +208,7 @@ export function ContextWindowIndicator({
                       void persistPrefs(next);
                     }}
                     className={cn(
-                      "h-[15px] w-[27px] border border-[var(--border-forge)] shadow-none",
+                      "h-[14px] w-[28px] border border-[var(--border-forge)] shadow-none",
                       "data-[state=checked]:bg-[var(--text-accent)] data-[state=unchecked]:bg-[var(--bg-hover)]",
                       "data-[state=checked]:border-transparent data-[state=unchecked]:border-[var(--border-forge)]",
                     )}
@@ -207,26 +217,25 @@ export function ContextWindowIndicator({
               </div>
             </div>
 
-            <div className="flex items-center gap-1 rounded-md border border-[rgba(237,239,242,0.08)] bg-[rgba(255,255,255,0.03)] px-1.5 py-[3px]">
+            <div className="flex items-center gap-1 rounded-md border border-[rgba(245,158,11,0.18)] bg-[rgba(245,158,11,0.08)] px-1.5 py-[3px]">
               <Brain className="size-2.5 shrink-0 text-[var(--text-accent)]" aria-hidden />
               <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-[var(--bg-hover)]">
                 <div
                   className="h-full rounded-full"
                   style={{
                     width: `${fillPercent}%`,
-                    background:
-                      "linear-gradient(90deg, var(--text-accent), color-mix(in srgb, var(--text-accent) 58%, white))",
+                    background: "linear-gradient(90deg, #facc15, #f59e0b)",
                   }}
                 />
               </div>
-              <span className="min-w-7 text-right font-mono text-[9px] tabular-nums text-[var(--text-accent)]">
+              <span className="min-w-7 text-right font-mono text-[9px] tabular-nums text-[#facc15]">
                 {percentLabel}
               </span>
             </div>
 
             <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1">
               <div
-                className="min-w-0 truncate font-mono text-[9px] text-[var(--text-secondary)]"
+                className="min-w-0 truncate font-mono text-[8px] text-[var(--text-secondary)]"
                 title={modelLabel}
               >
                 {modelLabel}
@@ -234,8 +243,8 @@ export function ContextWindowIndicator({
 
               <button
                 type="button"
-                className="forge-composer-send min-w-[68px] px-2 text-[9px] font-semibold"
-                style={{ width: "auto", height: "20px", paddingInline: "8px", borderRadius: "7px" }}
+                className="forge-composer-send min-w-[64px] px-1.5 text-[8px] font-semibold"
+                style={{ width: "auto", height: "18px", paddingInline: "7px", borderRadius: "7px" }}
                 disabled={saving || isCompacting}
                 onClick={() => void handleCompactNow()}
               >

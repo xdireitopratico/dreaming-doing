@@ -7,6 +7,7 @@ import {
   EditorIntegrationsMenu,
   type EditorIntegrationsMenuProps,
 } from "@/components/editor/EditorIntegrationsMenu";
+import { PreviewRouteNav } from "@/components/editor/PreviewRouteNav";
 
 interface EditorTopBarProps {
   projectId?: string;
@@ -90,6 +91,19 @@ export function EditorTopBar({
           <span className="forge-topbar-divider mx-1 shrink-0 hidden sm:block" aria-hidden />
           <EditorIntegrationsMenu {...integrations} />
         </div>
+
+        {onPreviewPathChange && (
+          <div className="forge-topbar-address-slot">
+            <PreviewRouteNav
+              files={previewFiles}
+              activePath={previewPath}
+              onNavigate={onPreviewPathChange}
+              devUrl={previewDevUrl}
+              onRefresh={onPreviewRefresh}
+              compact
+            />
+          </div>
+        )}
       </div>
 
       <div className="forge-topbar-right">

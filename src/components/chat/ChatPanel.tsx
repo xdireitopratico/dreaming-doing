@@ -25,6 +25,7 @@ export type ChatPanelProps = {
   agentHasRun?: boolean;
   agent: AgentRun;
   running: boolean;
+  turnActive: boolean;
   composerMode?: AgentComposerMode;
   onComposerModeChange?: (mode: AgentComposerMode) => void;
   onSend: (text: string, mode?: AgentComposerMode, parts?: StoredMessagePart[]) => void;
@@ -63,6 +64,7 @@ export function ChatPanel({
   agentHasRun = false,
   agent,
   running,
+  turnActive,
   composerMode = "plan",
   onComposerModeChange,
   onSend,
@@ -103,13 +105,13 @@ export function ChatPanel({
     messagesLoading,
     agentHasRun,
     agent,
-    running,
+    running: turnActive,
     focusedRunId,
   });
 
   const holdUserAnchor = shouldHoldUserMessageAnchor({
     isPendingRun: agent.isPendingRun,
-    running,
+    running: turnActive,
     activeRunId: agent.activeRunId,
     finished: agent.progress.finished,
   });
@@ -171,7 +173,7 @@ export function ChatPanel({
     return null;
   }, [thread]);
 
-  const clarifyCreating = running && agent.progress.phase === "clarify" && !activeClarify;
+  const clarifyCreating = turnActive && agent.progress.phase === "clarify" && !activeClarify;
 
   const lastAssistantMessageId = useMemo(() => {
     for (let i = thread.length - 1; i >= 0; i--) {
@@ -223,7 +225,7 @@ export function ChatPanel({
 
       <ChatPlanDock
         pendingPlan={pendingPlan}
-        creating={running && agent.progress.phase === "creating_plan" && !pendingPlan}
+        creating={turnActive && agent.progress.phase === "creating_plan" && !pendingPlan}
         materializing={agent.isPendingRun && !!pendingPlan}
         onReview={(runId) => onOpenInspector?.(runId, "plan")}
         onApprove={onPlanApprove}
@@ -233,7 +235,7 @@ export function ChatPanel({
       <ChatClarifyDock
         data={activeClarify}
         creating={clarifyCreating}
-        disabled={running}
+        disabled={turnActive}
         onSubmit={handleClarifySubmit}
         onSkip={handleClarifySkip}
       />

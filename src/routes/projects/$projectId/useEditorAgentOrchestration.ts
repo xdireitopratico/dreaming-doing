@@ -10,7 +10,6 @@ import type { usePreviewBoot } from "@/hooks/usePreviewBoot";
 import { clearEnhancements } from "@/lib/monacoEnhancements";
 import { useAgentSessionCoordinator } from "./useAgentSessionCoordinator";
 import type { useAgentRun } from "@/hooks/useAgentRun";
-import { PENDING_RUN_ID } from "@/lib/pending-run-id";
 
 import type { FileRow } from "./editor-page-types";
 
@@ -29,8 +28,7 @@ type UseEditorAgentOrchestrationParams = {
   files: FileRow[] | undefined;
   agent: AgentRun;
   qc: QueryClient;
-  running: boolean;
-  setRunning: (value: boolean | ((prev: boolean) => boolean)) => void;
+  liveRunActive: boolean;
   logs: LogEntry[];
   setLogs: (value: LogEntry[] | ((prev: LogEntry[]) => LogEntry[])) => void;
   logPanelOpen: boolean;
@@ -61,8 +59,7 @@ export function useEditorAgentOrchestration({
   files,
   agent,
   qc,
-  running,
-  setRunning,
+  liveRunActive,
   setLogs,
   logPanelOpen,
   setLogPanelOpen,
@@ -99,7 +96,6 @@ export function useEditorAgentOrchestration({
     projectId,
     conversation,
     agent,
-    running,
     tasteQuota,
     runAgent,
   });
@@ -126,11 +122,6 @@ export function useEditorAgentOrchestration({
     [agent.progress.timeline],
   );
   useAgentBlame({ blameMap: blameEntries, editorRef, monacoRef });
-
-  // ─── Sync running state — slot live enquanto há run ativa (mesmo antes do realtime conectar) ──
-  useEffect(() => {
-    setRunning(agent.sessionStage === "pending" || agent.sessionStage === "running");
-  }, [agent.sessionStage, setRunning]);
 
   // ─── Realtime events → logs ─────────────────────────────────────────
   useEffect(() => {
@@ -189,7 +180,7 @@ export function useEditorAgentOrchestration({
 
   // Boot sandbox durante run (web/expo) para preview ao vivo enquanto o agente edita.
   useEffect(() => {
-    if (!running) {
+    if (!liveRunActive) {
       previewBootDuringRunRef.current = false;
       previewBootInRunAttemptsRef.current = 0;
       return;
@@ -215,7 +206,7 @@ export function useEditorAgentOrchestration({
         previewBootInRunAttemptsRef.current = 0;
       });
   }, [
-    running,
+    liveRunActive,
     supportsLivePreview,
     e2bConnected,
     devUrl,
@@ -227,7 +218,7 @@ export function useEditorAgentOrchestration({
   ]);
 
   useEffect(() => {
-    if (running) {
+    if (liveRunActive) {
       previewBootAfterAgentRef.current = false;
       return;
     }
@@ -243,7 +234,7 @@ export function useEditorAgentOrchestration({
     );
   }, [
     agentShouldBootPreview,
-    running,
+    liveRunActive,
     supportsLivePreview,
     e2bConnected,
     devUrl,
@@ -261,7 +252,7 @@ export function useEditorAgentOrchestration({
   const syncPreviewToSandbox = useCallback(
     async (reload: boolean) => {
       if (!supportsLivePreview || !e2bConnected || previewE2bCircuit) return;
-      if (fileCount === 0 && !running) return;
+      if (fileCount === 0 && !liveRunActive) return;
       if (previewSyncInFlightRef.current) {
         if (reload) previewSyncPendingReloadRef.current = true;
         return;
@@ -294,13 +285,13 @@ export function useEditorAgentOrchestration({
       previewE2bCircuit,
       devUrl,
       fileCount,
-      running,
+      liveRunActive,
       setPreviewReloadNonce,
     ],
   );
 
-  const fileSyncDebounceMs = running ? 0 : 600;
-  const previewTickDebounceMs = running ? 100 : 800;
+  const fileSyncDebounceMs = liveRunActive ? 0 : 600;
+  const previewTickDebounceMs = liveRunActive ? 100 : 800;
 
   useEffect(() => {
     if (!filesSyncKey || filesSyncKey === lastSyncedFilesKeyRef.current) return;
@@ -308,9 +299,9 @@ export function useEditorAgentOrchestration({
     lastSyncedFilesKeyRef.current = filesSyncKey;
     const t = window.setTimeout(
       () => {
-        void syncPreviewToSandbox(activeView === "preview" || running);
+        void syncPreviewToSandbox(activeView === "preview" || liveRunActive);
       },
-      running ? 0 : fileSyncDebounceMs,
+      liveRunActive ? 0 : fileSyncDebounceMs,
     );
     return () => window.clearTimeout(t);
   }, [
@@ -320,7 +311,7 @@ export function useEditorAgentOrchestration({
     e2bConnected,
     previewE2bCircuit,
     activeView,
-    running,
+    liveRunActive,
     fileSyncDebounceMs,
     syncPreviewToSandbox,
   ]);
@@ -334,7 +325,7 @@ export function useEditorAgentOrchestration({
       () => {
         void syncPreviewToSandbox(true);
       },
-      running ? 0 : previewTickDebounceMs,
+      liveRunActive ? 0 : previewTickDebounceMs,
     );
     return () => window.clearTimeout(t);
   }, [
@@ -363,7 +354,7 @@ export function useEditorAgentOrchestration({
     blameEntries,
     filesSyncKey,
     previewSyncing,
-    previewLiveUpdating: running && supportsLivePreview && (previewSyncing || !!devUrl),
+    previewLiveUpdating: liveRunActive && supportsLivePreview && (previewSyncing || !!devUrl),
     refreshPreview,
   };
 }

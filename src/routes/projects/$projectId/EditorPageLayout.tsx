@@ -34,7 +34,6 @@ import type { useVisualEditor } from "@/hooks/useVisualEditor";
 import { useJobWorkspaceFocus } from "@/hooks/useJobWorkspaceFocus";
 import { JobInspector } from "@/components/editor/JobInspector";
 import type { useAgentRun } from "@/hooks/useAgentRun";
-import { useActiveRun } from "@/hooks/useActiveRun";
 import type { usePreviewBoot } from "@/hooks/usePreviewBoot";
 import type { useConnectors } from "@/hooks/useConnectors";
 import type { AgentPreferences } from "@/lib/agent-preferences";
@@ -49,6 +48,7 @@ export type EditorPageLayoutProps = {
   conversationId?: string | null;
   projectName?: string | null;
   running: boolean;
+  turnActive: boolean;
   agent: AgentRun;
   mainView: EditorMainView;
   onMainViewChange: (view: EditorMainView) => void;
@@ -150,6 +150,7 @@ export function EditorPageLayout({
   conversationId,
   projectName,
   running,
+  turnActive,
   agent,
   mainView,
   onMainViewChange,
@@ -235,8 +236,6 @@ export function EditorPageLayout({
   mobilePanel = "chat",
   onMobilePanelChange,
 }: EditorPageLayoutProps) {
-  const activeRun = useActiveRun(agent);
-
   const pendingPlan = usePendingPlan({
     livePlan: agent.progress.pendingPlan,
     messages: chatMessages,
@@ -545,6 +544,7 @@ export function EditorPageLayout({
                   agentHasRun={agentHasRun}
                   agent={agent}
                   running={running}
+                  turnActive={turnActive}
                   composerMode={composerMode}
                   onComposerModeChange={setComposerMode}
                   onSend={handleSend}
