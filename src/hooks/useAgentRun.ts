@@ -11,6 +11,7 @@ import {
   type AgentProgress,
   initialAgentProgress,
 } from "@/lib/agent-progress";
+import { resolveAgentSessionStage } from "@/lib/agent-session-stage";
 import { PENDING_RUN_ID } from "@/lib/pending-run-id";
 import { setStreamingTelemetryContext } from "@/lib/streaming-telemetry";
 import type { PendingQueueItem } from "@/components/chat/ChatQueueDock";
@@ -243,6 +244,18 @@ export function useAgentRun() {
     });
   }, [activeRunId, refreshPendingQueue]);
 
+  const sessionStage = useMemo(
+    () =>
+      resolveAgentSessionStage({
+        progress,
+        activeRunId,
+        running:
+          !!activeRunId && !progress.finished && !progress.canceled && !progress.awaiting,
+        connectionState: progress.connectionState,
+      }),
+    [progress, activeRunId],
+  );
+
   return {
     progress,
     connected,
@@ -277,6 +290,7 @@ export function useAgentRun() {
     beginPendingTurn,
     clearPendingTurn,
     activeRunStartedAtMs,
+    sessionStage,
     /** @deprecated use activeRunStartedAtMs */
     pendingTurnStartedAtMs: activeRunStartedAtMs,
     isPendingRun: activeRunId === PENDING_RUN_ID,

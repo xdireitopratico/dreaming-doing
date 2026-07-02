@@ -129,19 +129,13 @@ export function useEditorAgentOrchestration({
 
   // ─── Sync running state — slot live enquanto há run ativa (mesmo antes do realtime conectar) ──
   useEffect(() => {
-    // Tratar PENDING (fase inicial antes de receber runId do server) também como "running"
-    // para travar input e permitir live overlay imediato no chat (sem lag de UX).
-    const active =
-      agent.activeRunId != null &&
-      !agent.progress.finished &&
-      !agent.progress.canceled &&
-      !agent.progress.awaiting;
-    setRunning(active);
+    setRunning(
+      agent.sessionStage === "pending" ||
+        agent.sessionStage === "running" ||
+        agent.sessionStage === "reconnecting",
+    );
   }, [
-    agent.activeRunId,
-    agent.progress.finished,
-    agent.progress.canceled,
-    agent.progress.awaiting,
+    agent.sessionStage,
     setRunning,
   ]);
 

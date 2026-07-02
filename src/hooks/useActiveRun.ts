@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { AgentProgress } from "@/lib/agent-progress";
 import type { useAgentRun } from "@/hooks/useAgentRun";
+import { isAgentSessionRunning, type AgentSessionStage } from "@/lib/agent-session-stage";
 
 export type ActiveRunState = {
   progress: AgentProgress;
@@ -8,17 +9,13 @@ export type ActiveRunState = {
   activeRunStartedAtMs: number | null;
   connected: boolean;
   isPendingRun: boolean;
+  sessionStage: AgentSessionStage;
   /** Agente com run ativa e ainda não terminal/aguardando usuário. */
   running: boolean;
 };
 
 export function selectActiveRun(agent: ReturnType<typeof useAgentRun>): ActiveRunState {
-  const running = !!(
-    agent.activeRunId &&
-    !agent.progress.finished &&
-    !agent.progress.canceled &&
-    !agent.progress.awaiting
-  );
+  const running = isAgentSessionRunning(agent.sessionStage);
 
   return {
     progress: agent.progress,
@@ -26,6 +23,7 @@ export function selectActiveRun(agent: ReturnType<typeof useAgentRun>): ActiveRu
     activeRunStartedAtMs: agent.activeRunStartedAtMs,
     connected: agent.connected,
     isPendingRun: agent.isPendingRun,
+    sessionStage: agent.sessionStage,
     running,
   };
 }
@@ -40,6 +38,7 @@ export function useActiveRun(agent: ReturnType<typeof useAgentRun>): ActiveRunSt
       agent.activeRunStartedAtMs,
       agent.connected,
       agent.isPendingRun,
+      agent.sessionStage,
     ],
   );
 }

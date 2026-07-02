@@ -9,7 +9,6 @@ import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
 import { collapseForgeUiBundle } from "@/lib/file-tree-display";
 import { detectProjectStack, type ProjectStackKind } from "@/lib/detect-project-kind";
 import type { useAgentRun } from "@/hooks/useAgentRun";
-import { useAgentRealtime } from "@/hooks/useAgentRealtime";
 
 import { CHAT_MESSAGE_WINDOW } from "@/lib/chat/constants";
 import type { FileRow, Msg } from "./editor-page-types";
@@ -112,9 +111,6 @@ export function useEditorPageData({ projectId, search, agent, navigate }: UseEdi
   const publishedUrl =
     typeof projectMeta?.publishedUrl === "string" ? projectMeta.publishedUrl : null;
   const previewReady = projectMeta?.previewReady === true;
-
-  // ─── Realtime unificado (agent_runs + agent_stream_events + messages) ───
-  useAgentRealtime(projectId, conversation?.id);
 
   // ─── Realtime project_files (canal editor-{projectId}) ───
   useEffect(() => {
