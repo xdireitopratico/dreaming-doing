@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
+  assertCanonicalPreviewUrl,
   buildLivePreviewUrl,
   buildCdpHost,
   ensurePreview,
@@ -31,6 +32,15 @@ describe("design-dna-preview", () => {
 
   it("buildCdpHost uses CDP port 9222", () => {
     expect(buildCdpHost("sandbox-abc")).toBe(`${CDP_PORT}-sandbox-abc.e2b.app`);
+  });
+
+  it("assertCanonicalPreviewUrl rejeita porta CDP", () => {
+    expect(() => assertCanonicalPreviewUrl(`https://${CDP_PORT}-sb.e2b.app`)).toThrow(
+      /previewUrl inválido|anti-padrão A1/,
+    );
+    expect(() =>
+      assertCanonicalPreviewUrl(buildLivePreviewUrl("sb")),
+    ).not.toThrow();
   });
 
   it("ensurePreview throws when CDP is not ready", async () => {

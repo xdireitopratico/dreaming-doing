@@ -26,6 +26,20 @@ export function buildCdpHost(sandboxId: string, domain: string = E2B_DOMAIN): st
   return `${CDP_PORT}-${sandboxId}.${domain}`;
 }
 
+/** Valida contrato canônico de previewUrl (≠ CDP). */
+export function assertCanonicalPreviewUrl(previewUrl: string): void {
+  if (!previewUrl.includes(`://${PREVIEW_PORT}-`)) {
+    throw new Error(
+      `previewUrl inválido: deve usar porta ${PREVIEW_PORT} (live view), não CDP :${CDP_PORT}. Got: ${previewUrl}`,
+    );
+  }
+  if (previewUrl.includes(`://${CDP_PORT}-`)) {
+    throw new Error(
+      `previewUrl usa porta CDP (${CDP_PORT}) — anti-padrão A1 da spec. Use live view :${PREVIEW_PORT}.`,
+    );
+  }
+}
+
 export type EnsurePreviewResult = {
   previewUrl: string;
   cdpReady: boolean;
@@ -116,6 +130,8 @@ export async function ensurePreview(
       `Live preview not ready on port ${PREVIEW_PORT} — rebuild E2B template with noVNC stack.`,
     );
   }
+
+  assertCanonicalPreviewUrl(previewUrl);
 
   await appendJobEvent(supabase, jobId, "sandbox_ready", {
     sandboxId,

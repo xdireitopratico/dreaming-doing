@@ -3,6 +3,7 @@ import {
   evaluateLibraryPersistEligibility,
   resolveJobTerminalStatus,
   buildLibraryUpsertRow,
+  isDnaStructurallyValidated,
   MIN_DNA_QUALITY_SCORE,
 } from "./persist-library-entry.ts";
 import type { DesignDnaExtractionResult } from "./design-dna-extraction.ts";
@@ -102,15 +103,16 @@ describe("resolveJobTerminalStatus — Gate G2", () => {
     expect(terminal.ok).toBe(true);
   });
 
-  it("partial quando algumas URLs persistiram e outras falharam", () => {
+  it("failed quando sucesso parcial (G2 rigoroso — spec §4.2)", () => {
     const terminal = resolveJobTerminalStatus({
       urlsTotal: 2,
       libraryPersistedCount: 1,
       errors: [{ url: "https://b.com", error: "falhou", kind: "no_dna" }],
       blockedCount: 0,
     });
-    expect(terminal.status).toBe("partial");
-    expect(terminal.ok).toBe(true);
+    expect(terminal.status).toBe("failed");
+    expect(terminal.ok).toBe(false);
+    expect(terminal.jobError).toBeTruthy();
   });
 
   it("nunca completed com libraryPersistedCount zero", () => {
@@ -121,6 +123,30 @@ describe("resolveJobTerminalStatus — Gate G2", () => {
       blockedCount: 0,
     });
     expect(terminal.status).not.toBe("completed");
+  });
+});
+
+describe("isDnaStructurallyValidated", () => {
+  it("true quando validationScore >= 40 e não rejeitado", () => {
+    expect(
+      isDnaStructurallyValidated({
+        ...baseExtraction,
+        dna: baseDna,
+        validationScore: 72,
+        validationRejected: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("false quando validationRejected", () => {
+    expect(
+      isDnaStructurallyValidated({
+        ...baseExtraction,
+        dna: baseDna,
+        validationScore: 72,
+        validationRejected: true,
+      }),
+    ).toBe(false);
   });
 });
 
@@ -144,5 +170,27 @@ describe("buildLibraryUpsertRow", () => {
     expect(row.quality_score).toBe(7);
     expect(row.provider_trace).toEqual(["llm:test"]);
     expect(row.design_dna).toBeTruthy();
+    expect(row.validated).toBe(false);
+  });
+
+  it("validated true quando DNA passou no validador estrutural", () => {
+    const row = buildLibraryUpsertRow(
+      {
+        url: "https://example.com",
+        urlIndex: 0,
+        depth: "shallow",
+        ingestKind: "production",
+        userId: "user-1",
+        categories: ["hero"],
+      },
+      baseDna,
+      {
+        ...baseExtraction,
+        dna: baseDna,
+        validationScore: 55,
+        validationRejected: false,
+      },
+    );
+    expect(row.validated).toBe(true);
   });
 });

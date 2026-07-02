@@ -7,100 +7,30 @@ import {
   type DesignDnaExecuteResponse,
 } from "../functions/_shared-design-dna";
 import {
+  assertLlmMatchesG1,
   createLlmChatDispatcher,
   extractDesignDnaForUrl,
-  resolveLLMConfig,
+  resolveLlmConfigForG1Model,
   type LLMConfig,
 } from "./design-dna-extraction.ts";
 import { ensurePreview } from "./design-dna-preview.ts";
-import { resolveExtractionCapabilities } from "./resolve-extraction-capabilities.ts";
+import {
+  resolveExtractionCapabilities,
+  type ExtractionCapabilitiesOk,
+} from "./resolve-extraction-capabilities.ts";
 import { loadUserE2bApiKey } from "../../../supabase/functions/_shared/user-e2b.ts";
 import {
   persistLibraryEntry,
   resolveJobTerminalStatus,
 } from "./persist-library-entry.ts";
-import { connectToSandbox, waitForEnvdReady } from "./e2b-client";
+import { ensureDesignDnaSandbox } from "./design-dna-sandbox.ts";
 import { createAgentContext } from "./browser-agent-state";
 import { runBrowserAgent, createDefaultCdpTools } from "./browser-agent-runner";
 import { runAgentPlanningStep } from "./browser-agent-llm";
 import { synthesizeDesignDNA } from "./browser-agent-synthesis";
 import type { BrowserAgentContext, BrowserAgentStep } from "./browser-agent-state";
 
-const E2B_API_BASE = process.env.E2B_API_BASE || "https://api.e2b.app";
-const E2B_TEMPLATE_ID = process.env.E2B_TEMPLATE || "dreaming-doing-chromium";
 const LOOP_BUDGET_MS = 270_000;
-
-async function ensureDesignDnaSandbox(
-  supabase: SupabaseClient,
-  serviceClient: SupabaseClient,
-  userId: string,
-  e2bApiKey: string,
-  jobId: string,
-): Promise<{ sandboxId: string; accessToken: string | null }> {
-  // Tenta reusar sandbox existente de jobs anteriores
-  const { data: latestJob } = await serviceClient
-    .from("design_dna_jobs")
-    .select("sandbox_id")
-    .not("sandbox_id", "is", null)
-    .order("started_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (latestJob?.sandbox_id) {
-    try {
-      const { accessToken } = await connectToSandbox(latestJob.sandbox_id as string, e2bApiKey);
-      if (accessToken) {
-        return {
-          sandboxId: latestJob.sandbox_id as string,
-          accessToken,
-        };
-      }
-    } catch {
-      // 404 ou erro — sandbox morto, cria novo abaixo
-    }
-  }
-
-  // Cria novo sandbox com auto-pause de 15 min
-  await appendJobEvent(supabase, jobId, "sandbox_setup", { sandboxId: "pending", step: "creating" });
-
-  const resp = await fetch(`${E2B_API_BASE}/sandboxes`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-API-Key": e2bApiKey },
-    signal: AbortSignal.timeout(30_000),
-    body: JSON.stringify({
-      templateID: E2B_TEMPLATE_ID,
-      timeout: 900,
-      autoPause: true,
-      autoPauseMemory: true,
-      autoResume: { enabled: true },
-      metadata: { forge_app: "dreaming-doing", forge_job_id: jobId, forge_user_id: userId },
-    }),
-  });
-
-  const text = await resp.text();
-  if (!resp.ok) throw new Error(`E2B create ${resp.status}: ${text.slice(0, 400)}`);
-
-  const data = JSON.parse(text) as { sandboxID?: string; sandboxId?: string; templateID?: string };
-  const sandboxId = data.sandboxID ?? data.sandboxId ?? "";
-  if (!sandboxId) throw new Error("E2B: no sandboxID in response");
-
-  const sandboxTemplate = data.templateID ?? "";
-  if (sandboxTemplate && sandboxTemplate !== E2B_TEMPLATE_ID) {
-    console.warn(`[design-dna] Sandbox created with template ${sandboxTemplate}, expected ${E2B_TEMPLATE_ID}`);
-  }
-
-  await appendJobEvent(supabase, jobId, "sandbox_setup", { sandboxId, step: "connecting" });
-
-  const { accessToken } = await connectToSandbox(sandboxId, e2bApiKey);
-
-  await appendJobEvent(supabase, jobId, "sandbox_setup", { sandboxId, step: "waiting-runtime" });
-
-  await waitForEnvdReady(sandboxId, accessToken).catch((err) => {
-    console.warn("[design-dna] envd not ready, continuing anyway:", err);
-  });
-
-  return { sandboxId, accessToken };
-}
 
 export async function executeDesignDnaJob(
   supabase: SupabaseClient,
@@ -145,6 +75,8 @@ export async function executeDesignDnaJob(
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
+  let capabilitiesOk: ExtractionCapabilitiesOk | null = null;
+
   // Gate G1 (defense in depth): fail closed se pré-requisitos ausentes
   if (userId) {
     const capabilities = await resolveExtractionCapabilities(serviceClient, userId, depth);
@@ -176,24 +108,95 @@ export async function executeDesignDnaJob(
         durationMs: Date.now() - startMs,
       };
     }
+    capabilitiesOk = capabilities;
   }
 
   const { data: job } = await supabase
-      .from("design_dna_jobs")
-      .select("sandbox_id, meta")
-      .eq("id", jobId)
-      .single();
+    .from("design_dna_jobs")
+    .select("sandbox_id, meta")
+    .eq("id", jobId)
+    .single();
 
   const currentMeta = { ...((job?.meta ?? {}) as Record<string, unknown>) };
-  const ingestKind = typeof currentMeta.ingestKind === "string" && currentMeta.ingestKind.trim()
-    ? currentMeta.ingestKind.trim()
-    : "production";
+  const ingestKind =
+    typeof currentMeta.ingestKind === "string" && currentMeta.ingestKind.trim()
+      ? currentMeta.ingestKind.trim()
+      : "production";
   currentMeta.ingestKind = ingestKind;
   const isDeep = depth === "deep";
   let sandboxId = "";
   let sandboxAccessToken: string | null = null;
+  let deepLlm: LLMConfig | null = null;
 
   if (isDeep) {
+    if (!capabilitiesOk?.llm.supportsVision) {
+      const msg =
+        "Modelo sem visão para DEEP. Configure um modelo vision em API Models (/api-models).";
+      const errorRecord = { scope: "job", error: msg, code: "missing_vision" };
+      errors.push(errorRecord);
+      await appendJobEvent(supabase, jobId, "capability_error", errorRecord);
+      await supabase
+        .from("design_dna_jobs")
+        .update({
+          status: "failed",
+          error: msg,
+          errors,
+          finished_at: new Date().toISOString(),
+        })
+        .eq("id", jobId);
+      return {
+        ok: false,
+        status: "failed",
+        jobId,
+        resumable: false,
+        canceled: false,
+        error: msg,
+        urlsCompleted: 0,
+        durationMs: Date.now() - startMs,
+      };
+    }
+
+    const resolvedWire = await resolveLlmConfigForG1Model(
+      serviceClient,
+      userId,
+      capabilitiesOk.llm,
+    );
+    if (!resolvedWire) {
+      const msg =
+        `Conector LLM "${capabilitiesOk.llm.provider}" indisponível para o modelo ${capabilitiesOk.llm.model}. ` +
+        "Verifique API Models (/api-models).";
+      const errorRecord = { scope: "job", error: msg, code: "missing_llm" };
+      errors.push(errorRecord);
+      await appendJobEvent(supabase, jobId, "capability_error", errorRecord);
+      await supabase
+        .from("design_dna_jobs")
+        .update({
+          status: "failed",
+          error: msg,
+          errors,
+          finished_at: new Date().toISOString(),
+        })
+        .eq("id", jobId);
+      return {
+        ok: false,
+        status: "failed",
+        jobId,
+        resumable: false,
+        canceled: false,
+        error: msg,
+        urlsCompleted: 0,
+        durationMs: Date.now() - startMs,
+      };
+    }
+    assertLlmMatchesG1(resolvedWire, capabilitiesOk.llm);
+    deepLlm = {
+      apiKey: resolvedWire.apiKey,
+      baseUrl: resolvedWire.baseUrl,
+      model: resolvedWire.model,
+      label: resolvedWire.label,
+      protocol: resolvedWire.protocol,
+    };
+
     const e2bApiKey = userId ? await loadUserE2bApiKey(serviceClient, userId) : "";
     if (!e2bApiKey) {
       const msg =
@@ -223,13 +226,19 @@ export async function executeDesignDnaJob(
       };
     }
 
-    // Sandbox persistente com auto-pause/resume — E2B gerencia idle de 15 min
-    const sb = await ensureDesignDnaSandbox(supabase, serviceClient, userId, e2bApiKey, jobId);
+    const sb = await ensureDesignDnaSandbox(
+      supabase,
+      userId,
+      e2bApiKey,
+      jobId,
+      job?.sandbox_id,
+    );
     sandboxId = sb.sandboxId;
     sandboxAccessToken = sb.accessToken;
 
     const preview = await ensurePreview(supabase, jobId, sandboxId, sandboxAccessToken);
     currentMeta.previewUrl = preview.previewUrl;
+    currentMeta.sandboxReused = sb.reused;
 
     currentMeta.progress = 15;
 
@@ -277,6 +286,11 @@ export async function executeDesignDnaJob(
 
       let dnaResult;
       if (isDeep) {
+        if (!deepLlm) {
+          throw new Error("DEEP LLM not resolved — internal error");
+        }
+        const llm = deepLlm;
+
         const agentCtx = createAgentContext({
           jobId,
           url,
@@ -288,50 +302,14 @@ export async function executeDesignDnaJob(
           maxSteps: 25,
         });
 
-        const resolvedLlm = await resolveLLMConfig(serviceClient, userId, "high");
-        if (!resolvedLlm) {
-          throw new Error("No LLM configured for DEEP browser agent");
-        }
-        const llm: LLMConfig = {
-          apiKey: resolvedLlm.apiKey,
-          baseUrl: resolvedLlm.baseUrl,
-          model: resolvedLlm.model,
-          label: resolvedLlm.label,
-          protocol: resolvedLlm.protocol,
-        };
-
         const tools = createDefaultCdpTools();
+        const visionLlm = createLlmChatDispatcher(llm);
 
-        const plannerLlm = createLlmChatDispatcher(llm);
         const planner = async (ctx: BrowserAgentContext, screenshotBase64?: string) =>
-          runAgentPlanningStep(ctx, plannerLlm, screenshotBase64);
+          runAgentPlanningStep(ctx, visionLlm, screenshotBase64);
 
-        const synthesizer = async (steps: BrowserAgentStep[], u: string, cats: string[]) => {
-          const callLlm = async (messages: Array<{ role: string; content: string }>) => {
-            const res = await fetch(`${llm.baseUrl}/chat/completions`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${llm.apiKey}`,
-              },
-              body: JSON.stringify({
-                model: llm.model,
-                messages,
-                max_tokens: 4096,
-                temperature: 0.3,
-                response_format: { type: "json_object" },
-              }),
-              signal: AbortSignal.timeout(120000),
-            });
-            if (!res.ok) {
-              const text = await res.text().catch(() => "");
-              throw new Error(`Agent synthesis LLM error: ${res.status} ${text.slice(0, 200)}`);
-            }
-            const data = await res.json();
-            return { content: data.choices?.[0]?.message?.content ?? "" };
-          };
-          return synthesizeDesignDNA(steps, u, cats, callLlm);
-        };
+        const synthesizer = async (steps: BrowserAgentStep[], u: string, cats: string[]) =>
+          synthesizeDesignDNA(steps, u, cats, visionLlm);
 
         const fetchInstructions = async (id: string) => {
           const { data } = await serviceClient
@@ -387,13 +365,17 @@ export async function executeDesignDnaJob(
             cleanHtmlChars: 0,
           },
           screenshotUrl: "",
-          screenshotBase64: agentResult.steps.find((s) => s.observation.screenshot)?.observation.screenshot,
+          screenshotBase64: agentResult.steps.find((s) => s.observation.screenshot)
+            ?.observation.screenshot,
           screenshots: agentResult.steps
             .filter((s) => s.observation.screenshot)
             .map((s) => s.observation.screenshot as string),
           providerTrace: [`llm:${llm.label}`, "cdp:browser-agent"],
           confidence: 90,
-          notes: [`Browser agent completed ${agentResult.steps.length} steps`, ...agentResult.steps.map((s) => `${s.action.type}: ${s.thought}`)],
+          notes: [
+            `Browser agent completed ${agentResult.steps.length} steps`,
+            ...agentResult.steps.map((s) => `${s.action.type}: ${s.thought}`),
+          ],
           blockedReason: null,
         };
       } else {
@@ -437,7 +419,6 @@ export async function executeDesignDnaJob(
         });
       }
 
-      // Emite screenshots como eventos separados (para timeline real-time)
       if (dnaResult.screenshots.length > 0) {
         const maxShots = Math.min(dnaResult.screenshots.length, 5);
         for (let si = 0; si < maxShots; si++) {

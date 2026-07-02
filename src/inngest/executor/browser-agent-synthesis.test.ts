@@ -47,7 +47,12 @@ describe("synthesizeDesignDNA", () => {
       }),
     });
 
-    const result = await synthesizeDesignDNA(baseSteps, "https://example.com", ["hero"], mockLlm as any);
+    const result = await synthesizeDesignDNA(baseSteps, "https://example.com", ["hero"], mockLlm);
+    expect(mockLlm).toHaveBeenCalledWith(
+      expect.stringContaining("https://example.com"),
+      "Sintetize o Design DNA final.",
+      "data:image/png;base64,base64...",
+    );
     expect(result.name).toBe("Example Site");
     expect(result.quality_score).toBe(9);
     expect(result.quality_source).toBe("deep_agent");
@@ -63,7 +68,7 @@ describe("synthesizeDesignDNA", () => {
         quality_score: 15,
       }),
     });
-    const result = await synthesizeDesignDNA(baseSteps, "https://x.com", ["hero"], mockLlm as any);
+    const result = await synthesizeDesignDNA(baseSteps, "https://x.com", ["hero"], mockLlm);
     expect(result.quality_score).toBe(10);
   });
 
@@ -74,7 +79,7 @@ describe("synthesizeDesignDNA", () => {
         category: "full_page",
       }),
     });
-    const result = await synthesizeDesignDNA(baseSteps, "https://y.com", ["hero"], mockLlm as any);
+    const result = await synthesizeDesignDNA(baseSteps, "https://y.com", ["hero"], mockLlm);
     expect(result.serves_domains).toEqual([]);
     expect(result.compatible_languages).toEqual([]);
     expect(result.compatible_moods).toEqual([]);

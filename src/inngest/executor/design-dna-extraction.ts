@@ -133,7 +133,13 @@ export async function loadWebSecrets(supabase: SupabaseClient, userId: string): 
 
 export type ResolvedLLM = LLMConfig & {
   /** Caminho usado para resolver (auditoria + aviso de fallback). */
-  resolvedFrom: "connectors" | "preferences.fixed" | "preferences.robin" | "preferences.fixed.custom" | "env";
+  resolvedFrom:
+    | "connectors"
+    | "preferences.fixed"
+    | "preferences.robin"
+    | "preferences.fixed.custom"
+    | "capabilities.g1"
+    | "env";
 };
 
 type LlmKind = string;
@@ -484,6 +490,79 @@ export async function resolveLLMConfig(
 
   // Sem modo configurado → FAIL-CLOSED
   return null;
+}
+
+/** Snapshot do LLM validado em G1 — usado para evitar drift no agente DEEP. */
+export type G1ResolvedLlm = {
+  model: string;
+  label: string;
+  provider: string;
+  supportsVision: boolean;
+};
+
+/**
+ * Resolve wire LLM usando exatamente o provider+model validados em G1.
+ * Evita drift entre resolveExtractionCapabilities e resolveLLMConfig(auto/high).
+ */
+export async function resolveLlmConfigForG1Model(
+  supabase: SupabaseClient,
+  userId: string,
+  g1Llm: G1ResolvedLlm,
+): Promise<ResolvedLLM | null> {
+  const { data } = await supabase
+    .from("connectors")
+    .select("kind, provider, token_encrypted, meta")
+    .eq("owner_id", userId)
+    .not("token_encrypted", "is", null)
+    .order("updated_at", { ascending: false })
+    .limit(50);
+
+  const rows = (data ?? []) as Array<{
+    kind?: string | null;
+    provider?: string | null;
+    token_encrypted?: string | null;
+    meta?: Record<string, unknown> | null;
+  }>;
+
+  const metaOf = (row: (typeof rows)[number]) =>
+    (row.meta ?? {}) as { baseUrl?: string; defaultModel?: string };
+
+  const findConnector = (provider: LlmKind) =>
+    rows
+      .map((row) => {
+        const r = readConnectorProvider(row);
+        return r && r.provider === provider ? { ...r, meta: metaOf(row) } : null;
+      })
+      .find(
+        (
+          x,
+        ): x is {
+          provider: LlmKind;
+          token: string;
+          meta: { baseUrl?: string; defaultModel?: string };
+        } => x !== null,
+      );
+
+  const connector = findConnector(g1Llm.provider);
+  if (!connector) return null;
+
+  return buildLlmConfig(
+    connector.provider,
+    connector.token,
+    { ...connector.meta, defaultModel: g1Llm.model },
+    g1Llm.model,
+    "capabilities.g1",
+  );
+}
+
+/** Fail closed se o wire divergir do modelo validado em G1. */
+export function assertLlmMatchesG1(wire: ResolvedLLM, g1Llm: G1ResolvedLlm): void {
+  if (wire.model !== g1Llm.model) {
+    throw new Error(
+      `LLM drift (G1): gate validou "${g1Llm.model}" mas o agente resolveu "${wire.model}". ` +
+        "Verifique API Models (/api-models) — o modelo do job DEEP deve ser o mesmo validado no gate.",
+    );
+  }
 }
 
 

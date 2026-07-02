@@ -15,6 +15,36 @@ const CDP_TIMEOUT_MS = 60_000;
 
 const BROWSER_LEVEL_PREFIXES = ["Target.", "Browser."];
 
+/** Pure helpers — testáveis sem WebSocket real (G4). */
+export function isBrowserLevelCdpMethod(method: string): boolean {
+  return BROWSER_LEVEL_PREFIXES.some((prefix) => method.startsWith(prefix));
+}
+
+export function buildCdpCommand(
+  id: number,
+  method: string,
+  params: Record<string, unknown> = {},
+  pageSessionId: string | null = null,
+): CdpMessage {
+  const msg: CdpMessage = { id, method, params };
+  if (pageSessionId && !isBrowserLevelCdpMethod(method)) {
+    msg.sessionId = pageSessionId;
+  }
+  return msg;
+}
+
+export function pickPageSessionId(
+  targets: CdpTarget[],
+  attachResults: Array<{ targetId: string; sessionId?: string }>,
+): string | null {
+  for (const target of targets) {
+    if (target.type !== "page" || !target.id) continue;
+    const match = attachResults.find((r) => r.targetId === target.id && r.sessionId);
+    if (match?.sessionId) return match.sessionId;
+  }
+  return null;
+}
+
 export type CdpMessage = {
   id?: number;
   method?: string;
@@ -61,10 +91,6 @@ export class CdpWebSocketClient {
     const h: Record<string, string> = {};
     if (this.accessToken) h["X-Access-Token"] = this.accessToken;
     return h;
-  }
-
-  private isBrowserLevel(method: string): boolean {
-    return BROWSER_LEVEL_PREFIXES.some((prefix) => method.startsWith(prefix));
   }
 
   async connect(): Promise<void> {
@@ -234,10 +260,12 @@ export class CdpWebSocketClient {
   ): Promise<unknown> {
     await this.connect();
     const id = this.nextId++;
-    const msg: CdpMessage = { id, method, params };
-
-    const sid = sessionId ?? (this.isBrowserLevel(method) ? undefined : this.pageSessionId ?? undefined);
-    if (sid) msg.sessionId = sid;
+    const msg = buildCdpCommand(
+      id,
+      method,
+      params,
+      sessionId ?? this.pageSessionId,
+    );
 
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {

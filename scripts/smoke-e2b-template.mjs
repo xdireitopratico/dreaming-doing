@@ -50,10 +50,22 @@ async function main() {
 
   // 4. Run executor (default template)
   const executor = readFileSync(resolve(process.cwd(), "src/inngest/executor/run-design-dna.ts"), "utf8");
-  log("executor uses custom template by default", /dreaming-doing-chromium/.test(executor));
+  const sandboxModule = readFileSync(
+    resolve(process.cwd(), "src/inngest/executor/design-dna-sandbox.ts"),
+    "utf8",
+  );
+  log(
+    "executor uses custom template by default",
+    /dreaming-doing-chromium/.test(sandboxModule),
+  );
   log("executor skips runtime playwright install (uses template)", !executor.includes("npm install playwright"));
   log("executor uses ensurePreview (G4)", /ensurePreview/.test(executor));
   log("executor does not use CDP port as previewUrl", !/PREVIEW_PORT\s*=\s*9222/.test(executor));
+  log("executor uses job-scoped sandbox", /ensureDesignDnaSandbox/.test(executor));
+  log("executor does not reuse global sandbox query", !/order\("started_at"/.test(executor));
+  const sandbox = readFileSync(resolve(process.cwd(), "src/inngest/executor/design-dna-sandbox.ts"), "utf8");
+  log("sandbox module scopes reuse to job sandbox_id", /resolveJobScopedSandboxId/.test(sandbox));
+  log("sandbox module avoids cross-job query", !/design_dna_jobs/.test(sandbox));
 
   console.log(`\n=== Result: ${passed} passed, ${failed} failed ===\n`);
   process.exit(failed > 0 ? 1 : 0);

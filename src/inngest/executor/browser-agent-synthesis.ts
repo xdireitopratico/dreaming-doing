@@ -1,4 +1,5 @@
 import type { BrowserAgentStep } from "./browser-agent-state";
+import type { AgentLlmCallFn } from "./browser-agent-llm";
 
 export type SynthesizedDNA = {
   name: string;
@@ -19,7 +20,12 @@ export type SynthesizedDNA = {
   extracted_at: string;
 };
 
-export type LlmCallFn = (messages: Array<{ role: string; content: string }>) => Promise<{ content: string }>;
+function resolveSynthesisScreenshot(steps: BrowserAgentStep[]): string {
+  const shot = [...steps].reverse().find((s) => s.observation.screenshot);
+  if (!shot?.observation.screenshot) return "";
+  const raw = shot.observation.screenshot;
+  return raw.startsWith("data:") ? raw : `data:image/png;base64,${raw}`;
+}
 
 export function buildSynthesisPrompt(
   url: string,
@@ -81,13 +87,11 @@ export async function synthesizeDesignDNA(
   steps: BrowserAgentStep[],
   url: string,
   categories: string[],
-  callLlm: LlmCallFn,
+  callLlm: AgentLlmCallFn,
 ): Promise<SynthesizedDNA> {
   const prompt = buildSynthesisPrompt(url, categories, steps);
-  const response = await callLlm([
-    { role: "system", content: prompt },
-    { role: "user", content: "Sintetize o Design DNA final." },
-  ]);
+  const screenshot = resolveSynthesisScreenshot(steps);
+  const response = await callLlm(prompt, "Sintetize o Design DNA final.", screenshot);
 
   const parsed = safeJsonParse(response.content) ?? {};
 

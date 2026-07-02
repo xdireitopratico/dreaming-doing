@@ -117,11 +117,20 @@ export function evaluateLibraryPersistEligibility(
   return { ok: true, dna };
 }
 
+const VALIDATION_PASS_SCORE = 40;
+
+export function isDnaStructurallyValidated(dnaResult: DesignDnaExtractionResult): boolean {
+  if (dnaResult.validationRejected) return false;
+  if (typeof dnaResult.validationScore !== "number") return false;
+  return dnaResult.validationScore >= VALIDATION_PASS_SCORE;
+}
+
 export function buildLibraryUpsertRow(
   ctx: LibraryPersistContext,
   dna: Record<string, unknown>,
   dnaResult: DesignDnaExtractionResult,
 ): Record<string, unknown> {
+  const validated = isDnaStructurallyValidated(dnaResult);
   return {
     name: (dna.name as string) || ctx.url,
     source_url: ctx.url,
@@ -135,7 +144,7 @@ export function buildLibraryUpsertRow(
     quality_source:
       (dna.quality_source as string) ||
       (ctx.depth === "deep" ? "deep_extraction" : "shallow_extraction"),
-    validated: false,
+    validated,
     raw_markdown: dnaResult.rawMarkdown,
     clean_markdown: dnaResult.cleanMarkdown,
     raw_html: dnaResult.rawHtml,
@@ -277,9 +286,13 @@ export function resolveJobTerminalStatus(input: {
     return { status: "completed", ok: true };
   }
 
+  // G2 rigoroso: spec §4.2 — completed ou failed; sucesso parcial = failed auditável
+  const partialMsg =
+    firstError ??
+    `Apenas ${libraryPersistedCount}/${urlsTotal} URL(s) persistidas na Design Library.`;
   return {
-    status: "partial",
-    ok: true,
-    jobError: firstError,
+    status: "failed",
+    ok: false,
+    jobError: partialMsg,
   };
 }
