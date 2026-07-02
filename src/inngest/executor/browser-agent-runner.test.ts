@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { snapshotExtractionScope } from "@/lib/agent-deep-capture-contract";
 import { runBrowserAgent } from "./browser-agent-runner";
 import { createAgentContext } from "./browser-agent-state";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -82,6 +83,7 @@ describe("runBrowserAgent", () => {
       sandboxId: "sb-1",
       sandboxAccessToken: "token",
       maxSteps: 5,
+      extractionScope: snapshotExtractionScope(["hero"]),
     });
 
     const result = await runBrowserAgent(
@@ -123,6 +125,7 @@ describe("runBrowserAgent", () => {
       sandboxId: "sb-1",
       sandboxAccessToken: "token",
       maxSteps: 5,
+      extractionScope: snapshotExtractionScope(["hero"]),
     });
 
     const result = await runBrowserAgent(ctx, {} as SupabaseClient, tools as any, planner, synthesizer, async () => [], async () => {});
@@ -171,6 +174,7 @@ describe("runBrowserAgent", () => {
       sandboxId: "sb-1",
       sandboxAccessToken: "token",
       maxSteps: 5,
+      extractionScope: snapshotExtractionScope(["hero"]),
     });
 
     const fetchInstructions = vi.fn().mockResolvedValue([

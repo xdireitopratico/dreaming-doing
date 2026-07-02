@@ -29,9 +29,20 @@ export function buildAgentPrompt(ctx: BrowserAgentContext, screenshotBase64?: st
 
   const pendingInstructions = ctx.instructions.filter((i) => i.status === "pending");
 
+  const scope = ctx.extractionScope;
+
   return `Você é um agente de design que explora sites no browser para extrair Design DNA de alta qualidade.
 
 OBJETIVO: analisar ${ctx.url} nas categorias: ${ctx.categories.join(", ")}.
+
+ESCOPO (level ${scope.level}):
+- intent: ${scope.intent}
+- pages: ${scope.pages}
+- folds: ${scope.folds}
+- viewports: ${scope.viewports.join(", ")}
+- min captures: ${scope.capturePolicy.minQualifiedCaptures}
+${scope.pageUrls?.length ? `- extra pages: ${scope.pageUrls.join(", ")}` : ""}
+${scope.excludeSelectors?.length ? `- ignore: ${scope.excludeSelectors.join(", ")}` : ""}
 
 FERRAMENTAS CDP disponíveis (escolha UMA por ciclo):
 ${toolList.map((t) => `- ${t.name}: ${JSON.stringify(t.params)} — ${t.use}`).join("\n")}

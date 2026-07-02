@@ -8,6 +8,7 @@ import {
   parseOperationPreferences,
   snapshotOperation,
 } from "../_shared/agent-contract-operation.ts";
+import { snapshotExtractionScope } from "../_shared/agent-contract-deep-capture.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": forgeOrigin(),
@@ -246,7 +247,13 @@ async function handleSchedule(
       current_url_index: 0,
       results: [],
       errors: [],
-      meta: { ingestKind, operation: operationMeta },
+      meta: {
+        ingestKind,
+        operation: operationMeta,
+        ...(normalizedDepth === "deep"
+          ? { scope: snapshotExtractionScope(categories) }
+          : {}),
+      },
     })
     .select("id")
     .single();

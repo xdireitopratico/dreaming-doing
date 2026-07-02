@@ -6,6 +6,7 @@ import type {
   AgentObservation,
   UserInstruction,
 } from "./browser-agent-state";
+import type { ExtractionScope } from "@/lib/agent-deep-capture-contract";
 import { addStep, isCycleDetected } from "./browser-agent-state";
 import type { AgentPlan } from "./browser-agent-llm";
 import type { SynthesizedDNA } from "./browser-agent-synthesis";
@@ -176,6 +177,7 @@ export async function runBrowserAgent(
   synthesizer: SynthesizerFn,
   fetchInstructions: FetchInstructionsFn,
   markConsumed: MarkInstructionsConsumedFn,
+  resolveScope?: () => ExtractionScope,
 ): Promise<
   { ok: true; dna: SynthesizedDNA; steps: BrowserAgentStep[] } | { ok: false; error: string }
 > {
@@ -191,6 +193,10 @@ export async function runBrowserAgent(
       if (instructions.length > 0) {
         ctx = { ...ctx, instructions };
         await withTimeout(markConsumed(ctx.jobId), STEP_TIMEOUT_MS, "markConsumed");
+      }
+
+      if (resolveScope) {
+        ctx = { ...ctx, extractionScope: resolveScope() };
       }
 
       // Capture screenshot for planner vision

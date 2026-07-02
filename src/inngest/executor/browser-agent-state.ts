@@ -1,6 +1,7 @@
 // src/inngest/executor/browser-agent-state.ts
 
 import { sanitizeObservationForEvidence } from "./deep-capture/sanitize";
+import type { ExtractionScope } from "@/lib/agent-deep-capture-contract";
 
 export type AgentAction =
   | { type: "navigate"; params: { url: string } }
@@ -61,6 +62,7 @@ export type BrowserAgentContext = {
   sandboxId: string;
   sandboxAccessToken: string | null;
   maxSteps: number;
+  extractionScope: ExtractionScope;
   steps: BrowserAgentStep[];
   dnaPartial: Record<string, unknown>;
   instructions: UserInstruction[];

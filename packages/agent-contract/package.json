@@ -9,7 +9,8 @@
     ".": "./src/index.ts",
     "./events": "./src/events.ts",
     "./lifecycle": "./src/lifecycle.ts",
-    "./operation": "./src/operation.ts"
+    "./operation": "./src/operation.ts",
+    "./deep-capture": "./src/deep-capture.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

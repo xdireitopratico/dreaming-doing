@@ -38,6 +38,16 @@ import {
   type RunOperationMeta,
 } from "@/lib/agent-operation-contract";
 import { postDesignDnaOperationReport } from "./design-dna-operation-report.ts";
+import {
+  parseExtractionScope,
+  snapshotExtractionScope,
+  type ExtractionScope,
+} from "@/lib/agent-deep-capture-contract";
+import {
+  mergeExtractionScope,
+  parseScopeFromInstruction,
+  summarizeScopeChanges,
+} from "./deep-capture/scope-parser.ts";
 
 const OPERATION_RESUME_BUFFER_MS = 120_000;
 
@@ -145,6 +155,10 @@ export async function executeDesignDnaJob(
       ? currentMeta.ingestKind.trim()
       : "production";
   currentMeta.ingestKind = ingestKind;
+  let extractionScope: ExtractionScope = parseExtractionScope(currentMeta.scope, categories);
+  if (depth === "deep") {
+    currentMeta.scope = extractionScope;
+  }
   const operationMeta: RunOperationMeta =
     parseRunOperationMeta(currentMeta.operation) ?? {
       mode: "cooperative",
@@ -272,6 +286,10 @@ export async function executeDesignDnaJob(
 
     currentMeta.progress = 15;
 
+    if (!currentMeta.scope) {
+      currentMeta.scope = snapshotExtractionScope(categories);
+      extractionScope = currentMeta.scope as ExtractionScope;
+    }
     await supabase
       .from("design_dna_jobs")
       .update({ sandbox_id: sandboxId, meta: currentMeta })
@@ -374,12 +392,13 @@ export async function executeDesignDnaJob(
         const agentCtx = createAgentContext({
           jobId,
           url,
-          categories: categories as string[],
+          categories: extractionScope.categories,
           depth: "deep",
           userId,
           sandboxId,
           sandboxAccessToken,
           maxSteps: 25,
+          extractionScope,
         });
 
         const tools = createDefaultCdpTools();
@@ -391,6 +410,23 @@ export async function executeDesignDnaJob(
         const synthesizer = async (steps: BrowserAgentStep[], u: string, cats: string[]) =>
           synthesizeDesignDNA(steps, u, cats, visionLlm);
 
+        const applyScopeFromInstructions = async (
+          instructions: Array<{ content: string }>,
+        ): Promise<void> => {
+          for (const inst of instructions) {
+            const patch = parseScopeFromInstruction(inst.content);
+            if (!patch) continue;
+            const before = extractionScope;
+            extractionScope = mergeExtractionScope(extractionScope, patch);
+            currentMeta.scope = extractionScope;
+            await supabase.from("design_dna_jobs").update({ meta: currentMeta }).eq("id", jobId);
+            await appendJobEvent(supabase, jobId, "scope_updated", {
+              changes: summarizeScopeChanges(before, extractionScope),
+              scope: extractionScope,
+            });
+          }
+        };
+
         const fetchInstructions = async (id: string) => {
           const { data } = await serviceClient
             .from("design_dna_instructions")
@@ -398,13 +434,15 @@ export async function executeDesignDnaJob(
             .eq("job_id", id)
             .eq("status", "pending")
             .order("created_at", { ascending: true });
-          return (data ?? []).map((row: Record<string, unknown>) => ({
+          const instructions = (data ?? []).map((row: Record<string, unknown>) => ({
             id: row.id as string,
             role: row.role as "user" | "system",
             content: row.content as string,
             status: row.status as "pending" | "consumed" | "canceled",
             createdAt: row.created_at as string,
           }));
+          await applyScopeFromInstructions(instructions);
+          return instructions;
         };
 
         const markConsumed = async (id: string) => {
@@ -423,6 +461,7 @@ export async function executeDesignDnaJob(
           synthesizer,
           fetchInstructions,
           markConsumed,
+          () => extractionScope,
         );
 
         if (!agentResult.ok) {

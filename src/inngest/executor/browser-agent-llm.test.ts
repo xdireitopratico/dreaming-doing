@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { snapshotExtractionScope } from "@/lib/agent-deep-capture-contract";
 import { runAgentPlanningStep, buildAgentPrompt } from "./browser-agent-llm";
 import type { BrowserAgentContext } from "./browser-agent-state";
 
@@ -11,6 +12,7 @@ const baseCtx = {
   sandboxId: "sb-1",
   sandboxAccessToken: "token",
   maxSteps: 10,
+  extractionScope: snapshotExtractionScope(["hero", "motion"]),
   steps: [],
   dnaPartial: {},
   instructions: [],
@@ -24,6 +26,8 @@ describe("buildAgentPrompt", () => {
     expect(prompt).toContain("motion");
     expect(prompt).toContain("navigate");
     expect(prompt).toContain("analyze");
+    expect(prompt).toContain("ESCOPO");
+    expect(prompt).toContain("level 7");
     expect(prompt).toContain("Responda APENAS com o JSON");
   });
 

@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { snapshotExtractionScope } from "@/lib/agent-deep-capture-contract";
 import {
   createAgentContext,
   addStep,
@@ -16,6 +17,7 @@ const baseCtx = {
   sandboxId: "sb-1",
   sandboxAccessToken: "token",
   maxSteps: 10,
+  extractionScope: snapshotExtractionScope(["hero", "motion"]),
 };
 
 describe("createAgentContext", () => {

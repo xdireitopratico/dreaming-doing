@@ -20,6 +20,8 @@ await esbuild.build({
     "@forge/agent-contract/lifecycle": resolve(root, "packages/agent-contract/src/lifecycle.ts"),
     "@forge/agent-contract/events": resolve(root, "packages/agent-contract/src/events.ts"),
     "@forge/agent-contract/operation": resolve(root, "packages/agent-contract/src/operation.ts"),
+    "@forge/agent-contract/deep-capture": resolve(root, "packages/agent-contract/src/deep-capture.ts"),
+    "@/lib/agent-deep-capture-contract": resolve(root, "src/lib/agent-deep-capture-contract.ts"),
     "@forge/agent-contract": resolve(root, "packages/agent-contract/src/index.ts"),
     "@/lib/agent-operation-contract": resolve(root, "src/lib/agent-operation-contract.ts"),
     "@/lib/error-utils": resolve(root, "src/lib/error-utils.ts"),
