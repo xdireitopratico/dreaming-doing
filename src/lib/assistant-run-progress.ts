@@ -192,6 +192,34 @@ function timelineFromMeta(meta: Record<string, unknown>): SSEEvent[] {
   return [];
 }
 
+function contextUsageFromTimeline(timeline: SSEEvent[]): AgentProgress["contextUsage"] | undefined {
+  let usage: AgentProgress["contextUsage"] | undefined;
+
+  for (const ev of timeline) {
+    if (ev.type === "context_usage") {
+      usage = {
+        usageTokens: typeof ev.data.usageTokens === "number" ? ev.data.usageTokens : 0,
+        windowTokens: typeof ev.data.windowTokens === "number" ? ev.data.windowTokens : 0,
+        percent: typeof ev.data.percent === "number" ? ev.data.percent : 0,
+        mode: ev.data.mode === "auto" ? "auto" : "manual",
+        compacting: ev.data.compacting === true,
+      };
+      continue;
+    }
+    if (ev.type === "context_compact_done" && usage) {
+      usage = {
+        ...usage,
+        usageTokens:
+          typeof ev.data.afterTokens === "number" ? ev.data.afterTokens : usage.usageTokens,
+        percent: typeof ev.data.percentAfter === "number" ? ev.data.percentAfter : usage.percent,
+        compacting: false,
+      };
+    }
+  }
+
+  return usage;
+}
+
 function asPlanSteps(raw: unknown): PlanStep[] {
   if (!Array.isArray(raw)) return [];
   return raw.filter((s) => s && typeof s === "object") as PlanStep[];
@@ -296,6 +324,10 @@ function progressFromCardSnapshot(snap: Record<string, unknown>, msg: ChatMessag
       : typeof snap.latencyThoughtMs === "number" && snap.latencyThoughtMs > 0
         ? snap.latencyThoughtMs
         : null;
+  const contextUsage =
+    (snap.contextUsage && typeof snap.contextUsage === "object"
+      ? (snap.contextUsage as AgentProgress["contextUsage"])
+      : null) ?? contextUsageFromTimeline(timeline);
 
   return {
     ...initialAgentProgress,
@@ -330,6 +362,7 @@ function progressFromCardSnapshot(snap: Record<string, unknown>, msg: ChatMessag
     clarifyQuestions: Array.isArray(snap.clarifyQuestions)
       ? (snap.clarifyQuestions as AgentProgress["clarifyQuestions"])
       : undefined,
+    contextUsage: contextUsage ?? undefined,
   };
 }
 
@@ -368,6 +401,10 @@ export function progressFromAssistantMessage(msg: ChatMessage): AgentProgress | 
       : typeof meta.latencyThoughtMs === "number" && meta.latencyThoughtMs > 0
         ? meta.latencyThoughtMs
         : null;
+  const contextUsage =
+    (meta.contextUsage && typeof meta.contextUsage === "object"
+      ? (meta.contextUsage as AgentProgress["contextUsage"])
+      : null) ?? undefined;
 
   const finishedAt = typeof meta.finishedAt === "string";
   const deliveryFiles = Array.isArray(meta.deliveryFiles) ? (meta.deliveryFiles as string[]) : [];
@@ -399,9 +436,7 @@ export function progressFromAssistantMessage(msg: ChatMessage): AgentProgress | 
   const planPending = storedPlan?.status === "pending" ? storedPlan.plan : null;
 
   const narrationText =
-    typeof meta.narrationText === "string" && meta.narrationText.trim()
-      ? meta.narrationText
-      : null;
+    typeof meta.narrationText === "string" && meta.narrationText.trim() ? meta.narrationText : null;
 
   return {
     ...initialAgentProgress,
@@ -415,6 +450,7 @@ export function progressFromAssistantMessage(msg: ChatMessage): AgentProgress | 
     streamText: body,
     narrationText,
     workingDurationMs: metaDuration,
+    contextUsage,
     summary: null,
     deliveryFiles,
     pendingPlan: planPending,

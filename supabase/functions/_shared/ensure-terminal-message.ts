@@ -20,6 +20,8 @@ const TIMELINE_TYPES = new Set([
   "validate_ok",
   "validate_fail",
   "file_diff",
+  "context_usage",
+  "context_compact_done",
   "done",
   "finish",
   "timeout_warning",

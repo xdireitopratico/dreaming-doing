@@ -9,16 +9,11 @@ import { logger } from "../../../_shared/logger.ts";
 import { capMetaSize } from "../loop-config.ts";
 import {
   buildCardSnapshot,
+  type PersistContextUsage,
   type BuildCardSnapshotOpts,
 } from "./snapshot.ts";
 import type { CanonicalBuildSession } from "../build-session.ts";
-import type {
-  AgentState,
-  ChatResponse,
-  ProposedPlan,
-  ToolCall,
-  ToolResult,
-} from "../../types.ts";
+import type { AgentState, ChatResponse, ProposedPlan, ToolCall, ToolResult } from "../../types.ts";
 import { LoopPhase } from "../../types.ts";
 
 export const CHECKPOINT_INTERVAL_STEPS = 2;
@@ -37,7 +32,7 @@ export type PersistFinalOpts = {
     multiple?: boolean;
     choices: Array<{ id: string; label: string; description?: string }>;
   }>;
-  finished?: boolean;  // allow resumable/early terminal messages to not force finished:true on card (AC1 + resumable semantics)
+  finished?: boolean; // allow resumable/early terminal messages to not force finished:true on card (AC1 + resumable semantics)
 };
 
 export type AgentPersistDeps = {
@@ -56,6 +51,7 @@ export type AgentPersistDeps = {
   getLastCheckpointStep: () => number;
   setLastCheckpointStep: (step: number) => void;
   getBuildSession: () => CanonicalBuildSession | null;
+  getContextUsage: () => PersistContextUsage | null;
   getDirectiveEmitted: () => boolean;
   getValidationGeneration: () => number;
   getOperationStartedAt: () => string;
@@ -76,6 +72,7 @@ function cardSnapshotForPersist(
     maxStepsLimit: deps.getMaxStepsLimit(),
     buildSession: deps.getBuildSession(),
     opts,
+    contextUsage: deps.getContextUsage(),
   });
 }
 
@@ -86,9 +83,7 @@ async function touchProjectUpdatedAt(deps: AgentPersistDeps): Promise<void> {
     .eq("id", deps.state.projectId);
 }
 
-export async function resolveExistingRunMessageId(
-  deps: AgentPersistDeps,
-): Promise<string | null> {
+export async function resolveExistingRunMessageId(deps: AgentPersistDeps): Promise<string | null> {
   const cached = deps.getLastRunMessageId();
   if (cached) return cached;
   if (!deps.runId) return null;

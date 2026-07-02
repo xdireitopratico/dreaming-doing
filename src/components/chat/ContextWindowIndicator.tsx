@@ -30,48 +30,6 @@ type ContextWindowIndicatorProps = {
   running?: boolean;
 };
 
-type CachedContextUsage = {
-  usageTokens: number;
-  windowTokens: number;
-  percent: number;
-  compacting: boolean;
-};
-
-const CONTEXT_USAGE_CACHE_KEY = "forge:context-usage:last";
-
-function readCachedContextUsage(): CachedContextUsage | null {
-  if (typeof sessionStorage === "undefined") return null;
-  try {
-    const raw = sessionStorage.getItem(CONTEXT_USAGE_CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<CachedContextUsage>;
-    if (
-      typeof parsed.usageTokens === "number" &&
-      typeof parsed.windowTokens === "number" &&
-      typeof parsed.percent === "number"
-    ) {
-      return {
-        usageTokens: parsed.usageTokens,
-        windowTokens: parsed.windowTokens,
-        percent: Math.max(0, Math.min(100, parsed.percent)),
-        compacting: parsed.compacting === true,
-      };
-    }
-  } catch {
-    // ignore
-  }
-  return null;
-}
-
-function writeCachedContextUsage(value: CachedContextUsage) {
-  if (typeof sessionStorage === "undefined") return;
-  try {
-    sessionStorage.setItem(CONTEXT_USAGE_CACHE_KEY, JSON.stringify(value));
-  } catch {
-    // ignore
-  }
-}
-
 function readContextPrefs(prefs: AgentPreferences) {
   return {
     mode: prefs.contextWindow?.mode ?? "manual",
@@ -99,9 +57,6 @@ export function ContextWindowIndicator({
   const [saving, setSaving] = useState(false);
   const [compactPending, setCompactPending] = useState(false);
   const [lastKnownPercent, setLastKnownPercent] = useState(0);
-  const [cachedUsage, setCachedUsage] = useState<CachedContextUsage | null>(() =>
-    readCachedContextUsage(),
-  );
 
   useEffect(() => {
     setPrefs(readContextPrefs(loadAgentPreferences()));
@@ -112,11 +67,10 @@ export function ContextWindowIndicator({
     rawPrefs.mode === "robin" ? rawPrefs.robinPoolModelId : rawPrefs.fixedPresetId,
     rawPrefs.userModelEntries,
   ).label;
-  const visibleUsage = contextUsage ?? cachedUsage;
-  const usagePercent = visibleUsage?.percent;
-  const usageTokens = visibleUsage?.usageTokens;
-  const windowTokens = visibleUsage?.windowTokens;
-  const isServerCompacting = visibleUsage?.compacting === true;
+  const usagePercent = contextUsage?.percent;
+  const usageTokens = contextUsage?.usageTokens;
+  const windowTokens = contextUsage?.windowTokens;
+  const isServerCompacting = contextUsage?.compacting === true;
 
   const fillPercent = useMemo(() => {
     if (isServerCompacting || compactPending) return 100;
@@ -132,20 +86,8 @@ export function ContextWindowIndicator({
     }
   }, [usagePercent]);
 
-  useEffect(() => {
-    if (!contextUsage) return;
-    const snapshot = {
-      usageTokens: contextUsage.usageTokens,
-      windowTokens: contextUsage.windowTokens,
-      percent: Math.max(0, Math.min(100, contextUsage.percent)),
-      compacting: contextUsage.compacting,
-    };
-    setCachedUsage(snapshot);
-    writeCachedContextUsage(snapshot);
-  }, [contextUsage]);
-
-  const isCompacting = visibleUsage?.compacting === true || compactPending;
-  const percentLabel = visibleUsage || isCompacting ? `${Math.round(fillPercent)}%` : "—";
+  const isCompacting = contextUsage?.compacting === true || compactPending;
+  const percentLabel = contextUsage || isCompacting ? `${Math.round(fillPercent)}%` : "—";
   const usageLabel =
     typeof usageTokens === "number" && typeof windowTokens === "number"
       ? `${formatTokenCount(usageTokens)} / ${formatTokenCount(windowTokens)}`

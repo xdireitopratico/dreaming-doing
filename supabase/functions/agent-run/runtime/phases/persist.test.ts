@@ -71,6 +71,10 @@ function mockPersistDeps(overrides?: Partial<AgentPersistDeps>): AgentPersistDep
       lastCheckpointStep = step;
     },
     getBuildSession: () => null,
+    getContextUsage: () => null,
+    getDirectiveEmitted: () => false,
+    getValidationGeneration: () => 0,
+    getOperationStartedAt: () => "",
     emit: () => {},
     upserts,
     inserts,

@@ -126,6 +126,50 @@ describe("assistant-run-progress", () => {
     expect(p?.deliveryFiles).toEqual(["src/App.tsx"]);
   });
 
+  it("cardSnapshot reidrata contextUsage a partir da timeline", () => {
+    const msg: ChatMessage = {
+      id: "a1",
+      role: "assistant",
+      content: "Janela atualizada.",
+      timestamp: 0,
+      meta: {
+        runId: "run-ctx",
+        partial: false,
+        finishedAt: "2026-01-01T00:00:00Z",
+        cardSnapshot: {
+          timeline: [
+            {
+              type: "context_usage",
+              data: {
+                usageTokens: 64000,
+                windowTokens: 128000,
+                percent: 50,
+                mode: "auto",
+                compacting: false,
+              },
+              timestamp: 1,
+            },
+            {
+              type: "context_compact_done",
+              data: { afterTokens: 32000, percentAfter: 25, windowTokens: 128000 },
+              timestamp: 2,
+            },
+          ],
+          tools: [],
+          diffs: [],
+          finished: true,
+        },
+      },
+    };
+
+    const p = progressFromAssistantMessage(msg);
+    expect(p?.contextUsage?.usageTokens).toBe(32000);
+    expect(p?.contextUsage?.windowTokens).toBe(128000);
+    expect(p?.contextUsage?.percent).toBe(25);
+    expect(p?.contextUsage?.mode).toBe("auto");
+    expect(p?.contextUsage?.compacting).toBe(false);
+  });
+
   it("cardSnapshot com awaitingKind clarify restaura gate pós-F5", () => {
     const msg: ChatMessage = {
       id: "a1",
@@ -298,7 +342,11 @@ describe("assistant-run-progress", () => {
         cardSnapshot: {
           timeline: [
             { type: "explore", data: { message: "DB rico 1" }, timestamp: 1 },
-            { type: "tool_start", data: { name: "fs_write", args: { path: "a.tsx" } }, timestamp: 2 },
+            {
+              type: "tool_start",
+              data: { name: "fs_write", args: { path: "a.tsx" } },
+              timestamp: 2,
+            },
           ],
           tools: [],
           finished: true,
@@ -373,7 +421,11 @@ describe("assistant-run-progress", () => {
         partial: false,
         finishedAt: "2026-01-01T00:00:00Z",
         streamTail: [
-          { type: "tool_start", data: { name: "fs_write", args: { path: "src/App.tsx" } }, timestamp: 1 },
+          {
+            type: "tool_start",
+            data: { name: "fs_write", args: { path: "src/App.tsx" } },
+            timestamp: 1,
+          },
           { type: "tool_end", data: { name: "fs_write", ok: true }, timestamp: 2 },
         ],
         cardSnapshot: { timeline: [], tools: [], finished: true, streamText: "Landing criada." },
@@ -394,9 +446,7 @@ describe("assistant-run-progress", () => {
         runId: "run-reload",
         partial: false,
         finishedAt: "2026-01-01T00:00:00Z",
-        streamTail: [
-          { type: "explore", data: { message: "Lendo projeto" }, timestamp: 1 },
-        ],
+        streamTail: [{ type: "explore", data: { message: "Lendo projeto" }, timestamp: 1 }],
         cardSnapshot: { timeline: [], tools: [], finished: true },
       },
     };

@@ -44,6 +44,7 @@ import type {
   PlanTurnFinishDeps,
   PlanTurnRunResult,
 } from "./phases/plan-turn.ts";
+import type { PersistContextUsage } from "./phases/snapshot.ts";
 import type { AgentLoopMutableState } from "./loop-mutable-state.ts";
 import type { CanonicalBuildSession } from "./build-session.ts";
 
@@ -303,6 +304,16 @@ export function buildPersistDeps(ctx: AgentLoopDepsContext): AgentPersistDeps {
     getLastCheckpointStep: ctx.getLastCheckpointStep,
     setLastCheckpointStep: ctx.setLastCheckpointStep,
     getBuildSession: ctx.getBuildSession,
+    getContextUsage: () => {
+      const snap = ctx.compression.measure(ctx.state.messages);
+      return {
+        usageTokens: snap.usageTokens,
+        windowTokens: snap.windowTokens,
+        percent: Math.round(snap.percent * 10) / 10,
+        mode: ctx.compression.getPolicy().mode,
+        compacting: ctx.compression.isCompacting(),
+      } satisfies PersistContextUsage;
+    },
     getDirectiveEmitted: ctx.getDirectiveEmitted,
     getValidationGeneration: ctx.getValidationGeneration,
     getOperationStartedAt: ctx.getOperationStartedAt,
@@ -397,7 +408,8 @@ export function buildExecuteDeps(
     emit: ctx.emit,
     platformLimitExceeded: ctx.platformLimitExceeded,
     pauseOperationForUser: ctx.pauseOperationForUser,
-    runDesignPreflightIfNeeded: ctx.runDesignPreflightIfNeeded as BuildExecuteDeps["runDesignPreflightIfNeeded"],
+    runDesignPreflightIfNeeded:
+      ctx.runDesignPreflightIfNeeded as BuildExecuteDeps["runDesignPreflightIfNeeded"],
     requiresFinalBuildGate: ctx.requiresFinalBuildGate,
     enabledApprovedPlanSteps: ctx.enabledApprovedPlanSteps,
     isCanceled: ctx.isCanceled,
@@ -420,10 +432,7 @@ export function buildExecuteDeps(
   };
 }
 
-export function buildPlanTurnDeps(
-  ctx: AgentLoopDepsContext,
-  skillPrompt: string,
-): PlanTurnDeps {
+export function buildPlanTurnDeps(ctx: AgentLoopDepsContext, skillPrompt: string): PlanTurnDeps {
   return {
     ...buildPlanTurnFinishDeps(ctx),
     robinActive: ctx.robinActive,
@@ -558,10 +567,7 @@ export type LoopBindings = {
   planTurnFinish: () => PlanTurnFinishDeps;
 };
 
-export function createLoopBindings(
-  host: AgentLoopHost,
-  invocationStartedAt: number,
-): LoopBindings {
+export function createLoopBindings(host: AgentLoopHost, invocationStartedAt: number): LoopBindings {
   const deps = () => createDepsContext(host, invocationStartedAt);
   const persistDeps = () => buildPersistDeps(deps());
   const infraDeps = () => buildInfraDeps(deps(), invocationStartedAt);

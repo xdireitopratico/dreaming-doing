@@ -2,6 +2,14 @@
 import type { ProposedPlan } from "../../types.ts";
 import type { CanonicalBuildSession } from "../build-session.ts";
 
+export type PersistContextUsage = {
+  usageTokens: number;
+  windowTokens: number;
+  percent: number;
+  mode: "manual" | "auto";
+  compacting: boolean;
+};
+
 export type StreamTimelineEntry = {
   type: string;
   data: Record<string, unknown>;
@@ -93,6 +101,7 @@ export type BuildCardSnapshotOpts = {
     multiple?: boolean;
     choices: Array<{ id: string; label: string; description?: string }>;
   }>;
+  contextUsage?: PersistContextUsage | null;
 };
 
 export type BuildCardSnapshotContext = {
@@ -106,6 +115,7 @@ export type BuildCardSnapshotContext = {
   buildSession: CanonicalBuildSession | null;
   opts: BuildCardSnapshotOpts;
   now?: number;
+  contextUsage?: PersistContextUsage | null;
 };
 
 export function buildCardSnapshot(ctx: BuildCardSnapshotContext): Record<string, unknown> {
@@ -145,6 +155,7 @@ export function buildCardSnapshot(ctx: BuildCardSnapshotContext): Record<string,
     terminalState: ctx.buildSession?.phase ?? null,
     checks: ctx.buildSession?.checks ?? [],
     logs: ctx.buildSession?.logs ?? [],
+    contextUsage: ctx.contextUsage ?? opts.contextUsage ?? undefined,
   };
 
   if (opts.pendingPlan) {
