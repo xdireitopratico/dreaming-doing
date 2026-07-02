@@ -55,6 +55,27 @@ describe("isCycleDetected", () => {
 });
 
 describe("formatStepsForPrompt", () => {
+  it("omits large base64 from observations (G-CAP-1)", () => {
+    const huge = "iVBORw0KGgo" + "a".repeat(5000);
+    const steps: BrowserAgentStep[] = [
+      {
+        stepNumber: 1,
+        thought: "capture hero",
+        action: { type: "screenshot", params: { fullPage: true } },
+        observation: {
+          type: "screenshot",
+          url: "https://example.com",
+          screenshot: huge,
+          result: { base64: huge },
+        },
+        timestamp: new Date().toISOString(),
+      },
+    ];
+    const prompt = formatStepsForPrompt(steps);
+    expect(prompt).toContain("omitted");
+    expect(prompt).not.toContain(huge);
+  });
+
   it("limits to last N steps", () => {
     const action = { type: "get_url", params: {} };
     const steps: BrowserAgentStep[] = Array.from({ length: 12 }, (_, i) => ({

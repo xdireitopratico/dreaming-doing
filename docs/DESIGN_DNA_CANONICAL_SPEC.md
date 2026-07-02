@@ -1,8 +1,10 @@
 # SPEC CANÔNICA — Design DNA Platform
 
-**Versão:** 1.2  
+**Versão:** 1.3  
 **Status:** Fonte única de verdade do produto  
 **Substitui:** specs/plans em `docs/superpowers/*design*`, `DESIGN_DNA_EXTRACTION_PLAN.md`, e qualquer doc que trate exemplos (BrowserUse, Refero, etc.) como arquitetura fixa.
+
+**DEEP Capture (escopo, prints qualificados, Navigation Report):** `docs/DESIGN_DNA_DEEP_CAPTURE_SPEC.md` — spec filha autoguiada (gates G-CAP-0…G-CAP-8). Implementação DEEP segue o filho; macro produto permanece neste arquivo.
 
 ---
 
@@ -116,11 +118,11 @@ resolveCapabilities(userId, "deep")
 ensureSandbox(E2B template)
 ensurePreview(sandbox)              // previewUrl REAL (≠ porta CDP)
 
-runAgentLoop(CDP + vision LLM)      // explore + design_dna_instructions
-
-collectEvidence(deep)               // CDP + nosso collector (agent.py ou equivalente TS)
-
-multiPassExtractDNA(evidence)       // vision obrigatória no loop e na síntese
+runDeepExtraction()                 // ver DESIGN_DNA_DEEP_CAPTURE_SPEC.md
+  ├─ runAgentLoop(CDP + vision LLM) // explore + design_dna_instructions + scope
+  ├─ qualified captures → Storage   // design_dna_captures (sem base64 no LLM)
+  ├─ NavigationReport               // partial + final
+  └─ multiPassExtractDNA(captureIds + report)  // vision orçada por pass
 
 validateDNA()
 

@@ -1,23 +1,10 @@
-import type { AgentObservation, BrowserAgentStep } from "./browser-agent-state";
+import type { BrowserAgentStep } from "./browser-agent-state";
 import type { AgentLlmCallFn } from "./browser-agent-llm";
+import { sanitizeObservationForEvidence } from "./deep-capture/sanitize";
+
+export { sanitizeObservationForEvidence } from "./deep-capture/sanitize";
 
 const MAX_SYNTHESIS_SCREENSHOT_CHARS = 120_000;
-
-/** Evita embutir PNG base64 no prompt de texto (estoura contexto do LLM). */
-export function sanitizeObservationForEvidence(obs: AgentObservation): Record<string, unknown> {
-  const copy = { ...obs } as Record<string, unknown>;
-  if (typeof copy.screenshot === "string" && copy.screenshot.length > 80) {
-    copy.screenshot = `[screenshot omitted, ${copy.screenshot.length} chars]`;
-  }
-  if (copy.result && typeof copy.result === "object" && copy.result !== null) {
-    const result = { ...(copy.result as Record<string, unknown>) };
-    if (typeof result.base64 === "string" && result.base64.length > 80) {
-      result.base64 = `[base64 omitted, ${result.base64.length} chars]`;
-    }
-    copy.result = result;
-  }
-  return copy;
-}
 
 export type SynthesizedDNA = {
   name: string;

@@ -1,5 +1,7 @@
 // src/inngest/executor/browser-agent-state.ts
 
+import { sanitizeObservationForEvidence } from "./deep-capture/sanitize";
+
 export type AgentAction =
   | { type: "navigate"; params: { url: string } }
   | { type: "screenshot"; params: { fullPage?: boolean } }
@@ -91,7 +93,7 @@ export function formatStepsForPrompt(steps: BrowserAgentStep[], limit = 10): str
       (s) =>
         `Step ${s.stepNumber}:\nThought: ${s.thought}\nAction: ${s.action.type} ${JSON.stringify(
           s.action.params,
-        )}\nObservation: ${JSON.stringify(s.observation)}`,
+        )}\nObservation: ${JSON.stringify(sanitizeObservationForEvidence(s.observation))}`,
     )
     .join("\n\n");
 }
