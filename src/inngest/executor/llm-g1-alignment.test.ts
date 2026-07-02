@@ -6,6 +6,7 @@ describe("assertLlmMatchesG1 — Gate G1/G4 alignment", () => {
     model: "claude-sonnet-4-6",
     label: "Anthropic",
     provider: "anthropic",
+    connectorEnv: "anthropic",
     supportsVision: true,
   };
 

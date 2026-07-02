@@ -96,6 +96,20 @@ export function secretKeyForProvider(providerId: string): string | null {
   return BUILTIN_RUNTIME[p]?.secretKey ?? (p === "openai" ? "OPENAI_API_KEY" : null);
 }
 
+/** Maps PresetWire.secretKey → connectors.provider (ex.: NVIDIA_API_KEY → nvidia). */
+export function connectorEnvFromSecretKey(secretKey: string): string | null {
+  const sk = secretKey.trim();
+  if (!sk) return null;
+  for (const [env, spec] of Object.entries(BUILTIN_RUNTIME)) {
+    if (spec.secretKey === sk) return env;
+  }
+  if (sk.endsWith("_API_KEY")) {
+    const stem = sk.slice(0, -"_API_KEY".length).toLowerCase().replace(/_/g, "-");
+    return `custom-${stem}`;
+  }
+  return null;
+}
+
 /** Aplica token de connector → dict de chaves runtime (uma chave por provider). */
 export function applyOpenAiConnectorToken(
   provider: string,

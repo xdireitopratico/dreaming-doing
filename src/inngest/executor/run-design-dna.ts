@@ -163,7 +163,7 @@ export async function executeDesignDnaJob(
     );
     if (!resolvedWire) {
       const msg =
-        `Conector LLM "${capabilitiesOk.llm.provider}" indisponível para o modelo ${capabilitiesOk.llm.model}. ` +
+        `Conector LLM "${capabilitiesOk.llm.connectorEnv}" indisponível para o modelo ${capabilitiesOk.llm.model}. ` +
         "Verifique API Models (/api-models).";
       const errorRecord = { scope: "job", error: msg, code: "missing_llm" };
       errors.push(errorRecord);

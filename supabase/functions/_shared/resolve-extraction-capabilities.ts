@@ -15,7 +15,10 @@ import {
   resolveUserRobinModel,
   resolveAutoForComplexity,
   resolveModelFromPreferences,
+  resolveWireFromPresetId,
 } from "./model-presets.ts";
+import { connectorEnvFromSecretKey } from "./provider-wire.ts";
+import { normalizePresetId } from "./preset-contract.ts";
 import { modelIdSupportsVision } from "./message-parts.ts";
 import { loadUserE2bApiKey } from "./user-e2b.ts";
 
@@ -31,7 +34,10 @@ export type CapabilityFailureCode =
 export type ResolvedExtractionLlm = {
   model: string;
   label: string;
+  /** Protocolo HTTP (openai / anthropic / gemini) — não é o id do conector. */
   provider: string;
+  /** Id do conector em connectors.provider (nvidia, groq, anthropic, …). */
+  connectorEnv: string;
   supportsVision: boolean;
 };
 
@@ -78,6 +84,39 @@ function modelSupportsVision(provider: string, model: string): boolean {
   return detectVisionSupport(provider, model) || modelIdSupportsVision(model);
 }
 
+function connectorEnvFromPresetId(presetId: string | undefined): string | null {
+  const norm = normalizePresetId(presetId);
+  if (!norm) return null;
+  if (norm.startsWith("pool-groq")) return "groq";
+  if (norm.startsWith("pool-nemotron") || norm.startsWith("nvidia--")) return "nvidia";
+  const dash = norm.indexOf("--");
+  if (dash > 0) return norm.slice(0, dash);
+  return null;
+}
+
+function resolveConnectorEnv(opts: {
+  wire: { secretKey: string; provider: string };
+  poolProvider?: string;
+  presetId?: string;
+  userModels?: Array<{ slug: string; env: string; label?: string }>;
+}): string {
+  if (opts.poolProvider?.trim()) return opts.poolProvider.trim();
+  const norm = normalizePresetId(opts.presetId);
+  if (norm?.startsWith("custom--") && opts.userModels?.length) {
+    const entry = opts.userModels.find((e) => {
+      const slug = e.slug.includes("/") ? e.slug : `${e.env}/${e.slug}`;
+      const customId = `custom--${slug.replace(/\//g, "--").replace(/\./g, "-")}`;
+      return customId === norm;
+    });
+    if (entry?.env) return entry.env;
+  }
+  return (
+    connectorEnvFromPresetId(opts.presetId) ??
+    connectorEnvFromSecretKey(opts.wire.secretKey) ??
+    opts.wire.provider
+  );
+}
+
 function resolveLlmFromPreferences(
   preferences: AgentPreferencesPayload | null,
   connectorKeys: Record<string, string>,
@@ -98,10 +137,19 @@ function resolveLlmFromPreferences(
       connectorKeys,
     );
     if (!wire) return null;
+    const presetId =
+      preferences.customModelId && preferences.useCustomModel
+        ? preferences.customModelId
+        : preferences.fixedPresetId;
     return {
       model: wire.model,
       label: wire.label,
       provider: wire.provider,
+      connectorEnv: resolveConnectorEnv({
+        wire,
+        presetId,
+        userModels: preferences.userModelEntries,
+      }),
       supportsVision: modelSupportsVision(wire.provider, wire.model),
     };
   }
@@ -120,6 +168,12 @@ function resolveLlmFromPreferences(
       model: wire.model,
       label: wire.label,
       provider: wire.provider,
+      connectorEnv: resolveConnectorEnv({
+        wire,
+        poolProvider,
+        presetId: preferences.robinPoolModelId,
+        userModels: preferences.userModelEntries,
+      }),
       supportsVision: modelSupportsVision(wire.provider, wire.model),
     };
   }
@@ -136,10 +190,18 @@ function resolveLlmFromPreferences(
       preferences.userModelEntries,
     );
     if (!wire) return null;
+    const matchedPreset = allowlist
+      .map((id) => ({ id, wire: resolveWireFromPresetId(id, preferences.userModelEntries) }))
+      .find((r) => r.wire?.model === wire.model && r.wire?.secretKey === wire.secretKey);
     return {
       model: wire.model,
       label: wire.label,
       provider: wire.provider,
+      connectorEnv: resolveConnectorEnv({
+        wire,
+        presetId: matchedPreset?.id,
+        userModels: preferences.userModelEntries,
+      }),
       supportsVision: modelSupportsVision(wire.provider, wire.model),
     };
   }

@@ -4,6 +4,7 @@ import { normalizePresetId } from "@/lib/preset-contract";
 import { getPresetById } from "@/lib/model-catalog";
 import type { ModelTier } from "@/lib/model-catalog";
 import { BUILTIN_RUNTIME } from "../../../supabase/functions/_shared/provider-wire.ts";
+import { normalizeNvidiaApiModel } from "../../../supabase/functions/_shared/nvidia-model.ts";
 import {
   CATEGORY_PROMPTS,
   MASTER_EXTRACTION_PROMPT,
@@ -496,7 +497,10 @@ export async function resolveLLMConfig(
 export type G1ResolvedLlm = {
   model: string;
   label: string;
+  /** Protocolo HTTP (openai / anthropic / gemini). */
   provider: string;
+  /** Id do conector (connectors.provider): nvidia, groq, anthropic, … */
+  connectorEnv: string;
   supportsVision: boolean;
 };
 
@@ -543,14 +547,18 @@ export async function resolveLlmConfigForG1Model(
         } => x !== null,
       );
 
-  const connector = findConnector(g1Llm.provider);
+  const connectorEnv = g1Llm.connectorEnv?.trim() || g1Llm.provider;
+  const connector = findConnector(connectorEnv);
   if (!connector) return null;
+
+  const model =
+    connectorEnv === "nvidia" ? normalizeNvidiaApiModel(g1Llm.model) : g1Llm.model;
 
   return buildLlmConfig(
     connector.provider,
     connector.token,
-    { ...connector.meta, defaultModel: g1Llm.model },
-    g1Llm.model,
+    { ...connector.meta, defaultModel: model },
+    model,
     "capabilities.g1",
   );
 }

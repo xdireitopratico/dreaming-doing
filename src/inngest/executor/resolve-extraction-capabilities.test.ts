@@ -135,7 +135,29 @@ describe("evaluateExtractionCapabilities — Gate G1", () => {
     if (result.ok) {
       expect(result.depth).toBe("deep");
       expect(result.llm.supportsVision).toBe(true);
+      expect(result.llm.connectorEnv).toBe("anthropic");
       expect(result.e2bConfigured).toBe(true);
+    }
+  });
+
+  it("DEEP ROBIN NVIDIA: connectorEnv=nvidia, model NIM, provider=openai (transport)", () => {
+    const result = evaluateExtractionCapabilities({
+      depth: "deep",
+      preferences: {
+        mode: "robin",
+        poolProvider: "nvidia",
+        robinPoolModelId: "custom--nvidia--kimi-k2-6",
+        userModelEntries: [{ slug: "nvidia/kimi-k2.6", env: "nvidia" }],
+      },
+      connectorKeys: { NVIDIA_API_KEY: "nvapi-test" },
+      e2bApiKey: "e2b_test_key_12345",
+      webScrapeConnectorToken: null,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.llm.connectorEnv).toBe("nvidia");
+      expect(result.llm.provider).toBe("openai");
+      expect(result.llm.model).toBe("moonshotai/kimi-k2.6");
     }
   });
 });
