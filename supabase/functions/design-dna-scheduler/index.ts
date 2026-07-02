@@ -1,5 +1,9 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { forgeOrigin } from "../_shared/cors.ts";
+import {
+  resolveExtractionCapabilities,
+  type ExtractionDepth,
+} from "../_shared/resolve-extraction-capabilities.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": forgeOrigin(),
@@ -151,6 +155,56 @@ async function handleSchedule(
     return json({ error: "Usuário não autenticado" }, 401);
   }
 
+  const normalizedDepth: ExtractionDepth = depth === "shallow" ? "shallow" : "deep";
+
+  // Gate G1: fail closed antes de enfileirar (jobs de usuário com pré-requisitos)
+  if (userId) {
+    const capabilities = await resolveExtractionCapabilities(supabase, userId, normalizedDepth);
+    if (!capabilities.ok) {
+      const errorRecord = {
+        scope: "job",
+        error: capabilities.message,
+        code: capabilities.code,
+        missing: capabilities.missing,
+      };
+      const { data: failedJob, error: failedInsertError } = await supabase
+        .from("design_dna_jobs")
+        .insert({
+          user_id: userId,
+          status: "failed",
+          depth: normalizedDepth,
+          categories,
+          urls,
+          current_url_index: 0,
+          results: [],
+          errors: [errorRecord],
+          error: capabilities.message,
+          finished_at: new Date().toISOString(),
+          meta: { ingestKind, capabilityGate: "G1", capabilityCode: capabilities.code },
+        })
+        .select("id")
+        .single();
+
+      if (failedInsertError || !failedJob) {
+        return json(
+          { error: capabilities.message, code: capabilities.code, missing: capabilities.missing },
+          400,
+        );
+      }
+
+      return json(
+        {
+          ok: false,
+          jobId: (failedJob as Record<string, unknown>).id as string,
+          error: capabilities.message,
+          code: capabilities.code,
+          missing: capabilities.missing,
+        },
+        400,
+      );
+    }
+  }
+
   // Cancela jobs anteriores não-terminais para evitar acúmulo de zumbis
   await supabase
     .from("design_dna_jobs")
@@ -167,7 +221,7 @@ async function handleSchedule(
     .insert({
       user_id: userId,
       status: "pending",
-      depth,
+      depth: normalizedDepth,
       categories,
       urls,
       current_url_index: 0,
@@ -196,7 +250,7 @@ async function handleSchedule(
   const eventResult = await sendInngestEvent("design-dna/extract.requested", {
     jobId,
     userId,
-    depth,
+    depth: normalizedDepth,
     categories,
     urls,
     ingestKind,
