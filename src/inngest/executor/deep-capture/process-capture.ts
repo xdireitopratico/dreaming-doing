@@ -9,6 +9,12 @@ import {
   type PersistCaptureResult,
 } from "./capture-storage";
 import type { QualifyCaptureFn } from "./capture-qualify";
+import type { QualifiedCaptureRecord } from "./navigation-report";
+
+export type ProcessCaptureHooks = {
+  onQualified?: (input: QualifiedCaptureRecord) => void | Promise<void>;
+  onRejected?: () => void | Promise<void>;
+};
 
 export type ProcessCaptureResult = {
   persisted: PersistCaptureResult;
@@ -20,6 +26,7 @@ export async function processQualifiedCapture(
   ctx: BrowserAgentContext,
   qualifyFn: QualifyCaptureFn,
   input: PersistCaptureInput,
+  hooks?: ProcessCaptureHooks,
 ): Promise<ProcessCaptureResult | null> {
   const uploaded = await uploadCapturePng(supabase, input);
 
@@ -40,6 +47,7 @@ export async function processQualifiedCapture(
       reason: qualification.notes ?? "not worth keeping",
       label: qualification.label,
     });
+    await hooks?.onRejected?.();
     return null;
   }
 
@@ -55,6 +63,13 @@ export async function processQualifiedCapture(
     byteSize: persisted.byteSize,
     segmentIndex: input.segmentIndex ?? 0,
     scrollY: input.scrollY ?? 0,
+  });
+
+  await hooks?.onQualified?.({
+    pageUrl: input.pageUrl,
+    captureId: persisted.captureId,
+    label: qualification.label,
+    sectionType: qualification.sectionType,
   });
 
   return { persisted, qualification };

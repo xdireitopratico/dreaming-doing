@@ -13,7 +13,8 @@ import type { SynthesizedDNA } from "./browser-agent-synthesis";
 import { appendJobEvent } from "../functions/_shared-design-dna";
 import { captureObservationFromPersist } from "./deep-capture/capture-storage";
 import { heuristicQualification, type QualifyCaptureFn } from "./deep-capture/capture-qualify";
-import { processQualifiedCapture } from "./deep-capture/process-capture";
+import { processQualifiedCapture, type ProcessCaptureHooks } from "./deep-capture/process-capture";
+import { type NavigationReportTracker } from "./deep-capture/navigation-report";
 import { sanitizeObservationForEvidence } from "./deep-capture/sanitize";
 import {
   takeScreenshot,
@@ -55,12 +56,21 @@ export type SynthesizerFn = (
 export type FetchInstructionsFn = (jobId: string) => Promise<UserInstruction[]>;
 export type MarkInstructionsConsumedFn = (jobId: string) => Promise<void>;
 
+function captureHooks(reportTracker?: NavigationReportTracker): ProcessCaptureHooks | undefined {
+  if (!reportTracker) return undefined;
+  return {
+    onQualified: (input) => reportTracker.recordQualified(input),
+    onRejected: () => reportTracker.recordRejected(),
+  };
+}
+
 async function persistSegmentBatch(
   supabase: SupabaseClient,
   ctx: BrowserAgentContext,
   qualifyFn: QualifyCaptureFn,
   pageUrl: string,
   segments: SegmentRaw[],
+  hooks?: ProcessCaptureHooks,
 ): Promise<AgentObservation> {
   const captures: Array<{
     captureId: string;
@@ -74,14 +84,20 @@ async function persistSegmentBatch(
   }> = [];
 
   for (const seg of segments) {
-    const processed = await processQualifiedCapture(supabase, ctx, qualifyFn, {
-      jobId: ctx.jobId,
-      pageUrl,
-      pngBase64: seg.base64,
-      segmentIndex: seg.segmentIndex,
-      scrollY: seg.scrollY,
-      fullPage: true,
-    });
+    const processed = await processQualifiedCapture(
+      supabase,
+      ctx,
+      qualifyFn,
+      {
+        jobId: ctx.jobId,
+        pageUrl,
+        pngBase64: seg.base64,
+        segmentIndex: seg.segmentIndex,
+        scrollY: seg.scrollY,
+        fullPage: true,
+      },
+      hooks,
+    );
     if (!processed) continue;
     captures.push({
       captureId: processed.persisted.captureId,
@@ -110,13 +126,14 @@ async function finalizeObservation(
   qualifyFn: QualifyCaptureFn,
   action: AgentAction,
   observation: AgentObservation,
+  hooks?: ProcessCaptureHooks,
 ): Promise<AgentObservation> {
   const pageUrl = observation.url ?? ctx.url;
 
   if (observation.type === "capture_segments") {
     const rawSegments = (observation as AgentObservation & { segments?: SegmentRaw[] }).segments;
     if (Array.isArray(rawSegments) && rawSegments.length > 0) {
-      return persistSegmentBatch(supabase, ctx, qualifyFn, pageUrl, rawSegments);
+      return persistSegmentBatch(supabase, ctx, qualifyFn, pageUrl, rawSegments, hooks);
     }
     return observation;
   }
@@ -126,12 +143,18 @@ async function finalizeObservation(
     typeof observation.screenshot === "string" &&
     observation.screenshot.length > 0
   ) {
-    const processed = await processQualifiedCapture(supabase, ctx, qualifyFn, {
-      jobId: ctx.jobId,
-      pageUrl,
-      pngBase64: observation.screenshot,
-      fullPage: false,
-    });
+    const processed = await processQualifiedCapture(
+      supabase,
+      ctx,
+      qualifyFn,
+      {
+        jobId: ctx.jobId,
+        pageUrl,
+        pngBase64: observation.screenshot,
+        fullPage: false,
+      },
+      hooks,
+    );
     if (!processed) {
       return {
         type: "capture",
@@ -266,6 +289,7 @@ export async function runBrowserAgent(
   markConsumed: MarkInstructionsConsumedFn,
   resolveScope?: () => ExtractionScope,
   qualifyCapture?: QualifyCaptureFn,
+  reportTracker?: NavigationReportTracker,
 ): Promise<
   { ok: true; dna: SynthesizedDNA; steps: BrowserAgentStep[] } | { ok: false; error: string }
 > {
@@ -290,6 +314,13 @@ export async function runBrowserAgent(
       );
       if (instructions.length > 0) {
         ctx = { ...ctx, instructions };
+        if (reportTracker) {
+          for (const inst of instructions) {
+            if (inst.role === "user") {
+              await reportTracker.recordInstruction(inst.content);
+            }
+          }
+        }
         await withTimeout(markConsumed(ctx.jobId), STEP_TIMEOUT_MS, "markConsumed");
       }
 
@@ -327,10 +358,21 @@ export async function runBrowserAgent(
       );
 
       const observation = await withTimeout(
-        finalizeObservation(supabase, ctx, qualifyFn, plan.action, rawObservation),
+        finalizeObservation(
+          supabase,
+          ctx,
+          qualifyFn,
+          plan.action,
+          rawObservation,
+          captureHooks(reportTracker),
+        ),
         STEP_TIMEOUT_MS,
         "finalizeObservation",
       );
+
+      if (reportTracker && plan.action.type === "navigate") {
+        await reportTracker.recordPageVisit(plan.action.params.url);
+      }
 
       await appendJobEvent(supabase, ctx.jobId, "agent_observation", {
         step: stepNumber,

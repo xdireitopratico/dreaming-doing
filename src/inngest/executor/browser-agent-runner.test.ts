@@ -204,31 +204,29 @@ describe("runBrowserAgent", () => {
     expect(tools.capturePageSegments).toHaveBeenCalledTimes(1);
     expect(tools.takeScreenshot).toHaveBeenCalledTimes(1);
     expect(mockProcessQualifiedCapture).toHaveBeenCalledTimes(2);
+    const captureInput = (overrides: Record<string, unknown>) =>
+      expect.objectContaining({
+        jobId: "job-seg",
+        pageUrl: "https://example.com",
+        fullPage: true,
+        ...overrides,
+      });
+
     expect(mockProcessQualifiedCapture).toHaveBeenNthCalledWith(
       1,
       expect.anything(),
       expect.objectContaining({ jobId: "job-seg" }),
       expect.any(Function),
-      expect.objectContaining({
-        jobId: "job-seg",
-        pageUrl: "https://example.com",
-        pngBase64: "seg0",
-        segmentIndex: 0,
-        scrollY: 0,
-        fullPage: true,
-      }),
+      captureInput({ pngBase64: "seg0", segmentIndex: 0, scrollY: 0 }),
+      undefined,
     );
     expect(mockProcessQualifiedCapture).toHaveBeenNthCalledWith(
       2,
       expect.anything(),
       expect.objectContaining({ jobId: "job-seg" }),
       expect.any(Function),
-      expect.objectContaining({
-        pngBase64: "seg1",
-        segmentIndex: 1,
-        scrollY: 800,
-        fullPage: true,
-      }),
+      captureInput({ pngBase64: "seg1", segmentIndex: 1, scrollY: 800 }),
+      undefined,
     );
   });
 

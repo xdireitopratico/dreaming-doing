@@ -9,6 +9,36 @@ export type ScopeIntent = "landing" | "full_site" | "curated" | "custom";
 export type ScopePages = "single" | "sitemap" | "user_list";
 export type ScopeFolds = "auto" | "all" | "hero_only";
 
+export type CaptureStats = {
+  qualified: number;
+  rejected: number;
+  pages: number;
+};
+
+export type NavigationReportPage = {
+  url: string;
+  title: string;
+  foldsCaptured: number;
+  sections: Array<{ type: string; label: string; captureId: string }>;
+};
+
+export type NavigationReport = {
+  jobId: string;
+  version: number;
+  scope: ExtractionScope;
+  pagesVisited: NavigationReportPage[];
+  capturesQualified: number;
+  capturesRejected: number;
+  highlights: string[];
+  motionObservations: string[];
+  typographyNotes: string[];
+  colorNotes: string[];
+  componentInventory: string[];
+  gaps: string[];
+  userInstructionsApplied: string[];
+  updatedAt: string;
+};
+
 export type ExtractionScope = {
   level: number;
   intent: ScopeIntent;

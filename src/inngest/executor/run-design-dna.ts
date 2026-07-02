@@ -49,6 +49,12 @@ import {
   summarizeScopeChanges,
 } from "./deep-capture/scope-parser.ts";
 import { qualifyCaptureWithLlm } from "./deep-capture/capture-qualify.ts";
+import {
+  NavigationReportTracker,
+  parseNavigationReport,
+  createNavigationReport,
+  formatNavigationReportSummary,
+} from "./deep-capture/navigation-report.ts";
 
 const OPERATION_RESUME_BUFFER_MS = 120_000;
 
@@ -346,9 +352,15 @@ export async function executeDesignDnaJob(
         libraryPersistedCount,
       });
       if (hotlWallIsTerminal(operationMeta)) {
+        const navSummary =
+          isDeep && currentMeta.navigationReport
+            ? formatNavigationReportSummary(
+                parseNavigationReport(currentMeta.navigationReport, jobId, extractionScope),
+              )
+            : "";
         await reportDesignDnaExit(supabase, jobId, operationMeta, {
           kind: "timeout",
-          summary: nearMsg,
+          summary: navSummary ? `${nearMsg}\n\n${navSummary}` : nearMsg,
           steps: results.length,
         });
         return {
@@ -389,6 +401,25 @@ export async function executeDesignDnaJob(
           throw new Error("DEEP LLM not resolved — internal error");
         }
         const llm = deepLlm;
+
+        const navigationReport = parseNavigationReport(
+          currentMeta.navigationReport,
+          jobId,
+          extractionScope,
+        );
+        const reportTracker = new NavigationReportTracker(
+          supabase,
+          jobId,
+          extractionScope,
+          navigationReport.pagesVisited.length > 0
+            ? navigationReport
+            : createNavigationReport(jobId, extractionScope),
+          currentMeta,
+        );
+        currentMeta.navigationReport = reportTracker.snapshot;
+        currentMeta.captureStats = reportTracker.stats;
+        await supabase.from("design_dna_jobs").update({ meta: currentMeta }).eq("id", jobId);
+        await reportTracker.recordPageVisit(url);
 
         const agentCtx = createAgentContext({
           jobId,
@@ -464,11 +495,16 @@ export async function executeDesignDnaJob(
           markConsumed,
           () => extractionScope,
           (input) => qualifyCaptureWithLlm(visionLlm, input),
+          reportTracker,
         );
 
         if (!agentResult.ok) {
           throw new Error(agentResult.error);
         }
+
+        await reportTracker.finalize();
+        currentMeta.navigationReport = reportTracker.snapshot;
+        currentMeta.captureStats = reportTracker.stats;
 
         const dna = agentResult.dna;
         dnaResult = {
