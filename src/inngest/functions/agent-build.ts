@@ -2,12 +2,10 @@ import { inngest } from "../client";
 import { ensureTerminalRunMessage } from "./ensure-terminal-message";
 import {
   drainPendingQueue,
-  emitStreamFinishEvent,
   getRunStatus,
   getSupabaseAdmin,
   markRunFinal,
   NonRetriableError,
-  resolveChunkResumeDecision,
   runAgentLoopWithResume,
   type AgentRunRequest,
 } from "./_shared";
@@ -80,70 +78,19 @@ export const agentBuildFunction = inngest.createFunction(
       return { runId, ok: false, canceled: true };
     }
 
-    if (!final.ok && !final.resumable) {
-      await step.run("mark-failed", async () => {
-        await markRunFinal(runId, "failed", { error: final.error ?? "agent failed" });
-      });
-      await step.run("drain-pending-queue-after-fail", async () => {
-        return await drainPendingQueue(payload);
-      });
-      return { runId, ok: false, error: final.error };
-    }
+    if (!final.ok) {
+      const status = await step.run("check-awaiting-status", async () => getRunStatus(runId));
+      const isAwaiting = final.awaiting === true || status === "awaiting_user";
 
-    if (!final.ok && final.resumable) {
-      const decision = await step.run("resolve-chunk-resume", () =>
-        resolveChunkResumeDecision(runId),
-      );
-
-      if (decision.action === "redispatch") {
-        await step.run("wait-queued-job", async () => {
-          const { waitForQueuedAgentJob } = await import("./agent-jobs.ts");
-          const ready = await waitForQueuedAgentJob(getSupabaseAdmin(), runId);
-          if (!ready) {
-            throw new NonRetriableError(
-              `Worker mode: chunk job não enfileirado antes do redispatch (${runId.slice(0, 8)})`,
-            );
-          }
+      if (!isAwaiting) {
+        await step.run("mark-failed", async () => {
+          await markRunFinal(runId, "failed", { error: final.error ?? "agent failed" });
         });
-        await step.sendEvent("re-dispatch-chunk", {
-          name: "agent/build.requested",
-          data: { ...payload, resume: true },
+        await step.run("drain-pending-queue-after-fail", async () => {
+          return await drainPendingQueue(payload);
         });
-        return { runId, ok: false, resumable: true, continued: true };
+        return { runId, ok: false, error: final.error };
       }
-
-      const exhaustedError = decision.error;
-      await step.run("mark-failed-resumable-exhausted", async () => {
-        await markRunFinal(runId, "failed", {
-          error: exhaustedError,
-          meta: {
-            resumableExhausted: true,
-            resumeAttempts: decision.chunkGeneration,
-          },
-        });
-      });
-      await step.run("ensure-terminal-message-resumable", async () => {
-        return await ensureTerminalRunMessage({
-          runId,
-          conversationId: payload.conversationId,
-          projectId: payload.projectId,
-          error: exhaustedError,
-          buildFailed: true,
-        });
-      });
-      await step.run("emit-finish-resumable", async () => {
-        await emitStreamFinishEvent(runId, {
-          type: "finish",
-          ok: false,
-          canceled: false,
-          resumable: false,
-          error: exhaustedError,
-          chunkCap: true,
-          resumableExhausted: true,
-          resumeAttempts: decision.chunkGeneration,
-        });
-      });
-      return { runId, ok: false, error: exhaustedError };
     }
 
     await step.run("mark-completed", async () => {

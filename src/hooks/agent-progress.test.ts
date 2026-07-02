@@ -150,7 +150,8 @@ describe("applyAgentProgressEvent", () => {
     );
     expect(done.pendingPlan?.planId).toBe("p-99");
     expect(done.awaitingKind).toBe("plan_approval");
-    expect(done.finished).toBe(true);
+    expect(done.finished).toBe(false);
+    expect(done.awaiting).toBe(true);
   });
 
   it("done com planProposed mantém pendingPlan e awaitingKind", () => {
@@ -171,7 +172,7 @@ describe("applyAgentProgressEvent", () => {
     expect(done.pendingPlan).not.toBeNull();
     expect(done.awaiting).toBe(true);
     expect(done.awaitingKind).toBe("plan_approval");
-    expect(done.finished).toBe(true);
+    expect(done.finished).toBe(false);
   });
 
   it("plan_proposed sem runId/projectId não popula pendingPlan", () => {
@@ -587,14 +588,17 @@ describe("Session 2.0 — contrato agent_run", () => {
       expect(next.statusHint).toContain("budget");
     });
 
-    it("chunk_resume seta autoResuming + resumeAttempts", () => {
+    it("run_paused marca resumable sem autoResuming", () => {
       const next = applyAgentProgressEvent(
-        { ...base, finished: false, autoResuming: false },
-        ev("chunk_resume", { attempt: 2, maxAttempts: 3, reason: "step budget exceeded" }),
+        { ...base, finished: false, autoResuming: false, resumable: false },
+        ev("run_paused", {
+          reason: "platform_limit",
+          message: "Execução longa — clique Continuar para seguir de onde parou",
+        }),
       );
-      expect(next.autoResuming).toBe(true);
-      expect(next.resumeAttempts).toBe(2);
-      expect(next.statusHint?.toLowerCase()).toContain("retomando");
+      expect(next.autoResuming).toBe(false);
+      expect(next.resumable).toBe(true);
+      expect(next.statusHint?.toLowerCase()).toContain("continuar");
     });
   });
 

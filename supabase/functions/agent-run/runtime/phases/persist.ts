@@ -54,7 +54,6 @@ export type AgentPersistDeps = {
   setLastCheckpointStep: (step: number) => void;
   getBuildSession: () => CanonicalBuildSession | null;
   emit: (type: string, data: unknown) => void;
-  loopBudgetMs: number;
 };
 
 function cardSnapshotForPersist(
@@ -424,12 +423,6 @@ export async function saveCheckpoint(
   const step = deps.state.currentStepIndex;
   if (!force && step - deps.getLastCheckpointStep() < CHECKPOINT_INTERVAL_STEPS) {
     return;
-  }
-  if (Date.now() - deps.runStartTime > deps.loopBudgetMs) {
-    deps.emit("timeout_warning", {
-      message: "Janela de execução concluída — progresso salvo para continuar",
-      elapsedMs: Date.now() - deps.runStartTime,
-    });
   }
   try {
     const extra: CheckpointExtra = {

@@ -25,13 +25,11 @@ import { buildSandboxEnv } from "./sandbox-env.ts";
 import { resolveAllocateSandbox } from "./run-context.ts";
 import { logger } from "../_shared/logger.ts";
 import { appendStreamEvent } from "../_shared/agent-stream.ts";
-import { chunkCapErrorMessage, evaluateChunkLimits } from "../_shared/agent-chunk-limits.ts";
 import { ensureTerminalRunMessage } from "../_shared/ensure-terminal-message.ts";
 import {
   agentRuntimeV2WorkerEnabled,
   resolveJobGenerationForChunk,
   shadowCompleteJob,
-  shadowEnqueueNextChunk,
 } from "../_shared/agent-jobs.ts";
 import { transitionRun } from "../_shared/run-lifecycle.ts";
 import type { AgentRunStatus } from "../_shared/agent-contract-events.ts";
@@ -66,6 +64,7 @@ export type ExecuteResult = {
   mode: "plan" | "build" | "chat";
   resumable: boolean;
   canceled: boolean;
+  awaiting?: boolean;
   error?: string;
   stepsCompleted: number;
   durationMs: number;
@@ -444,124 +443,6 @@ export async function executeAgentRun(
     result.awaiting === true;
   const prevMeta = (finalRun?.meta ?? runMetaBase) as Record<string, unknown>;
 
-  // Chunk resumable: Inngest chama execute de novo — não finalizar a run.
-  if (!result.ok && result.resumable && !result.canceled && !isAwaiting) {
-    const chunkLimits = evaluateChunkLimits(
-      prevMeta,
-      finalRun?.started_at as string | undefined,
-      Date.now(),
-      { buildFix: result.buildFix === true || prevMeta.buildFix === true },
-    );
-
-    if (chunkLimits.exceeded) {
-      const capError = chunkCapErrorMessage(chunkLimits.reason);
-      await flushStreamEvents();
-      await transitionRun(supabase, runId, "failed", {
-        steps: result.steps,
-        error: capError,
-        heartbeat_at: new Date().toISOString(),
-        meta: {
-          ...prevMeta,
-          chunkGeneration: chunkLimits.chunkGeneration,
-          chunkCapExceeded: true,
-          chunkCapReason: chunkLimits.reason ?? null,
-        },
-      });
-
-      await appendStreamEvent(supabase, runId, "finish", {
-        type: "finish",
-        ok: false,
-        resumable: false,
-        error: capError,
-        chunkCap: true,
-        resumableExhausted: true,
-        resumeAttempts: chunkLimits.chunkGeneration,
-        steps: result.steps,
-      });
-
-      await ensureTerminalRunMessage(supabase, {
-        runId,
-        conversationId,
-        projectId,
-        error: capError,
-        buildFailed: !planMode,
-      });
-
-      logger.warn("agent_run.chunk_cap_exceeded", {
-        runId,
-        reason: chunkLimits.reason,
-        chunkGeneration: chunkLimits.chunkGeneration,
-        mode: runMode,
-      });
-
-      return {
-        ok: false,
-        runId,
-        mode: runMode,
-        resumable: false,
-        canceled: false,
-        error: capError,
-        stepsCompleted: result.steps,
-        durationMs: Date.now() - startMs,
-      };
-    }
-
-    await transitionRun(supabase, runId, "running", {
-      steps: result.steps,
-      error: null,
-      heartbeat_at: new Date().toISOString(),
-      meta: {
-        ...prevMeta,
-        chunkGeneration: chunkLimits.chunkGeneration,
-        ...(chunkLimits.buildFixAttempts != null
-          ? { buildFixAttempts: chunkLimits.buildFixAttempts }
-          : {}),
-        buildFix: result.buildFix === true || prevMeta.buildFix === true,
-        lastChunkAt: new Date().toISOString(),
-        lastChunkMessage: result.error ?? null,
-        betweenChunks: true,
-      },
-    });
-
-    // Session 2.0 — sinaliza retomada de chunk ao consumidor (antes só em meta).
-    await appendStreamEvent(supabase, runId, "chunk_resume", {
-      type: "chunk_resume",
-      attempt: chunkLimits.chunkGeneration,
-      maxAttempts: 12,
-      reason: result.error ?? "step budget exceeded",
-    });
-
-    await shadowCompleteJob(supabase, runId, jobGeneration, {
-      resumable: true,
-      steps: result.steps,
-      error: result.error ?? null,
-      chunkGeneration: chunkLimits.chunkGeneration,
-    }, false);
-    await shadowEnqueueNextChunk(supabase, runId, chunkLimits.chunkGeneration + 1, {
-      planMode,
-      resume: true,
-    });
-
-    logger.info("agent_run.chunk_resumable", {
-      runId,
-      mode: runMode,
-      steps: result.steps,
-      chunkGeneration: chunkLimits.chunkGeneration,
-      durationMs: Date.now() - startMs,
-    });
-
-    return {
-      ok: false,
-      runId,
-      mode: runMode,
-      resumable: true,
-      canceled: false,
-      error: result.error,
-      stepsCompleted: result.steps,
-      durationMs: Date.now() - startMs,
-    };
-  }
-
   let terminalStatus: AgentRunStatus;
   if (result.canceled) {
     terminalStatus = "canceled";
@@ -642,8 +523,9 @@ export async function executeAgentRun(
     ok: result.ok,
     runId,
     mode: runMode,
-    resumable: !!result.resumable,
+    resumable: false,
     canceled: !!result.canceled,
+    awaiting: isAwaiting,
     error: result.error,
     stepsCompleted: result.steps,
     durationMs: Date.now() - startMs,

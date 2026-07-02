@@ -7,7 +7,7 @@ import {
   type AgentLoopHost,
   type AgentLoopDepsContext,
 } from "./deps-factory.ts";
-import { LoopPhase, type AgentState } from "../types.ts";
+import { LoopPhase, type AgentState, type ChatMessage } from "../types.ts";
 import { createAgentLoopMutableState } from "./loop-mutable-state.ts";
 
 function minimalAgentState(overrides?: Partial<AgentState>): AgentState {
@@ -42,9 +42,9 @@ function mockDepsContext(overrides?: Partial<AgentLoopDepsContext>): AgentLoopDe
       execute: async () => mockToolResult,
     } as unknown as AgentLoopDepsContext["reg"],
     compression: {
-      prepareMessages: (m) => m,
+      prepareMessages: (m: ChatMessage[]) => m,
       emitUsage: () => {},
-    } as AgentLoopDepsContext["compression"],
+    } as unknown as AgentLoopDepsContext["compression"],
     observer: {} as AgentLoopDepsContext["observer"],
     router: {} as AgentLoopDepsContext["router"],
     robinActive: false,
@@ -76,6 +76,10 @@ function mockDepsContext(overrides?: Partial<AgentLoopDepsContext>): AgentLoopDe
     setToolsInvoked: () => {},
     getConsecutiveNoContentReadSteps: () => 0,
     setConsecutiveNoContentReadSteps: () => {},
+    getReadGateBlockCount: () => 0,
+    setReadGateBlockCount: () => {},
+    getBuildSession: () => null,
+    setBuildSession: () => {},
     getLlmResponseWasStreamed: () => false,
     getLastExecutePhaseMessage: () => null,
     setLastExecutePhaseMessage: () => {},
@@ -92,20 +96,15 @@ function mockDepsContext(overrides?: Partial<AgentLoopDepsContext>): AgentLoopDe
     configuredModel: () => {
       throw new Error("not used");
     },
-    loopBudgetExceeded: () => false,
-    returnResumableChunk: async () => ({
+    platformLimitExceeded: () => false,
+    pauseOperationForUser: async (input) => ({
       ok: false as const,
-      error: "chunk",
-      steps: 0,
-      resumable: true as const,
-      toolsUsed: [],
-    }),
-    returnResumableWithUserMessage: async () => ({
-      ok: false as const,
-      error: "chunk",
-      steps: 0,
-      resumable: true as const,
-      toolsUsed: [],
+      error: input.message,
+      steps: input.steps,
+      resumable: false as const,
+      awaiting: true as const,
+      awaitingUser: { type: input.reason, message: input.message },
+      toolsUsed: [...input.toolsUsed],
     }),
     runDesignPreflightIfNeeded: async () => {},
     requiresFinalBuildGate: () => false,
@@ -121,7 +120,6 @@ function mockDepsContext(overrides?: Partial<AgentLoopDepsContext>): AgentLoopDe
     clearCheckpoint: async () => {},
     persistAssistantStep: async () => null,
     updateAssistantStep: async () => {},
-    persistCheckpointChat: async () => {},
     notifyLoopStatus: () => {},
     recordTouchedPath: () => {},
     finishClarify: async () => ({ ok: true, steps: 0, toolsUsed: [] }),
@@ -135,7 +133,7 @@ function mockDepsContext(overrides?: Partial<AgentLoopDepsContext>): AgentLoopDe
     getPlanLlmResponseWasStreamed: () => false,
     setPlanLlmResponseWasStreamed: () => {},
     ...overrides,
-  };
+  } as AgentLoopDepsContext;
 }
 
 Deno.test("buildPlanTurnFinishDeps — projectId e runId", () => {
@@ -185,9 +183,9 @@ function mockHost(overrides?: Partial<AgentLoopHost>): MockHostWithEmitted {
       execute: async () => mockToolResult,
     } as unknown as AgentLoopHost["reg"],
     compression: {
-      prepareMessages: (m) => m,
+      prepareMessages: (m: ChatMessage[]) => m,
       emitUsage: () => {},
-    } as AgentLoopHost["compression"],
+    } as unknown as AgentLoopHost["compression"],
     observer: {} as AgentLoopHost["observer"],
     router: {} as AgentLoopHost["router"],
     robinActive: false,

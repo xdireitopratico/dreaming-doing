@@ -886,7 +886,9 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
               prev.error
             : prev.streamText,
         lastFinishOk: !failed && !canceled,
-        resumable: failed && data.resumable === true && !canceled,
+        resumable: awaiting
+          ? true
+          : failed && data.resumable === true && !canceled,
         error: failed || canceled ? ((data.error as string) ?? prev.error) : null,
         summary,
         tokens:

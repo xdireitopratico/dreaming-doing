@@ -6,7 +6,6 @@ import {
   getSupabaseAdmin,
   markRunFinal,
   NonRetriableError,
-  resolveChunkResumeDecision,
   runAgentLoopWithResume,
   type AgentRunRequest,
 } from "./_shared";
@@ -69,37 +68,19 @@ export const agentChatFunction = inngest.createFunction(
       return { runId, ok: false, canceled: true };
     }
 
-    if (!final.ok && !final.resumable) {
-      await step.run("mark-failed", async () => {
-        await markRunFinal(runId, "failed", { error: final.error ?? "agent failed" });
-      });
-      await step.run("drain-pending-queue-after-fail", async () => {
-        return await drainPendingQueue(payload);
-      });
-      return { runId, ok: false, error: final.error };
-    }
+    if (!final.ok) {
+      const status = await step.run("check-awaiting-status", async () => getRunStatus(runId));
+      const isAwaiting = final.awaiting === true || status === "awaiting_user";
 
-    if (!final.ok && final.resumable) {
-      const decision = await step.run("resolve-chunk-resume", () =>
-        resolveChunkResumeDecision(runId),
-      );
-
-      if (decision.action === "redispatch") {
-        await step.sendEvent("re-dispatch-chunk", {
-          name: "agent/chat.requested",
-          data: { ...payload, resume: true },
+      if (!isAwaiting) {
+        await step.run("mark-failed", async () => {
+          await markRunFinal(runId, "failed", { error: final.error ?? "agent failed" });
         });
-        return { runId, ok: false, resumable: true, continued: true };
+        await step.run("drain-pending-queue-after-fail", async () => {
+          return await drainPendingQueue(payload);
+        });
+        return { runId, ok: false, error: final.error };
       }
-
-      const exhaustedError = decision.error;
-      await step.run("mark-failed-resumable-exhausted", async () => {
-        await markRunFinal(runId, "failed", {
-          error: exhaustedError,
-          meta: { resumableExhausted: true, resumeAttempts: decision.chunkGeneration },
-        });
-      });
-      return { runId, ok: false, error: exhaustedError };
     }
 
     await step.run("mark-completed", async () => {

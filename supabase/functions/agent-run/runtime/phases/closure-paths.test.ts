@@ -1,7 +1,7 @@
 // closure-paths.test.ts — Table-driven AC1: todo exit de execute.ts emite assistant_text + persistFinal.
 //
 // Inventário de exits (execute.ts):
-//   budget_exceeded | canceled | preflight_terminal | llm_fail_fast | llm_error_resumable
+//   platform_limit | canceled | preflight_terminal | llm_fail_fast | llm_error_pause
 //   llm_retries_exhausted | zero_writes_resumable | clarify | tool_miss_terminal
 //   canceled_mid_loop | max_steps_resumable | final_gate_failed | final_gate_budget
 //   success_summarize
@@ -16,6 +16,14 @@ import type { ChatMessage } from "../../types.ts";
 import { NarrationPhase } from "./narration.ts";
 import { createCanonicalBuildSession } from "../build-session.ts";
 import type { LLMProvider } from "../../types.ts";
+import type { PauseReason } from "../infra.ts";
+
+type PauseInput = {
+  reason: PauseReason;
+  message: string;
+  steps: number;
+  toolsUsed: Set<string>;
+};
 
 function makeMinimalDeps(overrides: Partial<BuildExecuteDeps> = {}): BuildExecuteDeps & {
   _events: () => Array<{ type: string; data: Record<string, unknown> }>;
@@ -108,11 +116,19 @@ function makeMinimalDeps(overrides: Partial<BuildExecuteDeps> = {}): BuildExecut
     },
     saveCheckpoint: async () => {},
     clearCheckpoint: async () => {},
-    returnResumableWithUserMessage: async (steps: number, _tu: Set<string>, _opt?: unknown, prose?: string) => {
-      const text = (prose && prose.trim()) || "Retomando automaticamente o trabalho anterior.";
+    pauseOperationForUser: async (input: PauseInput) => {
+      const text = input.message.trim() || "Pausado — continue quando estiver pronto.";
       events.push({ type: "assistant_text", data: { text, final: true } });
       persistCalls.push({ s: text, o: { lastFinishOk: false, finished: false } });
-      return { ok: false, resumable: true, steps, toolsUsed: [], error: "resumable" };
+      return {
+        ok: false,
+        resumable: false,
+        awaiting: true,
+        steps: input.steps,
+        toolsUsed: [...input.toolsUsed],
+        error: text,
+        awaitingUser: { type: input.reason, message: text },
+      };
     },
     notifyLoopStatus: () => {},
     attemptGracefulClosing: async () => "Fechamento amigável do assistente.",
@@ -121,7 +137,7 @@ function makeMinimalDeps(overrides: Partial<BuildExecuteDeps> = {}): BuildExecut
       persistCalls.push({ s: message, o: { lastFinishOk: true } });
       return { ok: true, summary: message, steps: 0, toolsUsed: [] };
     },
-    loopBudgetExceeded: () => false,
+    platformLimitExceeded: () => false,
     requiresFinalBuildGate: () => false,
     bumpLlmRetries: async () => 0,
     resetLlmRetries: async () => {},
@@ -158,9 +174,9 @@ type ClosureCase = {
 
 const cases: ClosureCase[] = [
   {
-    name: "budget_exceeded",
+    name: "platform_limit",
     setup: (deps) => {
-      deps.loopBudgetExceeded = () => true;
+      deps.platformLimitExceeded = () => true;
     },
   },
   {
@@ -180,11 +196,12 @@ const cases: ClosureCase[] = [
     },
   },
   {
-    name: "llm_error_resumable",
+    name: "llm_error_pause",
     setup: (deps) => {
       deps.llmChat = async () => {
         throw new Error("llm fail");
       };
+      deps.bumpLlmRetries = async () => 3;
     },
   },
   {
@@ -279,7 +296,7 @@ Deno.test("closure paths — table driven real entry points emit prose + persist
   }
 });
 
-Deno.test("chat-turn — erro LLM emite assistant_text via returnResumableWithUserMessage", async () => {
+Deno.test("chat-turn — erro LLM emite assistant_text via pauseOperationForUser", async () => {
   const events: Array<{ type: string; data: Record<string, unknown> }> = [];
   const persisted: string[] = [];
   const result = await runChatModeAgentTurn(
@@ -289,11 +306,19 @@ Deno.test("chat-turn — erro LLM emite assistant_text via returnResumableWithUs
       messages: [],
       streamState: { llmResponseWasStreamed: false, thinkingStreamStartedAt: null },
       emit: (t, d) => events.push({ type: t, data: d as Record<string, unknown> }),
-      returnResumableWithUserMessage: async (_s, _t, _o, prose) => {
-        const text = prose || "erro";
+      pauseOperationForUser: async (input: PauseInput) => {
+        const text = input.message || "erro";
         events.push({ type: "assistant_text", data: { text, final: true } });
         persisted.push(text);
-        return { ok: false, error: text, steps: 0, resumable: true, toolsUsed: [] };
+        return {
+          ok: false,
+          error: text,
+          steps: 0,
+          resumable: false,
+          awaiting: true,
+          awaitingUser: { type: input.reason, message: text },
+          toolsUsed: [],
+        };
       },
       onActivity: () => {},
       runId: "r1",
@@ -316,7 +341,7 @@ Deno.test("chat-turn — erro LLM emite assistant_text via returnResumableWithUs
   assert(persisted.length > 0);
 });
 
-Deno.test("structural — execute.ts and plan-turn.ts use returnResumableWithUserMessage not bare chunk", () => {
+Deno.test("structural — execute.ts plan-turn.ts chat-turn.ts use pauseOperationForUser not bare chunk", () => {
   const fs = (globalThis as { Deno?: { readTextFileSync: (url: URL) => string } }).Deno?.readTextFileSync;
   if (!fs) return;
   const execSrc = fs(new URL("./execute.ts", import.meta.url));
@@ -325,7 +350,13 @@ Deno.test("structural — execute.ts and plan-turn.ts use returnResumableWithUse
   const bareExec = /return\s+deps\.returnResumableChunk\s*\(/.test(execSrc);
   const barePlan = /return\s+deps\.returnResumableChunk\s*\(/.test(planSrc);
   const bareChat = /return\s+deps\.returnResumableChunk\s*\(/.test(chatSrc);
+  const pauseExec = /deps\.pauseOperationForUser\s*\(/.test(execSrc);
+  const pausePlan = /deps\.pauseOperationForUser\s*\(/.test(planSrc);
+  const pauseChat = /deps\.pauseOperationForUser\s*\(/.test(chatSrc);
   assertEquals(bareExec, false, "execute.ts must not call bare returnResumableChunk");
   assertEquals(barePlan, false, "plan-turn.ts must not call bare returnResumableChunk");
   assertEquals(bareChat, false, "chat-turn.ts must not call bare returnResumableChunk");
+  assertEquals(pauseExec, true, "execute.ts must call pauseOperationForUser");
+  assertEquals(pausePlan, true, "plan-turn.ts must call pauseOperationForUser");
+  assertEquals(pauseChat, true, "chat-turn.ts must call pauseOperationForUser");
 });

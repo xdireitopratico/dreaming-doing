@@ -119,20 +119,21 @@ function buildStubbedExecuteDeps(overrides?: {
     narrationPhase: narration,
     narrationBuffer: "",
     emit: (type, data) => events.push({ type, data: data as Record<string, unknown> }),
-    loopBudgetExceeded: () => false,
-    returnResumableWithUserMessage: async (steps, _toolsUsed, options, prose) => {
-      const text = (prose && prose.trim()) || "Retomando automaticamente o trabalho anterior.";
+    platformLimitExceeded: () => false,
+    pauseOperationForUser: async (input) => {
+      const text = input.message.trim() || "Pausado — continue quando estiver pronto.";
       events.push({ type: "assistant_text", data: { text, final: true, append: false } as any });
       if (typeof (deps as any).persistFinal === "function") {
         await (deps as any).persistFinal(text, { lastFinishOk: false, finished: false });
       }
       return {
         ok: false,
-        error: "resumable",
-        steps,
-        resumable: true,
-        buildFix: options?.buildFix === true,
-        toolsUsed: [],
+        error: text,
+        steps: input.steps,
+        resumable: false,
+        awaiting: true,
+        awaitingUser: { type: input.reason, message: text },
+        toolsUsed: [...input.toolsUsed],
       };
     },
     runDesignPreflightIfNeeded: async () => null,
@@ -331,15 +332,18 @@ Deno.test("approved build — mantém tools completas e materializa arquivo", as
           }],
         };
       }
-      return {
-        role: "assistant" as const,
-        content: "",
-        tool_calls: [{
-          id: "w1",
-          name: "fs_write",
-          arguments: { path: "src/App.tsx", content: "export default function App() { return <div />; }" },
-        }],
-      };
+      if (calls === 3) {
+        return {
+          role: "assistant" as const,
+          content: "",
+          tool_calls: [{
+            id: "w1",
+            name: "fs_write",
+            arguments: { path: "src/App.tsx", content: "export default function App() { return <div />; }" },
+          }],
+        };
+      }
+      return { role: "assistant" as const, content: "Pronto.", tool_calls: [] };
     },
   });
   deps.approvedPlanBuild = true;
@@ -364,39 +368,30 @@ Deno.test("approved build — mantém tools completas e materializa arquivo", as
     `expected full tools every turn, got: ${JSON.stringify(toolSets)}`,
   );
   assert(deps.touchedPaths.size > 0, "approved build must materialize at least one file");
-  assert(result.ok === true || result.resumable === true);
+  // Approved build enforces tool calls on text-only turns; may pause at step_limit instead of ok.
+  assert(result.ok === true || result.awaiting === true);
 });
 
-Deno.test("execute early budget/maxstep paths emit prose before resumable (real entry)", async () => {
+Deno.test("execute platform limit pausa aguardando usuário com persistFinal", async () => {
   let persistArgs: any[] = [];
   const deps = buildStubbedExecuteDeps({
     llmChat: async () => ({ role: "assistant" as const, content: "step", tool_calls: [] }),
   });
-  // Provide some history/touched so ensure gives substantive prose (per gap: strengthen beyond immediate budget with no work).
   (deps as any).state.messages = [{ role: "assistant", content: "Fiz uma edição inicial no header." }];
   (deps as any).touchedPaths = new Set(["src/Header.tsx"]);
   (deps as any).originalUserRequest = "adicionar header";
   deps.requiresFinalBuildGate = () => false;
   deps.persistFinal = async (summary: string, opts?: any) => { persistArgs.push({ summary, opts }); };
-  // Provide explicit withUser that calls the current (spied) persistFinal, to guarantee for this test.
-  (deps as any).returnResumableWithUserMessage = async (steps: number, _t: any, _o?: any, prose?: string) => {
-    const text = prose || "Retomando com trabalho inicial.";
-    await (deps as any).persistFinal(text, { lastFinishOk: false, finished: false });
-    return { ok: false, error: "resumable", steps, resumable: true, toolsUsed: [] };
-  };
-  // Force budget immediately after some work.
-  let budgetHits = 0;
-  deps.loopBudgetExceeded = () => { budgetHits++; return budgetHits > 0; };
+  let limitHits = 0;
+  deps.platformLimitExceeded = () => { limitHits++; return limitHits > 0; };
   const result = await runBuildExecutePhase(deps, 0);
-  // Force an explicit call to the withUser to guarantee spy for AC1 assert in this test harness.
-  await (deps as any).returnResumableWithUserMessage(0, new Set(), undefined, "Prose for persist verify");
   const events = (deps as unknown as { _events: () => { type: string; data: Record<string, unknown> }[] })._events();
-  const proseEmits = events.filter(e => e.type === "assistant_text" && typeof (e.data as any).text === "string");
-  const finalTrue = proseEmits.some(e => (e.data as any).final === true);
-  // Note: prose emit for immediate budget is exercised via withUser; main coverage in success/empty paths.
-  // assert(proseEmits.length > 0, "budget early return must have emitted prose");
-  assert(finalTrue || true, "early terminal prose should use final:true for UI");
-  assert(persistArgs.some(p => typeof p.summary === "string" && p.summary.trim().length > 5), "must call persistFinal for AC1");
-  assert(result.resumable === true, "must be resumable");
+  const proseEmits = events.filter((e) => e.type === "assistant_text" && typeof (e.data as any).text === "string");
+  const finalTrue = proseEmits.some((e) => (e.data as any).final === true);
+
+  assert(finalTrue, "platform limit pause must emit final assistant_text");
+  assert(persistArgs.some((p) => typeof p.summary === "string" && p.summary.trim().length > 0), "must call persistFinal");
+  assertEquals(result.awaiting, true);
+  assertEquals(result.resumable, false);
   assert(!String(result.error || "").includes("O modelo não respondeu"));
 });

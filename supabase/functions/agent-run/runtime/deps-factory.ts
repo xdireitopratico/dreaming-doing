@@ -18,25 +18,24 @@ import type {
 import { LoopPhase } from "../types.ts";
 import {
   bumpLlmRetries,
-  loopBudgetExceeded,
   maybeEmitSilenceHeartbeat,
+  pauseOperationForUser,
+  platformLimitExceeded,
   resetLlmRetries,
-  returnResumableChunk,
   touchHeartbeat,
-  type ResumableChunkResult,
+  type OperationPauseResult,
+  type PauseReason,
+  type RunInfraDeps,
 } from "./infra.ts";
 import {
   clearCheckpoint,
   persistAssistantStep,
-  persistCheckpointChat,
   persistFinal,
   persistPlanFinal,
   saveCheckpoint,
   updateAssistantStep,
 } from "./phases/persist.ts";
 import { finishClarify } from "./phases/plan-turn.ts";
-import type { RunInfraDeps } from "./infra.ts";
-import { returnResumableWithUserMessage as infraReturnResumableWithUserMessage } from "./infra.ts";
 import type { AgentPersistDeps, PersistFinalOpts } from "./phases/persist.ts";
 import type { BuildExecuteDeps } from "./phases/execute.ts";
 import type {
@@ -213,32 +212,13 @@ export type AgentLoopDepsContext = {
   ensureOpeningBeforeWork: (fallback: string) => void;
   emit: (type: string, data: unknown) => void;
   configuredModel: () => LLMProvider;
-  loopBudgetExceeded: () => boolean;
-  returnResumableChunk: (
-    steps: number,
-    toolsUsed: Set<string>,
-    options?: { buildFix?: boolean },
-  ) => Promise<{
-    ok: false;
-    error: string;
+  platformLimitExceeded: () => boolean;
+  pauseOperationForUser: (input: {
+    reason: PauseReason;
+    message: string;
     steps: number;
-    resumable: true;
-    buildFix?: boolean;
-    toolsUsed: string[];
-  }>;
-  returnResumableWithUserMessage: (
-    steps: number,
-    toolsUsed: Set<string>,
-    options?: { buildFix?: boolean; errorMessage?: string; pauseForUser?: boolean },
-    prose?: string,
-  ) => Promise<{
-    ok: false;
-    error: string;
-    steps: number;
-    resumable: true;
-    buildFix?: boolean;
-    toolsUsed: string[];
-  }>;
+    toolsUsed: Set<string>;
+  }) => Promise<OperationPauseResult>;
   runDesignPreflightIfNeeded: () => Promise<unknown>;
   requiresFinalBuildGate: () => boolean;
   enabledApprovedPlanSteps: () => PlanStep[];
@@ -258,7 +238,6 @@ export type AgentLoopDepsContext = {
     execResults: Array<{ call: ToolCall; result: ToolResult }>,
     step: number,
   ) => Promise<void>;
-  persistCheckpointChat: (steps: number, buildFix?: boolean) => Promise<void>;
   notifyLoopStatus: (ctx: LoopUpdateContext) => void;
   recordTouchedPath: (path: string) => void;
   finishClarify: (
@@ -292,10 +271,7 @@ export type AgentLoopDepsContext = {
   setPlanLlmResponseWasStreamed: (value: boolean) => void;
 };
 
-export function buildPersistDeps(
-  ctx: AgentLoopDepsContext,
-  loopBudgetMs: number,
-): AgentPersistDeps {
+export function buildPersistDeps(ctx: AgentLoopDepsContext): AgentPersistDeps {
   return {
     sb: ctx.sb,
     runId: ctx.runId,
@@ -313,19 +289,17 @@ export function buildPersistDeps(
     setLastCheckpointStep: ctx.setLastCheckpointStep,
     getBuildSession: ctx.getBuildSession,
     emit: ctx.emit,
-    loopBudgetMs,
   };
 }
 
 export function buildInfraDeps(
   ctx: AgentLoopDepsContext,
-  loopBudgetMs: number,
+  invocationStartedAt: number,
 ): RunInfraDeps {
   return {
     sb: ctx.sb,
     runId: ctx.runId,
-    runStartTime: ctx.runStartTime,
-    loopBudgetMs,
+    invocationStartedAt,
     getLastActivityAt: ctx.getLastActivityAt,
     setLastActivityAt: ctx.setLastActivityAt,
     getMaxStepsLimit: () => ctx.maxStepsLimit,
@@ -337,7 +311,6 @@ export function buildInfraDeps(
     emit: ctx.emit,
     getPhase: () => ctx.state.phase,
     saveCheckpoint: ctx.saveCheckpoint,
-    persistCheckpointChat: ctx.persistCheckpointChat,
     getBuildSession: ctx.getBuildSession,
   };
 }
@@ -402,8 +375,8 @@ export function buildExecuteDeps(
     ensureOpeningBeforeWork: ctx.ensureOpeningBeforeWork,
     narrationBuffer: ctx.narrationBuffer,
     emit: ctx.emit,
-    loopBudgetExceeded: ctx.loopBudgetExceeded,
-    returnResumableWithUserMessage: ctx.returnResumableWithUserMessage,
+    platformLimitExceeded: ctx.platformLimitExceeded,
+    pauseOperationForUser: ctx.pauseOperationForUser,
     runDesignPreflightIfNeeded: ctx.runDesignPreflightIfNeeded as BuildExecuteDeps["runDesignPreflightIfNeeded"],
     requiresFinalBuildGate: ctx.requiresFinalBuildGate,
     enabledApprovedPlanSteps: ctx.enabledApprovedPlanSteps,
@@ -447,8 +420,8 @@ export function buildPlanTurnDeps(
     toolDefinitions: ctx.reg.getDefinitions(),
     streamState: ctx.planStreamState,
     compressMessages: ctx.compressMessages,
-    loopBudgetExceeded: ctx.loopBudgetExceeded,
-    returnResumableWithUserMessage: ctx.returnResumableWithUserMessage,
+    platformLimitExceeded: ctx.platformLimitExceeded,
+    pauseOperationForUser: ctx.pauseOperationForUser,
     saveCheckpoint: (phase) => ctx.saveCheckpoint(phase),
     attemptGracefulClosing: (reason) => ctx.attemptGracefulClosing(reason),
     executeTool: ctx.executeTool,
@@ -462,11 +435,11 @@ export function buildPlanTurnDeps(
 
 export function createDepsContext(
   host: AgentLoopHost,
-  loopBudgetMs: number,
+  invocationStartedAt: number,
 ): AgentLoopDepsContext {
   let ctx!: AgentLoopDepsContext;
-  const persistDeps = () => buildPersistDeps(ctx, loopBudgetMs);
-  const infraDeps = () => buildInfraDeps(ctx, loopBudgetMs);
+  const persistDeps = () => buildPersistDeps(ctx);
+  const infraDeps = () => buildInfraDeps(ctx, invocationStartedAt);
   const accessors = mutableAccessors(host.mutable);
 
   ctx = {
@@ -502,18 +475,14 @@ export function createDepsContext(
     ensureOpeningBeforeWork: (fallback) => host.ensureOpeningBeforeWork(fallback),
     emit: (type, data) => host.emit(type, data),
     configuredModel: () => host.configuredModel(),
-    loopBudgetExceeded: () =>
-      loopBudgetExceeded({ runStartTime: host.runStartTime, loopBudgetMs }),
-    returnResumableChunk: (steps, used, options) =>
-      returnResumableChunk(infraDeps(), steps, used, options),
-    returnResumableWithUserMessage: (steps, used, options, prose) =>
-      infraReturnResumableWithUserMessage(
-        infraDeps(),
-        (summary, opts) => persistFinal(persistDeps(), summary, opts),
-        steps,
-        used,
-        options,
-        prose,
+    platformLimitExceeded: () => platformLimitExceeded({ invocationStartedAt }),
+    pauseOperationForUser: (input) =>
+      pauseOperationForUser(
+        {
+          ...infraDeps(),
+          persistFinal: (summary, opts) => persistFinal(persistDeps(), summary, opts),
+        },
+        input,
       ),
     runDesignPreflightIfNeeded: () => host.runDesignPreflightIfNeeded(),
     requiresFinalBuildGate: () => host.requiresFinalBuildGate(),
@@ -530,8 +499,6 @@ export function createDepsContext(
     persistAssistantStep: (response) => persistAssistantStep(persistDeps(), response),
     updateAssistantStep: (msgId, response, execResults, step) =>
       updateAssistantStep(persistDeps(), msgId, response, execResults, step),
-    persistCheckpointChat: (steps, buildFix) =>
-      persistCheckpointChat(persistDeps(), steps, buildFix),
     notifyLoopStatus: (ctx) => host.notifyLoopStatus(ctx),
     recordTouchedPath: (path) => host.recordTouchedPath(path),
     finishClarify: (message, steps, used, clarifyQuestions) =>
@@ -556,17 +523,12 @@ export type LoopBindings = {
   clearCheckpoint: () => Promise<void>;
   saveCheckpoint: (phase: LoopPhase, force?: boolean) => Promise<void>;
   touchHeartbeat: () => Promise<void>;
-  returnResumableChunk: (
-    steps: number,
-    toolsUsed: Set<string>,
-    options?: { buildFix?: boolean },
-  ) => Promise<ResumableChunkResult>;
-  returnResumableWithUserMessage: (
-    steps: number,
-    toolsUsed: Set<string>,
-    options?: { buildFix?: boolean },
-    prose?: string,
-  ) => Promise<ResumableChunkResult>;
+  pauseOperationForUser: (input: {
+    reason: PauseReason;
+    message: string;
+    steps: number;
+    toolsUsed: Set<string>;
+  }) => Promise<OperationPauseResult>;
   buildExecute: (
     toolsUsed: Set<string>,
     executionModel: LLMProvider,
@@ -578,11 +540,11 @@ export type LoopBindings = {
 
 export function createLoopBindings(
   host: AgentLoopHost,
-  loopBudgetMs: number,
+  invocationStartedAt: number,
 ): LoopBindings {
-  const deps = () => createDepsContext(host, loopBudgetMs);
-  const persistDeps = () => buildPersistDeps(deps(), loopBudgetMs);
-  const infraDeps = () => buildInfraDeps(deps(), loopBudgetMs);
+  const deps = () => createDepsContext(host, invocationStartedAt);
+  const persistDeps = () => buildPersistDeps(deps());
+  const infraDeps = () => buildInfraDeps(deps(), invocationStartedAt);
 
   return {
     deps,
@@ -590,10 +552,14 @@ export function createLoopBindings(
     clearCheckpoint: () => clearCheckpoint(persistDeps()),
     saveCheckpoint: (phase, force) => saveCheckpoint(persistDeps(), phase, force),
     touchHeartbeat: () => touchHeartbeat(infraDeps()),
-    returnResumableChunk: (steps, used, options) =>
-      returnResumableChunk(infraDeps(), steps, used, options),
-    returnResumableWithUserMessage: (steps, used, options, prose) =>
-      infraReturnResumableWithUserMessage(infraDeps(), (s, o) => persistFinal(persistDeps(), s, o), steps, used, options, prose),
+    pauseOperationForUser: (input) =>
+      pauseOperationForUser(
+        {
+          ...infraDeps(),
+          persistFinal: (summary, opts) => persistFinal(persistDeps(), summary, opts),
+        },
+        input,
+      ),
     buildExecute: (toolsUsed, model, designReadPathsDone) =>
       buildExecuteDeps(deps(), toolsUsed, model, designReadPathsDone),
     buildPlanTurn: (skillPrompt) => buildPlanTurnDeps(deps(), skillPrompt),

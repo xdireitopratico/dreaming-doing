@@ -18,8 +18,8 @@ describe("isTerminalHonest", () => {
     assert.equal(isTerminalHonest(["start", "phase"], "running"), false);
   });
 
-  it("aceita chunk_resume em handoff", () => {
-    assert.equal(isTerminalHonest(["start", "chunk_resume"], "running"), true);
+  it("rejeita running mesmo com run_paused sem terminal", () => {
+    assert.equal(isTerminalHonest(["start", "run_paused"], "running"), false);
   });
 
   it("exige finish+rico em completed", () => {

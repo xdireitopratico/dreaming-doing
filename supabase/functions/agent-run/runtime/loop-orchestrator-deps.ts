@@ -14,6 +14,7 @@ import type { AgentStateData } from "../agent-fsm.ts";
 import type { LoopBindings } from "./deps-factory.ts";
 import type { LoopUpdateContext } from "../loop-status.ts";
 import type { AgentLoopRunResult } from "./loop-result.ts";
+import type { OperationPauseResult, PauseReason } from "./infra.ts";
 
 export type LoopOrchestratorHost = {
   state: AgentState;
@@ -41,7 +42,7 @@ export type LoopOrchestratorHost = {
   emitTransition: (eventType: string, data?: unknown) => Promise<void>;
   notifyLoopStatus: (ctx: LoopUpdateContext) => void;
   configuredModel: () => LLMProvider;
-  loopBudgetExceeded: () => boolean;
+  platformLimitExceeded: () => boolean;
   gatherContext: () => Promise<void>;
   runChatModeAgentTurn: (model: LLMProvider) => Promise<AgentLoopRunResult>;
   runPlanModeAgentTurn: (model: LLMProvider) => Promise<AgentLoopRunResult>;
@@ -83,9 +84,13 @@ export function buildOrchestratorDeps(
         llm: host.llm,
         router: host.router,
       }),
-    loopBudgetExceeded: () => host.loopBudgetExceeded(),
-    returnResumableWithUserMessage: (steps, used, options, prose) =>
-      host.bindings.returnResumableWithUserMessage(steps, used, options, prose),
+    platformLimitExceeded: () => host.platformLimitExceeded(),
+    pauseOperationForUser: (input: {
+      reason: PauseReason;
+      message: string;
+      steps: number;
+      toolsUsed: Set<string>;
+    }): Promise<OperationPauseResult> => host.bindings.pauseOperationForUser(input),
     gatherContext: () => host.gatherContext(),
     saveCheckpoint: (phase) => host.bindings.saveCheckpoint(phase),
     runChatModeAgentTurn: (model) => host.runChatModeAgentTurn(model),
