@@ -191,7 +191,7 @@ export function ContextWindowIndicator({
                   type="text"
                   inputMode="numeric"
                   className="h-[22px] w-full rounded-md border border-[var(--border-forge)] bg-[var(--bg-base)] px-1.5 font-mono text-[11px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus:border-[var(--border-active)]"
-                  placeholder="128000"
+                  placeholder="256"
                   value={prefs.windowTokens}
                   onChange={(e) => setPrefs((p) => ({ ...p, windowTokens: e.target.value }))}
                   onBlur={() => void persistPrefs(prefs)}

@@ -78,10 +78,11 @@ export function useEditorPageData({ projectId, search, agent, navigate }: UseEdi
         const nextMeta = (nextRow.meta ?? {}) as Record<string, unknown>;
         const prevMeta = (prevRow.meta ?? {}) as Record<string, unknown>;
         const assistantInserted = eventType === "INSERT" && nextRow.role === "assistant";
+        const assistantUpdated = eventType === "UPDATE" && nextRow.role === "assistant";
         const queuedChanged = nextMeta.queued !== prevMeta.queued;
         const rowDeleted = eventType === "DELETE";
 
-        if (assistantInserted || queuedChanged || rowDeleted) {
+        if (assistantInserted || assistantUpdated || queuedChanged || rowDeleted) {
           void qc.invalidateQueries({ queryKey: ["messages", conversationId] });
         }
       },
