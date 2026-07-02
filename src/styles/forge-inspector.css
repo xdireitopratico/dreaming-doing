@@ -85,15 +85,15 @@
   display: flex;
   gap: var(--space-xs);
   padding: 3px;
-  border-radius: 999px;
+  border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--border-forge) 80%, transparent);
   background: color-mix(in srgb, var(--bg-input) 72%, transparent);
 }
 
 .forge-inspector-tab {
   font-size: 12px;
-  padding: 4px 10px;
-  border-radius: 999px;
+  padding: 4px 9px;
+  border-radius: 8px;
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -720,7 +720,7 @@
   display: inline-flex;
   align-items: center;
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: 8px;
   font: var(--font-task-label);
   font-size: 10px;
   font-weight: 600;
@@ -1074,8 +1074,8 @@
 .forge-inspector-plan-pill {
   display: inline-flex;
   align-items: center;
-  padding: 2px 10px;
-  border-radius: 999px;
+  padding: 2px 9px;
+  border-radius: 8px;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -1304,7 +1304,7 @@
 .forge-preview-status-pill {
   font-size: 11px;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: 8px;
   border: 1px solid var(--border-forge);
   background: var(--bg-card);
   color: var(--text-muted);

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { previewDeviceWidth, type PreviewDevice } from "@/components/editor/PreviewViewportChrome";
+import { previewDeviceWidth, type PreviewDevice } from "@/components/editor/preview-device";
 import { buildPreviewUrl } from "@/lib/project-routes";
 import { BuildConsole } from "@/components/editor/BuildConsole";
 import type { AgentProgress } from "@/lib/agent-progress";
@@ -128,8 +128,7 @@ export function PreviewFrame({
   const seedPlaceholder = useMemo(() => {
     const entryPath = projectEntryPath(projectStack);
     const entry = files.find(
-      (f) =>
-        f.path === entryPath || f.path === `/${entryPath}` || f.path.endsWith(`/${entryPath}`),
+      (f) => f.path === entryPath || f.path === `/${entryPath}` || f.path.endsWith(`/${entryPath}`),
     );
     return isSeedPlaceholderEntryContent(entry?.content);
   }, [files, projectStack]);
@@ -266,7 +265,11 @@ export function PreviewFrame({
 
         {view === "iframe-live" && iframeSrc && (
           <div className={surfaceClass("forge-preview-iframe-wrap relative")}>
-              {previewLiveUpdating && !agentRunning && !previewSyncing && !warming && !iframeLoading ? (
+            {previewLiveUpdating &&
+            !agentRunning &&
+            !previewSyncing &&
+            !warming &&
+            !iframeLoading ? (
               <div className="pointer-events-none absolute right-3 top-3 z-20 rounded-full bg-neutral-900/85 px-3 py-1 text-xs font-medium text-white shadow-sm">
                 Preview ao vivo
               </div>

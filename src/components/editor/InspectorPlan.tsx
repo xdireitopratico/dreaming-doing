@@ -133,11 +133,7 @@ export function InspectorPlan({ state, onApprove, onReject, onEditRequest }: Ins
   }, [onReject]);
 
   const statusCopy =
-    status === "approved"
-      ? "Aprovado"
-      : status === "rejected"
-        ? "Rejeitado"
-        : "Plano";
+    status === "approved" ? "Aprovado" : status === "rejected" ? "Rejeitado" : "Plano";
 
   const { size, reversible } = planMetaSignals(plan);
   const missionTitle = plan.mission?.trim() || plan.summary;

@@ -16,6 +16,7 @@ interface PreviewRouteNavProps {
   onRefresh?: () => void;
   /** Barra compacta no chrome do preview (refresh fica fora). */
   variant?: "default" | "chrome";
+  compact?: boolean;
 }
 
 function normalizeRouteInput(raw: string): string {
@@ -38,6 +39,7 @@ export function PreviewRouteNav({
   devUrl,
   onRefresh,
   variant = "default",
+  compact = false,
 }: PreviewRouteNavProps) {
   const routes = useMemo(() => {
     const paths = files.map((f) => f.path);
@@ -94,17 +96,19 @@ export function PreviewRouteNav({
       role="navigation"
       aria-label="Navegação do preview"
     >
-      <span
-        className="forge-address-bar-scheme"
-        title={canNavigate ? previewHost : "Preview local"}
-      >
-        {canNavigate ? (
-          <Lock className="size-3 text-[var(--forge-primary)]/80" aria-hidden />
-        ) : (
-          <Globe className="size-3 text-[var(--forge-ghost)]" aria-hidden />
-        )}
-        <span className="forge-address-bar-host">{previewHost}</span>
-      </span>
+      {!compact && (
+        <span
+          className="forge-address-bar-scheme"
+          title={canNavigate ? previewHost : "Preview local"}
+        >
+          {canNavigate ? (
+            <Lock className="size-3 text-[var(--forge-primary)]/80" aria-hidden />
+          ) : (
+            <Globe className="size-3 text-[var(--forge-ghost)]" aria-hidden />
+          )}
+          <span className="forge-address-bar-host">{previewHost}</span>
+        </span>
+      )}
 
       <input
         type="text"

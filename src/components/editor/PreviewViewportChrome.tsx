@@ -1,18 +1,35 @@
-import { Monitor, RefreshCw, Smartphone, Tablet } from "lucide-react";
+import { RefreshCw } from "lucide-react";
+import {
+  PREVIEW_DEVICE_OPTIONS as DEVICE_OPTIONS,
+  nextPreviewDevice,
+  type PreviewDevice,
+} from "@/components/editor/preview-device";
 import { PreviewRouteNav } from "@/components/editor/PreviewRouteNav";
 
-export type PreviewDevice = "desktop" | "tablet" | "mobile";
+export function PreviewDeviceCycleButton({
+  device,
+  onDeviceChange,
+}: {
+  device: PreviewDevice;
+  onDeviceChange: (device: PreviewDevice) => void;
+}) {
+  const current = DEVICE_OPTIONS.find((option) => option.id === device) ?? DEVICE_OPTIONS[0];
+  const Icon = current.icon;
 
-const DEVICE_OPTIONS: Array<{
-  id: PreviewDevice;
-  label: string;
-  icon: typeof Monitor;
-  width: string | null;
-}> = [
-  { id: "desktop", label: "Desktop", icon: Monitor, width: null },
-  { id: "tablet", label: "Tablet", icon: Tablet, width: "768px" },
-  { id: "mobile", label: "Mobile", icon: Smartphone, width: "390px" },
-];
+  return (
+    <button
+      type="button"
+      className="forge-preview-device-btn"
+      data-active="true"
+      title={current.label}
+      aria-label={current.label}
+      aria-pressed="true"
+      onClick={() => onDeviceChange(nextPreviewDevice(device))}
+    >
+      <Icon className="size-3.5" />
+    </button>
+  );
+}
 
 interface PreviewViewportChromeProps {
   files: Array<{ path: string; content?: string }>;
@@ -36,28 +53,13 @@ export function PreviewViewportChrome({
   return (
     <div className="forge-preview-chrome-bar">
       <div className="forge-preview-device-toggle" role="group" aria-label="Tamanho do preview">
-        {DEVICE_OPTIONS.map((option) => {
-          const Icon = option.icon;
-          const active = device === option.id;
-          return (
-            <button
-              key={option.id}
-              type="button"
-              title={option.label}
-              aria-pressed={active}
-              className="forge-preview-device-btn"
-              data-active={active}
-              onClick={() => onDeviceChange(option.id)}
-            >
-              <Icon className="size-3.5" />
-            </button>
-          );
-        })}
+        <PreviewDeviceCycleButton device={device} onDeviceChange={onDeviceChange} />
       </div>
 
       <div className="forge-preview-chrome-nav">
         <PreviewRouteNav
           variant="chrome"
+          compact
           files={files}
           activePath={activePath}
           onNavigate={onNavigate}
@@ -76,8 +78,4 @@ export function PreviewViewportChrome({
       </button>
     </div>
   );
-}
-
-export function previewDeviceWidth(device: PreviewDevice): string | null {
-  return DEVICE_OPTIONS.find((d) => d.id === device)?.width ?? null;
 }

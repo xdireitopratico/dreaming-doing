@@ -1,6 +1,5 @@
 import { Link } from "@tanstack/react-router";
 import { Code2, Eye, Moon, Share2 } from "lucide-react";
-import { useAuth } from "@/lib/auth";
 import type { EditorMainView } from "@/components/editor/editor-views";
 import { ForgeLogoMark } from "@/components/editor/ForgeLogoMark";
 import { ProjectHeaderMenu } from "@/components/editor/ProjectHeaderMenu";
@@ -8,7 +7,6 @@ import {
   EditorIntegrationsMenu,
   type EditorIntegrationsMenuProps,
 } from "@/components/editor/EditorIntegrationsMenu";
-import { PreviewRouteNav } from "@/components/editor/PreviewRouteNav";
 
 interface EditorTopBarProps {
   projectId?: string;
@@ -41,13 +39,6 @@ export function EditorTopBar({
   onPreviewRefresh,
   integrations,
 }: EditorTopBarProps) {
-  const { user } = useAuth();
-
-  const initials =
-    user?.email?.slice(0, 2).toUpperCase() ??
-    user?.user_metadata?.full_name?.slice(0, 2)?.toUpperCase() ??
-    "U";
-
   return (
     <header className="forge-topbar">
       <div className="forge-topbar-left">
@@ -99,24 +90,9 @@ export function EditorTopBar({
           <span className="forge-topbar-divider mx-1 shrink-0 hidden sm:block" aria-hidden />
           <EditorIntegrationsMenu {...integrations} />
         </div>
-
-        {onPreviewPathChange && (
-          <div className="forge-topbar-address-slot">
-            <PreviewRouteNav
-              files={previewFiles}
-              activePath={previewPath}
-              onNavigate={onPreviewPathChange}
-              devUrl={previewDevUrl}
-              onRefresh={onPreviewRefresh}
-            />
-          </div>
-        )}
       </div>
 
       <div className="forge-topbar-right">
-        <span className="forge-avatar" title={user?.email ?? ""}>
-          {initials}
-        </span>
         <button type="button" className="forge-connector-btn" title="Tema">
           <Moon className="size-4" />
         </button>
