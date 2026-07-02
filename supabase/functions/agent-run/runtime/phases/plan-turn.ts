@@ -191,12 +191,6 @@ export async function finishClarify(
   const text = sanitizeUserFacingProse(message || "Preciso de mais detalhes para continuar.").trim() ||
     "Preciso de mais detalhes para continuar.";
   deps.emit("assistant_text", { text, final: true });
-  deps.emit("gate_decision", {
-    phase: "clarify",
-    reason: "clarify tool",
-    awaiting: true,
-    clarifyQuestions: clarifyQuestions ?? undefined,
-  });
   await deps.persistFinal(text, {
     awaiting: true,
     awaitingKind: "clarify",

@@ -6,7 +6,7 @@ import {
   getSupabaseAdmin,
   markRunFinal,
   NonRetriableError,
-  runAgentLoopWithResume,
+  runAgentLoopOnce,
   type AgentRunRequest,
 } from "./_shared";
 
@@ -39,8 +39,8 @@ export const agentBuildFunction = inngest.createFunction(
       await markRunFinal(runId, "running");
     });
 
-    const final = await runAgentLoopWithResume(
-      step as Parameters<typeof runAgentLoopWithResume>[0],
+    const final = await runAgentLoopOnce(
+      step as Parameters<typeof runAgentLoopOnce>[0],
       { ...payload, planMode: false, chatMode: false },
     );
 

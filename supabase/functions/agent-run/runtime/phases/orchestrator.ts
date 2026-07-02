@@ -62,11 +62,6 @@ export async function runAgentOrchestrator(
 ): Promise<PlanTurnRunResult> {
   if (deps.chatMode) {
     await deps.emitTransition("send");
-    deps.emit("classify", {
-      complexity: "low",
-      complexityScore: 2,
-      summary: "Chat",
-    });
     return deps.runChatModeAgentTurn(deps.configuredModel());
   }
 
@@ -81,12 +76,6 @@ export async function runAgentOrchestrator(
     });
     await deps.emitTransition("classified", {
       complexity: deps.complexityScore,
-      summary: deps.state.intent?.summary ?? "Retomada",
-      restored: true,
-    });
-    deps.emit("classify", {
-      complexity: deps.state.intent?.complexity ?? "unknown",
-      complexityScore: deps.complexityScore,
       summary: deps.state.intent?.summary ?? "Retomada",
       restored: true,
     });
@@ -111,7 +100,6 @@ export async function runAgentOrchestrator(
     }
 
     deps.emit("phase", { phase: "gather", message: GATHER_PHASE_MESSAGE });
-    deps.emit("explore", { message: GATHER_PHASE_MESSAGE, phase: "gather" });
     await deps.gatherContext();
     await deps.saveCheckpoint(LoopPhaseEnum.GATHER_CONTEXT);
 

@@ -30,7 +30,6 @@ export const TIMELINE_EVENT_TYPES: ReadonlySet<string> = new Set([
   "step_result",
   "step",
   "task",
-  "delivery_checkpoint",
   "file_diff",
   "plan_proposed",
   "gate_decision",

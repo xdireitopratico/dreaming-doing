@@ -589,18 +589,6 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
         timeline: [...prev.timeline, event],
       };
 
-    case "classify": {
-      return {
-        ...prev,
-        model: (data.model as string) ?? prev.model,
-        classifyComplexity:
-          typeof data.complexity === "string" ? data.complexity : prev.classifyComplexity,
-        classifySummary: typeof data.summary === "string" ? data.summary : prev.classifySummary,
-        classifyRestored: data.restored === true ? true : prev.classifyRestored,
-        timeline: [...prev.timeline, event],
-      };
-    }
-
     case "skills":
       return {
         ...prev,
@@ -677,50 +665,6 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
           },
         ],
         previewSyncTick: (prev.previewSyncTick ?? 0) + 1,
-        timeline: [...prev.timeline, event],
-      };
-    }
-
-    case "preview_sync":
-      return {
-        ...prev,
-        previewSyncTick: (prev.previewSyncTick ?? 0) + 1,
-        timeline: [...prev.timeline, event],
-      };
-
-    case "validate_ok":
-      return {
-        ...prev,
-        runtimeChecks: [
-          ...prev.runtimeChecks,
-          ...((data.checks as Array<{ name: string; ok: boolean }>) ?? [
-            { name: "build", ok: true },
-          ]),
-        ],
-        timeline: [...prev.timeline, event],
-      };
-
-    case "validate_fail": {
-      const diags = parseAgentDiagnostics(data);
-      pushDiagnostics(diags);
-      return {
-        ...prev,
-        runtimeChecks: [
-          ...prev.runtimeChecks,
-          ...((data.checks as Array<{ name: string; ok: boolean }>) ?? [
-            { name: "build", ok: false },
-          ]),
-        ],
-        timeline: [...prev.timeline, event],
-      };
-    }
-
-    case "gate_decision": {
-      const awaiting = data.awaiting === true;
-      return {
-        ...prev,
-        awaiting: awaiting || prev.awaiting,
-        awaitingKind: awaiting ? "clarify" : prev.awaitingKind,
         timeline: [...prev.timeline, event],
       };
     }
@@ -892,23 +836,6 @@ export function applyAgentProgressEvent(prev: AgentProgress, event: SSEEvent): A
       return {
         ...prev,
         statusHint: (data.message as string) ?? "Modelo preso — tentando destravar…",
-        timeline: [...prev.timeline, event],
-      };
-
-    case "typecheck_fail": {
-      const diags = parseAgentDiagnostics(data);
-      pushDiagnostics(diags);
-      return {
-        ...prev,
-        statusHint: (data.message as string) ?? "Erros de TypeScript — veja o editor",
-        timeline: [...prev.timeline, event],
-      };
-    }
-
-    case "timeout_warning":
-      return {
-        ...prev,
-        statusHint: (data.message as string) ?? "Loop budget quase esgotado…",
         timeline: [...prev.timeline, event],
       };
 

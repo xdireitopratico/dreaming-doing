@@ -201,13 +201,14 @@ describe("applyAgentProgressEvent", () => {
     expect(state.tools[1]?.ok).toBe(true);
   });
 
-  it("classify legado não polui streamText (checkpoint resume)", () => {
+  it("classify legado ignorado no reducer (só timeline)", () => {
     const next = applyAgentProgressEvent(
-      { ...base, finished: false, streamText: null },
+      { ...base, finished: false, streamText: null, model: null },
       ev("classify", { summary: "Landing de cafeteria", model: "gpt-4" }),
     );
     expect(next.streamText).toBeNull();
-    expect(next.model).toBe("gpt-4");
+    expect(next.model).toBeNull();
+    expect(next.timeline).toHaveLength(1);
   });
 
   it("build_log acumula linhas no progress", () => {
@@ -328,9 +329,6 @@ describe("applyAgentProgressEvent", () => {
       ev("file_diff", { path: "src/App.tsx", before: "", after: "x", op: "write" }),
     );
     expect(withDiff.previewSyncTick).toBe(1);
-
-    const withSync = applyAgentProgressEvent(withDiff, ev("preview_sync", { reason: "fs_change" }));
-    expect(withSync.previewSyncTick).toBe(2);
 
     const cleared = applyAgentProgressEvent(withPlan, ev("done", { planRejected: true }));
     expect(cleared.pendingPlan).toBeNull();
@@ -512,52 +510,13 @@ describe("Session 2.0 — contrato agent_run", () => {
     });
   });
 
-  describe("B5 — classify com restored/complexity/summary", () => {
-    it("classify restored:true marca checkpoint restaurado", () => {
-      const next = applyAgentProgressEvent(
-        { ...base, finished: false },
-        ev("classify", {
-          model: "gpt-4",
-          complexity: "medium",
-          summary: "Landing de cafeteria",
-          restored: true,
-        }),
-      );
-      expect(next.model).toBe("gpt-4");
-      expect(next.classifyComplexity).toBe("medium");
-      expect(next.classifySummary).toBe("Landing de cafeteria");
-      expect(next.classifyRestored).toBe(true);
-    });
-  });
-
-  describe("B6 — novos cases: stuck / typecheck_fail / timeout_warning / run_paused", () => {
+  describe("B6 — stuck / run_paused", () => {
     it("stuck atualiza statusHint com mensagem de modelo preso", () => {
       const next = applyAgentProgressEvent(
         { ...base, finished: false, statusHint: null },
         ev("stuck", { message: "Modelo preso em leitura — forçando saída", reason: "read-only-loop" }),
       );
       expect(next.statusHint).toContain("preso");
-    });
-
-    it("typecheck_fail faz pushDiagnostics com erros TS", () => {
-      applyAgentProgressEvent(
-        { ...base, finished: false },
-        ev("typecheck_fail", {
-          message: "src/App.tsx:10:5 - error TS2322: Type 'string' is not assignable to type 'number'",
-          files: ["src/App.tsx"],
-        }),
-      );
-      const diags = getDiagnostics();
-      expect(diags.diagnostics.length).toBeGreaterThan(0);
-      expect(diags.diagnostics[0]?.filePath).toBe("src/App.tsx");
-    });
-
-    it("timeout_warning atualiza statusHint", () => {
-      const next = applyAgentProgressEvent(
-        { ...base, finished: false, statusHint: null },
-        ev("timeout_warning", { message: "Loop budget quase esgotado", silentMs: 120000 }),
-      );
-      expect(next.statusHint).toContain("budget");
     });
 
     it("run_paused marca resumable", () => {

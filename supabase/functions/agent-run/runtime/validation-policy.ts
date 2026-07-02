@@ -44,8 +44,8 @@ export function resolveValidationMode(input: {
 
   if (!input.hasSrcTree && pathsAreConfigOnly(paths)) return "off";
   if (input.isFinalGate) return "full";
-  if (input.hasSrcTree && input.loopStep - input.lastValidationStep < 3) return "light";
-  if (input.hasSrcTree && input.loopStep - input.lastValidationStep >= 3) return "full";
+  // Meio do loop: só tsc leve — build completo apenas no gate final.
+  if (input.hasSrcTree) return "light";
   return "light";
 }
 
@@ -61,4 +61,16 @@ export function formatBuildFeedback(
   const snippet = (feedback ?? primary?.name ?? "erro de validação").replace(/\s+/g, " ").trim();
   const msg = `[${name}] ${snippet.slice(0, 320)}. Corrija com fs_edit.`;
   return msg.slice(0, 400);
+}
+
+/** Feedback curto de quickTypeCheck — mesmo cap que formatBuildFeedback. */
+export function formatTypeCheckFeedback(
+  errors: Array<{ file: string; line: number; message: string }>,
+): string {
+  if (!errors.length) return "[typescript] erro de tipo. Corrija com fs_edit.";
+  const head = errors
+    .slice(0, 3)
+    .map((e) => `${e.file}:${e.line} ${e.message}`)
+    .join("; ");
+  return `[typescript] ${head}`.replace(/\s+/g, " ").trim().slice(0, 400);
 }

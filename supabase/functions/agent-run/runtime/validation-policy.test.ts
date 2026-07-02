@@ -1,5 +1,6 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
+  formatTypeCheckFeedback,
   pathsAreConfigOnly,
   resolveValidationMode,
   touchedPathsIncludeSrc,
@@ -31,6 +32,19 @@ Deno.test("resolveValidationMode — light com src entre validações", () => {
   );
 });
 
+Deno.test("resolveValidationMode — meio do loop nunca full", () => {
+  assertEquals(
+    resolveValidationMode({
+      touchedPaths: new Set(["src/App.tsx"]),
+      hasSrcTree: true,
+      loopStep: 10,
+      isFinalGate: false,
+      lastValidationStep: 0,
+    }),
+    "light",
+  );
+});
+
 Deno.test("resolveValidationMode — full no gate final", () => {
   assertEquals(
     resolveValidationMode({
@@ -42,6 +56,14 @@ Deno.test("resolveValidationMode — full no gate final", () => {
     }),
     "full",
   );
+});
+
+Deno.test("formatTypeCheckFeedback — cap curto para LLM", () => {
+  const msg = formatTypeCheckFeedback([
+    { file: "src/App.tsx", line: 10, message: "Type 'string' is not assignable to type 'number'" },
+  ]);
+  assertEquals(msg.startsWith("[typescript]"), true);
+  assertEquals(msg.length <= 400, true);
 });
 
 Deno.test("touchedPathsIncludeSrc detecta src/", () => {

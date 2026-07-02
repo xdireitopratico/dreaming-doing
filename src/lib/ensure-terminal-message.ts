@@ -20,7 +20,6 @@ const TIMELINE_TYPES = new Set([
   "assistant_text",
   "validate_ok",
   "validate_fail",
-  "delivery_checkpoint",
   "file_diff",
   "done",
   "finish",

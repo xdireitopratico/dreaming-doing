@@ -365,24 +365,6 @@ export function buildJobStreamTree(
       continue;
     }
 
-    if (ev.type === "delivery_checkpoint") {
-      const files = Array.isArray(data.deliveryFiles) ? (data.deliveryFiles as string[]) : [];
-      nodes.push({
-        kind: "result",
-        id: `result-${ts}`,
-        ts,
-        summary: files.length ? `Checkpoint · ${files.length} arquivo(s)` : "Checkpoint salvo",
-        evidence: files.map(fileBase),
-        status: "done",
-      });
-      continue;
-    }
-
-    if (ev.type === "delivery_checkpoint_silent" || ev.type === "checkpoint_resume") {
-      pushTask(nodes, buildPhaseTaskTitle("resume"), ts, "resume");
-      continue;
-    }
-
     if (ev.type === "error") {
       nodes.push({
         kind: "result",

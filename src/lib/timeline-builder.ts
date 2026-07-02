@@ -345,19 +345,6 @@ export function buildForgeTimeline(timeline: SSEEvent[], running = false): Forge
       continue;
     }
 
-    if (ev.type === "delivery_checkpoint") {
-      const checkpoint = checkpointSummary(data);
-      if (!checkpoint) continue;
-      items.push({
-        type: "RESULT",
-        id: `result-${ts}`,
-        ok: true,
-        text: checkpoint.text,
-        evidence: checkpoint.files.map(fileBase),
-      });
-      continue;
-    }
-
     if (ev.type === "file_diff") {
       const path = typeof data.path === "string" ? data.path : "";
       const op = typeof data.op === "string" ? data.op : "edit";

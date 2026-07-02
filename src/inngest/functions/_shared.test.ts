@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   drainPendingQueue,
-  MAX_LOOP_RESUME_STEPS,
   partitionAgentRunExtras,
+  runAgentLoopOnce,
   type AgentRunRequest,
 } from "./_shared";
 
@@ -16,9 +16,10 @@ const drainPayload: AgentRunRequest = {
   planMode: true,
 };
 
-describe("MAX_LOOP_RESUME_STEPS", () => {
-  it("permite até 3 chunks por invocação Inngest", () => {
-    expect(MAX_LOOP_RESUME_STEPS).toBe(3);
+describe("runAgentLoopOnce", () => {
+  it("é a função canônica de execução por evento", () => {
+    expect(typeof runAgentLoopOnce).toBe("function");
+    expect(runAgentLoopOnce.name).toBe("runAgentLoopOnce");
   });
 });
 

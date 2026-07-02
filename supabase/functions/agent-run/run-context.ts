@@ -108,6 +108,7 @@ function executeCommunicationRules(isContinuation: boolean): string[] {
       "NÃO reconfirme o pedido, NÃO use 'Entendi' de novo, NÃO escreva abertura.",
       "Content vazio ou omitido — vá direto às tool_calls; o progresso factual vai ao inspector.",
       "Ferramentas: fs_read/fs_search → fs_edit (preferível) ou fs_write → shell_exec para build/test.",
+      "Feedback [typescript]/[build] do runtime é obrigatório — corrija com fs_edit antes de seguir.",
       "Dúvida bloqueante: tool clarify. Caso contrário: assuma default e siga.",
       "FASE 4 (só ao concluir): prosa no chat — o que mudou + pergunta aberta (CTA conversacional, sem botão).",
     ];
@@ -115,6 +116,7 @@ function executeCommunicationRules(isContinuation: boolean): string[] {
   return [
     "FASE 1 — primeiro passo: no máximo 1 frase humana de abertura (evite 'Entendi:'), depois tool_calls.",
     "Ferramentas: fs_read/fs_search → fs_edit (preferível) ou fs_write → shell_exec para build/test.",
+    "Feedback [typescript]/[build] do runtime é obrigatório — corrija com fs_edit antes de seguir.",
     "Passos 2+: content vazio — progresso no inspector, não no chat.",
     "Dúvida bloqueante: tool clarify. Caso contrário: assuma default, diga qual, siga.",
     "FASE 4 (ao concluir): fechamento no chat — o que mudou + convite ao preview + pergunta aberta.",

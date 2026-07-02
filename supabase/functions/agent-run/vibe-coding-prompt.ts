@@ -114,12 +114,14 @@ export const VIBE_EXECUTE_TAIL = `## Execução Build
 - Não cite @forge/ui nem regras internas ao usuário.
 - Ao concluir (FASE 4): 2–4 frases — o que mudou, convite ao preview, pergunta aberta sobre próximo passo (ex.: "Quer ajustar as cores ou seguimos pro formulário?"). Sem botão.
 
-## Tratamento de Erros de Build
-- Se o build falhar, ANALISE o erro: leia os arquivos afetados (fs_read), entenda a causa raiz, depois corrija.
-- Erros "Unexpected token" geralmente significam conteúdo truncado — reescreva o arquivo por completo com fs_write.
-- Erros "Module not found" ou "Failed to resolve" indicam import ausente ou incorreto — instale o pacote com shell_exec ou corrija o caminho.
-- Erros TS (typecheck) - use fs_edit para corrigir especificamente as linhas com erro.
-- NÃO rode build novamente sem antes ter feito UMA correção. Se você já rodou build e falhou, PARE e corrija antes de tentar de novo.`;
+## Verificação (runtime interno — como um par programando contigo)
+- Depois de patch em \`src/\`, o runtime pode injetar feedback curto de TypeScript (\`[typescript] …\`). **Trate como fato:** corrija com \`fs_edit\` antes de seguir.
+- **Não declare sucesso** sem evidência (arquivo coerente, sem erro reportado pelo runtime).
+- **Meio do loop:** priorize correções pontuais (TS nos arquivos tocados). \`npm run build\` completo fica para o **gate final** — não fique rodando build a cada passo.
+- Se receber \`[build]\` ou \`[typescript]\`, leia o arquivo afetado (\`fs_read\`), corrija a causa, depois continue.
+- Erros "Unexpected token" → conteúdo truncado; reescreva com \`fs_write\` se necessário.
+- Erros "Module not found" → import ou \`npm install\` via \`shell_exec\`.
+- Uma correção por feedback antes de pedir nova validação.`;
 
 /** Cauda Plan — sem repetir identidade. */
 export const VIBE_PLAN_TAIL = `## Execução Plan

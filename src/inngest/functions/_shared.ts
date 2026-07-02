@@ -68,15 +68,12 @@ export function getSupabaseAdmin(): SupabaseClient {
   return adminClient;
 }
 
-/** @deprecated Design DNA still uses multi-chunk resume; agent handlers use a single execute per event. */
-export const MAX_LOOP_RESUME_STEPS = 3;
-
 type InngestStep = {
   run: <T>(id: string, fn: () => Promise<T> | T) => Promise<T>;
 };
 
-/** Executa o loop uma vez por evento Inngest (sem auto-chunk redispatch). */
-export async function runAgentLoopWithResume(
+/** Uma execução do loop por evento Inngest (sem auto-chunk redispatch). */
+export async function runAgentLoopOnce(
   step: InngestStep,
   payload: AgentRunRequest,
 ): Promise<ExecuteResponse> {
@@ -85,6 +82,9 @@ export async function runAgentLoopWithResume(
     return await runAgentLoop(payload);
   });
 }
+
+/** @deprecated Use runAgentLoopOnce */
+export const runAgentLoopWithResume = runAgentLoopOnce;
 
 export async function getRunStatus(runId: string): Promise<AgentRunStatus | null> {
   const { data, error } = await getSupabaseAdmin()

@@ -33,5 +33,5 @@ Deno.test("no-redispatch — agent-chat sem auto-chunk Inngest", () => {
 
 Deno.test("no-redispatch — _shared executa loop uma vez", () => {
   assertEquals(sharedSrc.includes("execute-loop-0"), true);
-  assertEquals(sharedSrc.includes("sem auto-chunk redispatch"), true);
+  assertEquals(sharedSrc.includes("runAgentLoopOnce"), true);
 });

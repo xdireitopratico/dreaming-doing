@@ -81,6 +81,7 @@ import {
 import type { PauseReason } from "../infra.ts";
 import {
   formatBuildFeedback,
+  formatTypeCheckFeedback,
   resolveValidationMode,
   touchedPathsIncludeSrc,
 } from "../validation-policy.ts";
@@ -197,7 +198,6 @@ function applyNoToolCallsEnforcement(
     wasStreamed: deps.getLlmResponseWasStreamed(),
   });
   if (decision.kind === "fail") {
-    deps.emit("explore", { message: decision.exploreMessage });
     deps.emit("error", { message: decision.userMessage, recoverable: false });
     return true;
   }
@@ -205,7 +205,6 @@ function applyNoToolCallsEnforcement(
 
   deps.setToolMissCount(decision.attempt);
   deps.setForceToolsNext(decision.forceToolsNext);
-  deps.emit("explore", { message: decision.exploreMessage });
 
   const historyContent = assistantContentForHistory(
     response.content,
@@ -556,7 +555,7 @@ export async function runBuildExecutePhase(
         touchedPathsCount: deps.touchedPaths.size,
       });
       if (preTurnGuide.action === "nudge_stall") {
-        deps.emit("explore", { message: preTurnGuide.message });
+        deps.state.messages.push({ role: "user", content: preTurnGuide.message });
       }
 
       deps.compression.emitUsage(deps.state.messages);
@@ -1139,15 +1138,9 @@ export async function runBuildExecutePhase(
         const typeCheck = await deps.observer.quickTypeCheck(modifiedFilePaths);
         if (!typeCheck.ok) {
           deps.notifyLoopStatus({ kind: "typecheck_fail" });
-          deps.emit("typecheck_fail", {
-            errors: typeCheck.errors,
-            files: modifiedFilePaths,
-          });
           deps.state.messages.push({
             role: "user",
-            content: `BUILD FALHOU:\n${typeCheck.errors
-              .map((e) => `${e.file}:${e.line} - ${e.message}`)
-              .join("\n")}\nCorrija com fs_edit.`,
+            content: formatTypeCheckFeedback(typeCheck.errors),
           });
           continue;
         }
@@ -1174,68 +1167,6 @@ export async function runBuildExecutePhase(
           continue;
         }
         buildAttempts = 0;
-      } else if (modifiedFiles && buildAttempts < EXECUTE_MAX_RETRIES && validationMode === "full") {
-        deps.state.phase = LoopPhaseEnum.VALIDATE_STEP;
-        deps.notifyLoopStatus({ kind: "build_check" });
-        deps.emit("phase", { phase: "validate", message: "Conferindo build…" });
-        const session = deps.getBuildSession();
-        if (session) {
-          deps.setBuildSession(
-            transitionBuildSession(session, "validate_running", {
-              reason: "post-build validation running",
-            }),
-          );
-        }
-        await deps.saveCheckpoint(LoopPhaseEnum.VALIDATE_STEP);
-        const observation = await deps.observer.observe(() => deps.platformLimitExceeded());
-        lastValidationStep = loopStep;
-        const sessionAfterObserve = deps.getBuildSession();
-        if (sessionAfterObserve) {
-          deps.setBuildSession(
-            recordBuildSessionChecks(sessionAfterObserve, "validate", observation.checks),
-          );
-        }
-        if (!observation.passed) {
-          buildAttempts++;
-          const failedMessage = observation.feedback?.slice(0, 500) ?? "validate failed";
-          logger.event("agent.build_validate_retry", {
-            loopStep,
-            attempt: buildAttempts,
-            checks: observation.checks.filter((c) => !c.ok).map((c) => c.name),
-            feedbackLength: (observation.feedback ?? "").length,
-          });
-          const failingSession = deps.getBuildSession();
-          if (failingSession) {
-            deps.setBuildSession(
-              recordBuildSessionError(failingSession, {
-                kind: "build",
-                message: failedMessage,
-                recoverable: true,
-                phase: "validate_running",
-                retryDelta: 1,
-              }),
-            );
-          }
-          deps.state.messages.push({
-            role: "user",
-            content: formatBuildFeedback(observation.feedback, observation.checks),
-          });
-          continue;
-        }
-        buildAttempts = 0;
-        deps.notifyLoopStatus({ kind: "build_ok" });
-        logger.event("agent.build_validate_passed", {
-          loopStep,
-          modifiedFiles,
-        });
-        const passedSession = deps.getBuildSession();
-        if (passedSession) {
-          deps.setBuildSession(
-            transitionBuildSession(passedSession, "build_running", {
-              reason: "validation passed",
-            }),
-          );
-        }
       }
 
       if (isExecutionStuck(deps.state.executionLog)) {
