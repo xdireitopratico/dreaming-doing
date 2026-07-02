@@ -7,13 +7,13 @@
 import { providerWire } from "@/lib/ai-provider-registry";
 import { normalizeNvidiaApiModel } from "@/lib/nvidia-model";
 import {
-  normalizePresetId as normalizePresetIdContract,
+  normalizePresetId,
   TASTE_PLATFORM_MODEL_PRESET_ID,
   slugToPresetId,
 } from "@/lib/preset-contract";
 
 export {
-  normalizePresetIdContract as normalizePresetId,
+  normalizePresetId,
   TASTE_PLATFORM_MODEL_PRESET_ID,
   PLATFORM_ROBIN_TASTE_PRESET_ID,
 } from "@/lib/preset-contract";
@@ -834,7 +834,7 @@ export function resolveStudioSelectedEnv(
 }
 
 export function getPresetById(id?: string, userModels?: UserModelEntry[]): ForgeModelPreset {
-  const norm = normalizePresetIdContract(id);
+  const norm = normalizePresetId(id);
   if (!norm) return UNCONFIGURED_PRESET;
   const catalog = PRESET_BY_ID.get(norm);
   if (catalog) return catalog;
