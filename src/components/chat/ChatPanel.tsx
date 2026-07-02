@@ -13,6 +13,7 @@ import { ChatComposer } from "./ChatComposer";
 import { ChatQueueDock, type PendingQueueItem } from "./ChatQueueDock";
 import type { PlanStep } from "@/lib/agent-progress";
 import type { useAgentRun } from "@/hooks/useAgentRun";
+import { progressFromAssistantMessage } from "@/lib/assistant-run-progress";
 import { ChevronDown } from "lucide-react";
 
 type AgentRun = ReturnType<typeof useAgentRun>;
@@ -115,6 +116,16 @@ export function ChatPanel({
     activeRunId: agent.activeRunId,
     finished: agent.progress.finished,
   });
+
+  const historicalContextUsage = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const item = messages[i];
+      if (item?.role !== "assistant") continue;
+      const progress = progressFromAssistantMessage(item);
+      if (progress?.contextUsage) return progress.contextUsage;
+    }
+    return undefined;
+  }, [messages]);
 
   const lastUserMessageId = useMemo(() => {
     for (let i = thread.length - 1; i >= 0; i--) {
@@ -278,7 +289,7 @@ export function ChatPanel({
         visualEditsActive={visualEditsActive}
         externalPrompt={externalPrompt}
         onExternalPromptConsumed={onExternalPromptConsumed}
-        contextUsage={agent.progress.contextUsage}
+        contextUsage={agent.progress.contextUsage ?? historicalContextUsage}
         activeRunId={agent.activeRunId}
       />
     </div>

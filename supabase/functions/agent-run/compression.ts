@@ -12,7 +12,8 @@ export type ContextWindowPolicy = {
   windowTokens: number;
 };
 
-export const DEFAULT_CONTEXT_WINDOW_TOKENS = 128_000;
+// Default só entra quando a preferência do usuário não trouxe janela nenhuma.
+export const DEFAULT_CONTEXT_WINDOW_TOKENS = 256;
 export const AUTO_ADVISORY_RATIO = 0.8;
 export const AUTO_FORCE_RATIO = 0.95;
 const MAX_ANCHOR_MESSAGES = 64;

@@ -7,6 +7,11 @@ import { normalizePresetId } from "../_shared/preset-contract.ts";
 
 type UserModelEntry = { slug: string; env: string; label?: string };
 
+type ContextWindowPayload = {
+  mode?: "manual" | "auto";
+  windowTokens?: number;
+};
+
 function normalizeUserModelEntries(raw: Record<string, unknown>): UserModelEntry[] | undefined {
   const fromField = Array.isArray(raw.userModelEntries)
     ? raw.userModelEntries
@@ -61,6 +66,7 @@ export function normalizeAgentPreferences(
     webSearchFallback: typeof r.webSearchFallback === "string" ? r.webSearchFallback : undefined,
     webScrapeFallback: typeof r.webScrapeFallback === "string" ? r.webScrapeFallback : undefined,
     browserFallback: typeof r.browserFallback === "string" ? r.browserFallback : undefined,
+    contextWindow: normalizeContextWindow(r.contextWindow),
   };
 
   return Object.values(normalized).some((value) => {
@@ -69,6 +75,19 @@ export function normalizeAgentPreferences(
   })
     ? normalized
     : undefined;
+}
+
+function normalizeContextWindow(raw: unknown): ContextWindowPayload | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  const mode = r.mode === "auto" ? "auto" : r.mode === "manual" ? "manual" : undefined;
+  const windowTokens =
+    typeof r.windowTokens === "number" && r.windowTokens > 0 ? Math.floor(r.windowTokens) : undefined;
+  if (!mode && !windowTokens) return undefined;
+  return {
+    mode: mode ?? "manual",
+    windowTokens: windowTokens ?? 256,
+  };
 }
 
 /** Carrega preferências do perfil. Fail-closed: undefined se vazio. */

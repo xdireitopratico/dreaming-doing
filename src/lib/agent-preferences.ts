@@ -23,7 +23,8 @@ export type ContextWindowPrefs = {
   windowTokens: number;
 };
 
-export const DEFAULT_CONTEXT_WINDOW_TOKENS = 128_000;
+// Default somente quando o usuário ainda não gravou nenhuma janela explícita.
+export const DEFAULT_CONTEXT_WINDOW_TOKENS = 256;
 
 export type PoolProviderId = string;
 
