@@ -56,6 +56,13 @@ export function evaluateReadGate(input: {
   };
 }
 
+export function shouldPauseZeroDelivery(input: {
+  actionableIntent: boolean;
+  touchedPathsCount: number;
+}): boolean {
+  return input.actionableIntent && input.touchedPathsCount === 0;
+}
+
 export function evaluateZeroWritesExit(input: {
   approvedPlanBuild: boolean;
   touchedPathsCount: number;

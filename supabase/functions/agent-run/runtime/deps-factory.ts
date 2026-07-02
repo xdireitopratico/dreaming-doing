@@ -298,6 +298,7 @@ export function buildPersistDeps(ctx: AgentLoopDepsContext): AgentPersistDeps {
     getComplexityScore: () => ctx.complexityScore,
     touchedPaths: ctx.touchedPaths,
     narrationBuffer: ctx.narrationBuffer,
+    getNarrationBuffer: ctx.narrationTrim,
     tailSlice: ctx.tailSlice,
     getTimeline: ctx.getTimeline,
     runStartTime: ctx.runStartTime,

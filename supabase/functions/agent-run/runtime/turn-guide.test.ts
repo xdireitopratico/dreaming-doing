@@ -3,6 +3,7 @@ import {
   evaluateReadGate,
   evaluateTurnGuidePreTurn,
   evaluateZeroWritesExit,
+  shouldPauseZeroDelivery,
   READ_GATE_RELAX_AFTER,
   READ_ONLY_STALL_THRESHOLD,
   ZERO_WRITES_MIN_STEP,
@@ -77,6 +78,17 @@ Deno.test("evaluateReadGate — passa quando paths lidos", () => {
     readGateBlockCount: 0,
   });
   assertEquals(decision.action, "proceed");
+});
+
+Deno.test("shouldPauseZeroDelivery — intent acionável sem arquivos", () => {
+  assertEquals(
+    shouldPauseZeroDelivery({ actionableIntent: true, touchedPathsCount: 0 }),
+    true,
+  );
+  assertEquals(
+    shouldPauseZeroDelivery({ actionableIntent: false, touchedPathsCount: 0 }),
+    false,
+  );
 });
 
 Deno.test("evaluateZeroWritesExit — approved build step>=N zero touched pausa", () => {

@@ -6,7 +6,9 @@ import {
   computeFilePreDiff,
   isActionableIntent,
   isUiPatchCall,
+  looksLikeEmbeddedToolCall,
   recordDesignReadPath,
+  shouldBlockTextOnlyCompletion,
   shouldEnforceNoToolCalls,
   updateReadOnlyTracker,
 } from "./execute-helpers.ts";
@@ -23,6 +25,36 @@ Deno.test("shouldEnforceNoToolCalls — stream após tools = fechamento OK", () 
       toolsInvoked: true,
     }),
     false,
+  );
+});
+
+Deno.test("shouldEnforceNoToolCalls — approved plan com writes permite text_only", () => {
+  assertEquals(
+    shouldEnforceNoToolCalls({
+      forceTools: false,
+      narrationOnlyStep: false,
+      llmResponseWasStreamed: false,
+      approvedPlanBuild: true,
+      actionableIntent: true,
+      toolsInvoked: true,
+      touchedPathsCount: 2,
+    }),
+    false,
+  );
+});
+
+Deno.test("shouldEnforceNoToolCalls — approved plan sem writes exige tools", () => {
+  assertEquals(
+    shouldEnforceNoToolCalls({
+      forceTools: false,
+      narrationOnlyStep: false,
+      llmResponseWasStreamed: false,
+      approvedPlanBuild: true,
+      actionableIntent: true,
+      toolsInvoked: true,
+      touchedPathsCount: 0,
+    }),
+    true,
   );
 });
 
@@ -43,6 +75,41 @@ Deno.test("shouldEnforceNoToolCalls — stream sem tools ainda = retry", () => {
 Deno.test("isActionableIntent — modify e fix", () => {
   assertEquals(isActionableIntent("modify"), true);
   assertEquals(isActionableIntent(undefined), false);
+});
+
+Deno.test("looksLikeEmbeddedToolCall — detecta JSON shell no prose", () => {
+  const prose =
+    'Vou criar a estrutura.\n{"tool":"shell","command":"mkdir -p src/components"}';
+  assertEquals(looksLikeEmbeddedToolCall(prose), true);
+});
+
+Deno.test("looksLikeEmbeddedToolCall — ignora fechamento normal", () => {
+  assertEquals(
+    looksLikeEmbeddedToolCall("Pronto — confere o preview e me diz se quer ajustar algo."),
+    false,
+  );
+});
+
+Deno.test("shouldBlockTextOnlyCompletion — reads sem writes em intent acionável", () => {
+  assertEquals(
+    shouldBlockTextOnlyCompletion({
+      actionableIntent: true,
+      touchedPathsCount: 0,
+      assistantText: "Vou aplicar o design agora.",
+    }),
+    true,
+  );
+});
+
+Deno.test("shouldBlockTextOnlyCompletion — permite fechamento após writes", () => {
+  assertEquals(
+    shouldBlockTextOnlyCompletion({
+      actionableIntent: true,
+      touchedPathsCount: 2,
+      assistantText: "Hero atualizado no preview.",
+    }),
+    false,
+  );
 });
 
 Deno.test("computeForceTools — approved plan no step 1", () => {

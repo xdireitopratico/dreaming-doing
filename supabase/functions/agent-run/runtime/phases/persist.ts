@@ -45,6 +45,7 @@ export type AgentPersistDeps = {
   getComplexityScore: () => number;
   touchedPaths: Set<string>;
   narrationBuffer: string;
+  getNarrationBuffer?: () => string;
   tailSlice: (count: number) => unknown[];
   getTimeline: () => Array<{ type: string; data: Record<string, unknown>; timestamp?: number }>;
   runStartTime: number;
@@ -58,13 +59,17 @@ export type AgentPersistDeps = {
   emit: (type: string, data: unknown) => void;
 };
 
+function resolveNarrationBuffer(deps: AgentPersistDeps): string {
+  return (deps.getNarrationBuffer?.() ?? deps.narrationBuffer).trim();
+}
+
 function cardSnapshotForPersist(
   deps: AgentPersistDeps,
   opts: BuildCardSnapshotOpts,
 ): Record<string, unknown> {
   return buildCardSnapshot({
     timeline: deps.getTimeline(),
-    narrationBuffer: deps.narrationBuffer,
+    narrationBuffer: resolveNarrationBuffer(deps),
     runStartTime: deps.runStartTime,
     runId: deps.runId,
     projectId: deps.state.projectId,

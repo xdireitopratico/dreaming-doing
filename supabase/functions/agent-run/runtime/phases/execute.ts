@@ -32,6 +32,7 @@ import {
   isUiPatchCall,
   normalizeDesignReadPath,
   recordDesignReadPath,
+  shouldBlockTextOnlyCompletion,
   shouldEnforceNoToolCalls,
   shouldSuggestStackFork,
   updateReadOnlyTracker,
@@ -40,6 +41,7 @@ import {
   evaluateReadGate,
   evaluateTurnGuidePreTurn,
   evaluateZeroWritesExit,
+  shouldPauseZeroDelivery,
   ZERO_WRITES_RESUME_MESSAGE,
 } from "../turn-guide.ts";
 import { attemptOpeningProse } from "../turn-opening.ts";
@@ -858,7 +860,13 @@ export async function runBuildExecutePhase(
       }
 
       if (!response.tool_calls || response.tool_calls.length === 0) {
+        const blockTextOnly = shouldBlockTextOnlyCompletion({
+          actionableIntent,
+          touchedPathsCount: deps.touchedPaths.size,
+          assistantText,
+        });
         if (
+          blockTextOnly ||
           shouldEnforceNoToolCalls({
             forceTools,
             narrationOnlyStep,
@@ -866,6 +874,7 @@ export async function runBuildExecutePhase(
             approvedPlanBuild: deps.approvedPlanBuild,
             actionableIntent,
             toolsInvoked: deps.getToolsInvoked(),
+            touchedPathsCount: deps.touchedPaths.size,
           })
         ) {
           const fail = applyNoToolCallsEnforcement(deps, response, assistantText);
@@ -1291,6 +1300,15 @@ export async function runBuildExecutePhase(
       content: formatBuildFeedback(finalObservation.feedback, finalObservation.checks),
     });
     deps.notifyLoopStatus({ kind: "build_fix" });
+  }
+
+  if (
+    shouldPauseZeroDelivery({
+      actionableIntent: isActionableIntent(deps.state.intent?.type),
+      touchedPathsCount: deps.touchedPaths.size,
+    })
+  ) {
+    return zeroWritesResumableExit(deps, loopStep, "summarize_zero_writes");
   }
 
   deps.state.phase = LoopPhaseEnum.SUMMARIZE;

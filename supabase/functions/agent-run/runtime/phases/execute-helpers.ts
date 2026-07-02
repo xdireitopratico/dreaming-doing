@@ -83,6 +83,31 @@ export function isActionableIntent(type: IntentAnalysis["type"] | undefined): bo
   );
 }
 
+/** Modelo escreveu JSON de tool no prose em vez de usar tool_calls. */
+const EMBEDDED_TOOL_NAME_RE =
+  /\{\s*"(?:tool|name)"\s*:\s*"(?:shell|shell_exec|fs_write|fs_edit|fs_read|fs_list|fs_search)"/i;
+const EMBEDDED_SHELL_COMMAND_RE =
+  /\{[^}]{0,400}"command"\s*:\s*"(?:mkdir|npm|npx|cd |git |pnpm|yarn|bun )/i;
+
+export function looksLikeEmbeddedToolCall(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (EMBEDDED_TOOL_NAME_RE.test(t)) return true;
+  if (EMBEDDED_SHELL_COMMAND_RE.test(t)) return true;
+  return false;
+}
+
+/** text_only não pode fechar run acionável sem entrega materializada. */
+export function shouldBlockTextOnlyCompletion(input: {
+  actionableIntent: boolean;
+  touchedPathsCount: number;
+  assistantText: string;
+}): boolean {
+  if (looksLikeEmbeddedToolCall(input.assistantText)) return true;
+  if (input.actionableIntent && input.touchedPathsCount === 0) return true;
+  return false;
+}
+
 export function computeForceTools(input: {
   forceToolsNext: boolean;
   toolsInvoked: boolean;
@@ -273,15 +298,18 @@ export function shouldEnforceNoToolCalls(input: {
   approvedPlanBuild: boolean;
   actionableIntent: boolean;
   toolsInvoked: boolean;
+  touchedPathsCount?: number;
 }): boolean {
   // Streamed prose após tools já executadas = fechamento válido (ex. smoke fs_list → resumo).
   // Só penaliza stream sem tool_calls quando ainda não houve nenhuma execução.
   const streamedWithoutAction = input.llmResponseWasStreamed && !input.toolsInvoked;
+  const approvedPlanNeedsDelivery =
+    input.approvedPlanBuild && (input.touchedPathsCount ?? 0) === 0;
   return (
     input.forceTools ||
     input.narrationOnlyStep ||
     streamedWithoutAction ||
-    input.approvedPlanBuild ||
+    approvedPlanNeedsDelivery ||
     (input.actionableIntent && !input.toolsInvoked)
   );
 }

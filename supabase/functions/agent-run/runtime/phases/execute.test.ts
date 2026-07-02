@@ -42,6 +42,8 @@ function buildStubbedExecuteDeps(overrides?: {
     (type, data) => events.push({ type, data: data as Record<string, unknown> }),
   );
   let step = 0;
+  let toolsInvoked = false;
+  let toolMissCount = 0;
   const state = minimalState();
   let buildSession: CanonicalBuildSession | null = createCanonicalBuildSession("run-1", false);
 
@@ -63,12 +65,16 @@ function buildStubbedExecuteDeps(overrides?: {
     state,
     toolsUsed: new Set(),
     fileContentCache: new Map(),
-    getToolMissCount: () => 0,
-    setToolMissCount: () => {},
+    getToolMissCount: () => toolMissCount,
+    setToolMissCount: (value) => {
+      toolMissCount = value;
+    },
     getForceToolsNext: () => false,
     setForceToolsNext: () => {},
-    getToolsInvoked: () => false,
-    setToolsInvoked: () => {},
+    getToolsInvoked: () => toolsInvoked,
+    setToolsInvoked: (value) => {
+      toolsInvoked = value;
+    },
     getConsecutiveNoContentReadSteps: () => 0,
     setConsecutiveNoContentReadSteps: () => {},
     getReadGateBlockCount: () => 0,
@@ -397,4 +403,65 @@ Deno.test("execute platform limit pausa aguardando usuário com persistFinal", a
   assertEquals(result.awaiting, true);
   assertEquals(result.resumable, false);
   assert(!String(result.error || "").includes("O modelo não respondeu"));
+});
+
+Deno.test("e3b71248 — reads + shell JSON no prose não completa em 2 steps", async () => {
+  let llmCalls = 0;
+  const readPaths = [
+    "packages/forge-ui/src/compositions/opinionated/KineticHeadlineReveal.tsx",
+    "packages/forge-ui/src/compositions/opinionated/GlassNavFloating.tsx",
+    "packages/forge-ui/src/compositions/opinionated/HeroCinematicSpotlight.tsx",
+    "packages/forge-ui/src/compositions/opinionated/FeatureBentoGrid.tsx",
+    "packages/forge-ui/src/compositions/opinionated/FooterMinimalLegal.tsx",
+  ];
+  const shellJson =
+    'Vou montar a estrutura.\n{"tool":"shell","command":"mkdir -p src/components/hero"}';
+  const deps = buildStubbedExecuteDeps({
+    llmChat: async () => {
+      llmCalls += 1;
+      if (llmCalls === 1) {
+        return {
+          role: "assistant" as const,
+          content: "",
+          tool_calls: readPaths.map((path, i) => ({
+            id: `read-${i}`,
+            name: "fs_read" as const,
+            arguments: { path },
+          })),
+        };
+      }
+      return {
+        role: "assistant" as const,
+        content: shellJson,
+        tool_calls: [],
+      };
+    },
+  });
+  deps.state.intent = {
+    type: "modify",
+    scope: ["src"],
+    complexity: "medium",
+    summary: "clone livekit",
+  };
+  deps.approvedPlanBuild = true;
+  deps.approvedPlanDesign = {
+    moment: "hero cinematic",
+    techniques: ["glass"],
+    read_paths: readPaths,
+  } as BuildExecuteDeps["approvedPlanDesign"];
+  deps.requiresFinalBuildGate = () => false;
+  deps.maxStepsLimit = 8;
+  deps.executionModel = {
+    chat: async () => ({
+      role: "assistant" as const,
+      content: "Vou aplicar o design da biblioteca no hero.",
+      tool_calls: [],
+    }),
+  };
+
+  const result = await runBuildExecutePhase(deps, 0);
+
+  assertEquals(result.ok, false);
+  assertEquals(result.awaiting, true);
+  assert(llmCalls > 2, "must retry after blocked text_only, not complete in 2 LLM turns");
 });

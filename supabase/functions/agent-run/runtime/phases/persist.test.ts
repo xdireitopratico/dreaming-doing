@@ -74,7 +74,7 @@ function mockPersistDeps(overrides?: Partial<AgentPersistDeps>): AgentPersistDep
     getContextUsage: () => null,
     getDirectiveEmitted: () => false,
     getValidationGeneration: () => 0,
-    getOperationStartedAt: () => "",
+    getOperationStartedAt: () => new Date().toISOString(),
     emit: () => {},
     upserts,
     inserts,
@@ -101,6 +101,18 @@ Deno.test("saveCheckpoint — grava com force=true", async () => {
   deps.setLastCheckpointStep(2);
   await saveCheckpoint(deps, LoopPhase.GATHER_CONTEXT, true);
   assertEquals(deps.upserts.length, 1);
+});
+
+Deno.test("persistFinal — getNarrationBuffer vivo separado de streamText", async () => {
+  const deps = mockPersistDeps({
+    narrationBuffer: "",
+    getNarrationBuffer: () => "Vou aplicar o design no hero.",
+  });
+  await persistFinal(deps, "Hero pronto — confere o preview.");
+  const row = deps.inserts[0] as { meta: Record<string, unknown> };
+  const card = row.meta.cardSnapshot as { narrationText?: string; streamText?: string };
+  assertEquals(card.narrationText, "Vou aplicar o design no hero.");
+  assertEquals(card.streamText, "Hero pronto — confere o preview.");
 });
 
 Deno.test("persistFinal — insere mensagem quando não há run message existente", async () => {

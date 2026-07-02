@@ -2,6 +2,7 @@
 
 import type { ChatMessage, LLMProvider } from "./types.ts";
 import { sanitizeUserFacingProse } from "./sanitize-prose.ts";
+import { looksLikeEmbeddedToolCall } from "./runtime/phases/execute-helpers.ts";
 
 type ToolCallLike = {
   name: string;
@@ -93,6 +94,7 @@ export function lastAssistantProse(messages: ChatMessage[]): string | null {
     if (m.tool_calls?.length) continue;
     const text = typeof m.content === "string" ? m.content.trim() : "";
     if (!text || text === "Concluído.") continue;
+    if (looksLikeEmbeddedToolCall(text)) continue;
     return text;
   }
   return null;

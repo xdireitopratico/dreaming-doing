@@ -40,6 +40,17 @@ Deno.test("formatLoopStatus — build_ok", () => {
   assertEquals(text, null);
 });
 
+Deno.test("lastAssistantProse — ignora prosa com JSON de tool embutido", () => {
+  const messages: ChatMessage[] = [
+    {
+      role: "assistant",
+      content: 'Ok.\n{"tool":"shell","command":"mkdir -p src"}',
+    },
+    { role: "assistant", content: "Arquivos criados — abre o preview." },
+  ];
+  assertEquals(lastAssistantProse(messages), "Arquivos criados — abre o preview.");
+});
+
 Deno.test("lastAssistantProse — ignora turnos com tool_calls", () => {
   const messages: ChatMessage[] = [
     {
