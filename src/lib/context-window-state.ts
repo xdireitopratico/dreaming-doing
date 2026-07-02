@@ -1,7 +1,7 @@
 import type { AgentProgress } from "@/lib/agent-progress";
 import {
   DEFAULT_CONTEXT_WINDOW_TOKENS,
-  loadAgentPreferences,
+  type AgentPreferences,
   type ContextWindowMode,
 } from "@/lib/agent-preferences";
 import type { ChatMessage } from "@/lib/chat-types";
@@ -24,8 +24,7 @@ function roundPercent(percent: number): number {
   return Math.round(percent * 10) / 10;
 }
 
-export function resolveContextWindowConfig(): ContextWindowConfig {
-  const prefs = loadAgentPreferences();
+export function resolveContextWindowConfig(prefs: AgentPreferences): ContextWindowConfig {
   return {
     mode: prefs.contextWindow?.mode ?? "manual",
     windowTokens: normalizeWindowTokens(prefs.contextWindow?.windowTokens),
@@ -75,7 +74,8 @@ export function deriveContextWindowUsage(
 
 export function resolveComposerContextUsage(
   messages: ChatMessage[],
+  prefs: AgentPreferences,
   liveContextUsage?: AgentProgress["contextUsage"] | null,
 ): ContextWindowUsage {
-  return deriveContextWindowUsage(messages, resolveContextWindowConfig(), liveContextUsage);
+  return deriveContextWindowUsage(messages, resolveContextWindowConfig(prefs), liveContextUsage);
 }

@@ -15,12 +15,14 @@ import type { PlanStep } from "@/lib/agent-progress";
 import type { useAgentRun } from "@/hooks/useAgentRun";
 import { resolveComposerContextUsage } from "@/lib/context-window-state";
 import { ChevronDown } from "lucide-react";
+import type { AgentPreferences } from "@/lib/agent-preferences";
 
 type AgentRun = ReturnType<typeof useAgentRun>;
 
 export type ChatPanelProps = {
   projectId: string;
   conversationId: string | null | undefined;
+  agentPrefs: AgentPreferences;
   messages: ChatMessage[];
   messagesLoading?: boolean;
   agentHasRun?: boolean;
@@ -60,6 +62,7 @@ export type ChatPanelProps = {
 export function ChatPanel({
   projectId,
   conversationId,
+  agentPrefs,
   messages,
   messagesLoading = false,
   agentHasRun = false,
@@ -118,8 +121,13 @@ export function ChatPanel({
   });
 
   const composerContextUsage = useMemo(
-    () => resolveComposerContextUsage(messages, turnActive ? agent.progress.contextUsage : null),
-    [messages, turnActive, agent.progress.contextUsage],
+    () =>
+      resolveComposerContextUsage(
+        messages,
+        agentPrefs,
+        turnActive ? agent.progress.contextUsage : null,
+      ),
+    [messages, agentPrefs, turnActive, agent.progress.contextUsage],
   );
 
   const lastUserMessageId = useMemo(() => {

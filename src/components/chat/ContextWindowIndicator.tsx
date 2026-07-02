@@ -62,6 +62,12 @@ export function ContextWindowIndicator({
     setPrefs(readContextPrefs(loadAgentPreferences()));
   }, [open]);
 
+  useEffect(() => {
+    const refresh = () => setPrefs(readContextPrefs(loadAgentPreferences()));
+    window.addEventListener("forge:prefs-updated", refresh);
+    return () => window.removeEventListener("forge:prefs-updated", refresh);
+  }, []);
+
   const rawPrefs = loadAgentPreferences();
   const modelLabel = getPresetById(
     rawPrefs.mode === "robin" ? rawPrefs.robinPoolModelId : rawPrefs.fixedPresetId,

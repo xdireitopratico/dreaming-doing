@@ -536,12 +536,13 @@ export function EditorPageLayout({
             chat={
               <div className="forge-chat-column">
                 <TastePostStartBanner />
-                <ChatPanel
-                  projectId={projectId}
-                  conversationId={conversationId}
-                  messages={chatMessages}
-                  messagesLoading={chatMessagesLoading}
-                  agentHasRun={agentHasRun}
+        <ChatPanel
+          projectId={projectId}
+          conversationId={conversationId}
+          agentPrefs={_agentPrefs}
+          messages={chatMessages}
+          messagesLoading={chatMessagesLoading}
+          agentHasRun={agentHasRun}
                   agent={agent}
                   running={running}
                   turnActive={turnActive}
