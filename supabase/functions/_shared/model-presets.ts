@@ -409,9 +409,10 @@ export function resolveModelFromPreferences(
 export function defaultRobinModel(
   poolProvider: string,
   modelPresetId?: string,
+  userModels?: UserModelEntryPayload[],
 ): PresetWire {
   if (modelPresetId) {
-    const p = getPresetWire(modelPresetId);
+    const p = resolveWireFromPresetId(modelPresetId, userModels) ?? getPresetWire(modelPresetId);
     if (p) return p;
   }
   if (poolProvider === "nvidia") return PRESETS[PLATFORM_ROBIN_TASTE_PRESET_ID]!;

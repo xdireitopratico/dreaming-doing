@@ -80,13 +80,14 @@ export function robinProviderConfig(
   poolProvider: string,
   keys: string[],
   modelPresetId?: string,
+  userModels?: Array<{ slug: string; env: string; label?: string }>,
 ): ProviderConfig {
   if (keys.length === 0) {
     throw new Error(
       `Modo ROBIN ativo, mas nenhuma chave no pool ${poolProvider}. Adicione chaves em /api → Adicionar ao pool.`,
     );
   }
-  const wire = defaultRobinModel(poolProvider, modelPresetId);
+  const wire = defaultRobinModel(poolProvider, modelPresetId, userModels);
   return finalizeProviderConfig({
     provider: wire.provider,
     apiKey: keys[0]!,
@@ -263,11 +264,16 @@ export async function resolveAgentProvider(
     const robinPoolProvider = poolProvider!;
     const poolKeys = await loadConnectorPools(supabase, userId, robinPoolProvider);
     const robinPool = new RobinKeyPool(poolKeys);
-    const wire = defaultRobinModel(robinPoolProvider, preferences?.robinPoolModelId);
+    const wire = defaultRobinModel(
+      robinPoolProvider,
+      preferences?.robinPoolModelId,
+      preferences?.userModelEntries,
+    );
     const mainCfg = robinProviderConfig(
       robinPoolProvider,
       poolKeys,
       preferences?.robinPoolModelId,
+      preferences?.userModelEntries,
     );
     const envKeyName = wire.secretKey || `${robinPoolProvider.toUpperCase()}_API_KEY`;
     return {

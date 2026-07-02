@@ -109,7 +109,11 @@ function resolveLlmFromPreferences(
   if (mode === "robin") {
     const poolProvider = preferences.poolProvider?.trim();
     if (!poolProvider) return null;
-    const wire = defaultRobinModel(poolProvider, preferences.robinPoolModelId);
+    const wire = defaultRobinModel(
+      poolProvider,
+      preferences.robinPoolModelId,
+      preferences.userModelEntries,
+    );
     const secretKey = wire.secretKey;
     const apiKey = connectorKeys[secretKey];
     if (!apiKey) return null;

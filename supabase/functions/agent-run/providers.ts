@@ -92,8 +92,8 @@ export function detectVisionSupport(provider: string, model: string): boolean {
   // Qwen-VL, Qwen2-VL
   if (/qwen.*vl|qwen.*vision/.test(m)) return true;
 
-  // Kimi (Moonshot) — multimodal
-  if (p === "moonshotai" && /kimi/.test(m)) return true;
+  // Kimi (Moonshot / NVIDIA NIM) — multimodal
+  if ((p === "moonshotai" || p === "openai") && /kimi/.test(m)) return true;
 
   // LLaVA, BakLLaVA (Ollama)
   if (/llava|bakllava|moondream/.test(m)) return true;

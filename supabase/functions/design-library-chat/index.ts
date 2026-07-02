@@ -171,7 +171,7 @@ async function resolveLLMConfig(
       const poolKeys = await loadConnectorPools(supabase, targetUserId, poolProvider);
       if (poolKeys.length === 0) return null;
       const robinPresetId = typeof prefs.robinPoolModelId === "string" ? prefs.robinPoolModelId : undefined;
-      const wire = defaultRobinModel(poolProvider, robinPresetId);
+      const wire = defaultRobinModel(poolProvider, robinPresetId, userModelEntries);
       const key = poolKeys[0]!;
       return {
         apiKey: key,
