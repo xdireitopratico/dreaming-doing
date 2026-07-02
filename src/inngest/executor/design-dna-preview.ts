@@ -15,11 +15,14 @@ const E2B_DOMAIN =
   (typeof process !== "undefined" ? process.env.E2B_DOMAIN : undefined) ||
   "e2b.app";
 
+/** noVNC viewer path — root `/` only lists static files (app/, vnc.html, …). */
+export const LIVE_VIEW_PATH = "/vnc.html?autoconnect=true&resize=scale&reconnect=true";
+
 export function buildLivePreviewUrl(
   sandboxId: string,
   domain: string = E2B_DOMAIN,
 ): string {
-  return `https://${PREVIEW_PORT}-${sandboxId}.${domain}`;
+  return `https://${PREVIEW_PORT}-${sandboxId}.${domain}${LIVE_VIEW_PATH}`;
 }
 
 export function buildCdpHost(sandboxId: string, domain: string = E2B_DOMAIN): string {

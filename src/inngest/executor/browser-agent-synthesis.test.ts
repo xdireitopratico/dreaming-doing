@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
-import { synthesizeDesignDNA } from "./browser-agent-synthesis";
+import {
+  buildSynthesisPrompt,
+  sanitizeObservationForEvidence,
+  synthesizeDesignDNA,
+} from "./browser-agent-synthesis";
 import type { BrowserAgentStep } from "./browser-agent-state";
 
 const baseSteps: BrowserAgentStep[] = [
@@ -26,6 +30,21 @@ const baseSteps: BrowserAgentStep[] = [
     timestamp: new Date().toISOString(),
   },
 ];
+
+describe("sanitizeObservationForEvidence", () => {
+  it("strips large base64 from synthesis evidence", () => {
+    const huge = "a".repeat(5000);
+    const sanitized = sanitizeObservationForEvidence({
+      type: "screenshot",
+      url: "https://example.com",
+      screenshot: huge,
+      result: { base64: huge },
+    });
+    expect(sanitized.screenshot).toContain("omitted");
+    expect((sanitized.result as { base64: string }).base64).toContain("omitted");
+    expect(buildSynthesisPrompt("https://example.com", ["hero"], baseSteps)).not.toContain(huge);
+  });
+});
 
 describe("synthesizeDesignDNA", () => {
   it("calls LLM and returns parsed DNA", async () => {

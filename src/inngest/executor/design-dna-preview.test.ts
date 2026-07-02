@@ -24,10 +24,11 @@ describe("design-dna-preview", () => {
     vi.clearAllMocks();
   });
 
-  it("buildLivePreviewUrl uses port 6080 (not CDP)", () => {
+  it("buildLivePreviewUrl uses port 6080 with noVNC viewer path (not CDP root)", () => {
     const url = buildLivePreviewUrl("sandbox-abc");
-    expect(url).toBe(`https://${PREVIEW_PORT}-sandbox-abc.e2b.app`);
+    expect(url).toBe(`https://${PREVIEW_PORT}-sandbox-abc.e2b.app/vnc.html?autoconnect=true&resize=scale&reconnect=true`);
     expect(url).not.toContain(String(CDP_PORT));
+    expect(url).toContain("/vnc.html");
   });
 
   it("buildCdpHost uses CDP port 9222", () => {
