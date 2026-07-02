@@ -103,8 +103,10 @@ export const designDnaExtractFunction = inngest.createFunction(
     if (lastError && !lastResult?.ok) {
       await step.run("mark-failed-fatal", async () => {
         const sb = getSupabaseAdmin();
+        const fatalMsg = lastError ?? "extraction failed";
         await markJobFinal(sb, payload.jobId, "failed", {
-          error: lastError ?? "extraction failed",
+          error: fatalMsg,
+          errors: [{ scope: "job", error: fatalMsg, kind: "fatal" }],
         });
       });
       return { jobId: payload.jobId, ok: false, error: lastError };
@@ -152,8 +154,13 @@ export const designDnaExtractFunction = inngest.createFunction(
     if (!final.ok && !final.resumable) {
       await step.run("mark-failed", async () => {
         const sb = getSupabaseAdmin();
+        const failMsg =
+          final.error ??
+          (final.libraryPersistedCount === 0
+            ? "Nenhuma URL foi persistida na Design Library."
+            : "extraction failed");
         await markJobFinal(sb, jobId, "failed", {
-          error: final.error ?? "extraction failed",
+          error: failMsg,
         });
       });
       return { jobId, ok: false, status: "failed", error: final.error };
@@ -175,13 +182,31 @@ export const designDnaExtractFunction = inngest.createFunction(
       const sb = getSupabaseAdmin();
       const { data, error } = await sb
         .from("design_dna_jobs")
-        .select("status")
+        .select("status, errors")
         .eq("id", jobId)
         .single();
       if (error) {
         throw new Error(`Failed to check job ${jobId} before completion: ${error.message}`);
       }
       if (data?.status === "canceled") return;
+
+      // Gate G2: completed exige pelo menos uma entrada na library
+      const persisted = final.libraryPersistedCount ?? 0;
+      if (persisted === 0) {
+        const g2Error =
+          final.error ??
+          "Job terminou sem entradas na Design Library — falha de auditoria (G2).";
+        const existingErrors = Array.isArray(data?.errors) ? data.errors : [];
+        await markJobFinal(sb, jobId, "failed", {
+          error: g2Error,
+          errors:
+            existingErrors.length > 0
+              ? existingErrors
+              : [{ scope: "job", error: g2Error, kind: "g2_empty_terminal" }],
+        });
+        return;
+      }
+
       await markJobFinal(sb, jobId, "completed");
     });
 

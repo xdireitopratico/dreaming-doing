@@ -21,6 +21,8 @@ export type DesignDnaExecuteResponse = {
   canceled: boolean;
   error?: string;
   urlsCompleted: number;
+  /** Entradas efetivamente gravadas em design_system_library (Gate G2). */
+  libraryPersistedCount?: number;
   durationMs: number;
 };
 
