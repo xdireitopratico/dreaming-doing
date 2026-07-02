@@ -12,7 +12,6 @@ import {
   initialAgentProgress,
 } from "@/lib/agent-progress";
 import { PENDING_RUN_ID } from "@/lib/pending-run-id";
-import { shouldRetainLiveRunSlot } from "@/lib/live-run-overlay";
 import { setStreamingTelemetryContext } from "@/lib/streaming-telemetry";
 import type { PendingQueueItem } from "@/components/chat/ChatQueueDock";
 import { createRunActionHandlers } from "@/hooks/agent-run/agent-run-actions";
@@ -74,7 +73,8 @@ export function useAgentRun() {
     freezeRunProgress,
     getFrozenRunProgress,
     clearFrozenRunProgress,
-    releaseLiveRunSlot,
+    freezeLiveRunSession,
+    finalizeLiveRunSession,
   } = useMemo(
     () =>
       createFrozenProgressHandlers({
@@ -124,9 +124,9 @@ export function useAgentRun() {
         setActiveRunStartedAtMs,
         setQueueBlockingReason,
         enqueueStreamRow,
-        releaseLiveRunSlot,
+        freezeLiveRunSession,
       }),
-    [enqueueStreamRow, releaseLiveRunSlot],
+    [enqueueStreamRow, freezeLiveRunSession],
   );
 
   const {
@@ -184,12 +184,12 @@ export function useAgentRun() {
         setConnected,
         setActiveRunId,
         teardownChannels,
-        freezeRunProgress,
+        finalizeLiveRunSession,
       }),
-    [teardownChannels, freezeRunProgress],
+    [teardownChannels, finalizeLiveRunSession],
   );
 
-  const { bindSession, resetSession, tryRestoreSnapshot } = useMemo(
+  const { bindSession, resetSession, tryRestoreSnapshot, attachLiveRun } = useMemo(
     () =>
       createSessionHandlers({
         runIdRef,
@@ -228,24 +228,6 @@ export function useAgentRun() {
       setStreamingTelemetryContext({ projectId: ctx.projectId, runId: activeRunId });
     }
   }, [activeRunId]);
-
-  useEffect(() => {
-    if (!progress.finished) return;
-    if (!runIdRef.current && !activeRunId) return;
-    if (activeRunStartedAtMsRef.current != null) return;
-    if (shouldRetainLiveRunSlot(progress)) return;
-    const rid = runIdRef.current ?? activeRunId;
-    if (rid) releaseLiveRunSlot(rid);
-    setConnected(false);
-  }, [
-    progress.finished,
-    progress.awaiting,
-    progress.awaitingKind,
-    progress.canceled,
-    activeRunId,
-    progress,
-    releaseLiveRunSlot,
-  ]);
 
   useEffect(() => {
     return () => {
@@ -291,6 +273,7 @@ export function useAgentRun() {
     bindSession,
     resetSession,
     tryRestoreSnapshot,
+    attachLiveRun,
     beginPendingTurn,
     clearPendingTurn,
     activeRunStartedAtMs,

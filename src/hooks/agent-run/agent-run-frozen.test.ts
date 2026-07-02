@@ -38,7 +38,7 @@ describe("createFrozenProgressHandlers", () => {
     expect(activeRunId).toBe("run-1");
   });
 
-  it("releaseLiveRunSlot limpa run ativo", () => {
+  it("freezeLiveRunSession desanexa o transporte sem apagar a sessao visual", () => {
     const runIdRef = { current: "run-1" };
     const progressRef = {
       current: {
@@ -52,7 +52,7 @@ describe("createFrozenProgressHandlers", () => {
     let startedAt: number | null = 1000;
     const closedRunIdRef = { current: null as string | null };
 
-    const { releaseLiveRunSlot } = createFrozenProgressHandlers({
+    const { freezeLiveRunSession } = createFrozenProgressHandlers({
       runIdRef,
       closedRunIdRef,
       progressRef,
@@ -66,10 +66,41 @@ describe("createFrozenProgressHandlers", () => {
       bumpFrozenProgressTick: () => {},
     });
 
-    releaseLiveRunSlot("run-1");
+    freezeLiveRunSession("run-1");
+    expect(runIdRef.current).toBeNull();
+    expect(activeRunId).toBe("run-1");
+    expect(startedAt).toBeNull();
+    expect(frozenRunProgressRef.current.has("run-1")).toBe(true);
+  });
+
+  it("finalizeLiveRunSession limpa a sessao apos materializacao", () => {
+    const runIdRef = { current: "run-1" };
+    const progressRef = {
+      current: {
+        ...initialAgentProgress,
+        streamText: "x",
+        timeline: [{ type: "done", data: {}, timestamp: Date.now() }],
+      },
+    };
+    const frozenRunProgressRef = { current: new Map() };
+    let activeRunId: string | null = "run-1";
+    const closedRunIdRef = { current: null as string | null };
+
+    const { finalizeLiveRunSession } = createFrozenProgressHandlers({
+      runIdRef,
+      closedRunIdRef,
+      progressRef,
+      frozenRunProgressRef,
+      setActiveRunId: (v) => {
+        activeRunId = typeof v === "function" ? v(activeRunId) : v;
+      },
+      setActiveRunStartedAtMs: () => {},
+      bumpFrozenProgressTick: () => {},
+    });
+
+    finalizeLiveRunSession("run-1");
     expect(runIdRef.current).toBeNull();
     expect(activeRunId).toBeNull();
-    expect(startedAt).toBeNull();
     expect(frozenRunProgressRef.current.has("run-1")).toBe(true);
   });
 });

@@ -30,6 +30,43 @@ export type SessionHandlersDeps = {
 };
 
 export function createSessionHandlers(deps: SessionHandlersDeps) {
+  const findLatestLiveRun = async (projectId: string, conversationId: string) => {
+    const { data: run } = await supabase
+      .from("agent_runs")
+      .select("id, status, heartbeat_at, started_at, canceled_at")
+      .eq("project_id", projectId)
+      .eq("conversation_id", conversationId)
+      .in("status", ["running", "pending"])
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    return run
+      ? {
+          id: run.id as string,
+          status: run.status as string | null,
+          heartbeat_at: run.heartbeat_at as string | null,
+          started_at: run.started_at as string | null,
+          canceled_at: run.canceled_at as string | null,
+        }
+      : null;
+  };
+
+  const attachLiveRun = async (
+    projectId: string,
+    conversationId: string,
+    opts?: { resetProgress?: boolean },
+  ) => {
+    const run = await findLatestLiveRun(projectId, conversationId);
+    if (!run?.id) return null;
+
+    const isCurrentRun = deps.runIdRef.current === run.id;
+    await deps.subscribeToRun(run.id, {
+      resetProgress: opts?.resetProgress ?? !isCurrentRun,
+    });
+    return run.id;
+  };
+
   const bindSession = (projectId: string, conversationId: string) => {
     deps.sessionContextRef.current = { projectId, conversationId };
     setStreamingTelemetryContext({ projectId, runId: deps.runIdRef.current });
@@ -59,18 +96,10 @@ export function createSessionHandlers(deps: SessionHandlersDeps) {
   ) => {
     if (deps.runIdRef.current) return;
 
-    const { data: run } = await supabase
-      .from("agent_runs")
-      .select("id, status, heartbeat_at, started_at, canceled_at")
-      .eq("project_id", projectId)
-      .eq("conversation_id", conversationId)
-      .in("status", ["running", "pending"])
-      .order("started_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const run = await findLatestLiveRun(projectId, conversationId);
 
     let lastStreamAt: string | null = null;
-    if (run?.id) {
+    if (run) {
       const { data: lastStream } = await supabase
         .from("agent_stream_events")
         .select("created_at")
@@ -82,24 +111,14 @@ export function createSessionHandlers(deps: SessionHandlersDeps) {
     }
 
     const livePlan = planLiveRunRestore(
-      run
-        ? {
-            id: run.id as string,
-            status: run.status as string | null,
-            heartbeat_at: run.heartbeat_at as string | null,
-            started_at: run.started_at as string | null,
-            canceled_at: run.canceled_at as string | null,
-          }
-        : null,
+      run,
       lastStreamAt,
       messages,
     );
 
     if (livePlan.kind === "subscribe") {
-      deps.runIdRef.current = livePlan.runId;
-      deps.setActiveRunId(livePlan.runId);
       deps.lastSeqRef.current = 0;
-      void deps.subscribeToRun(livePlan.runId, { resetProgress: false });
+      void attachLiveRun(projectId, conversationId, { resetProgress: false });
       return;
     }
 
@@ -116,7 +135,7 @@ export function createSessionHandlers(deps: SessionHandlersDeps) {
     deps.runIdRef.current = null;
   };
 
-  return { bindSession, resetSession, tryRestoreSnapshot };
+  return { bindSession, resetSession, tryRestoreSnapshot, attachLiveRun };
 }
 
 export function subscribePendingQueueRealtime(

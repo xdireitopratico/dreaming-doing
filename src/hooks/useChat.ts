@@ -90,15 +90,11 @@ export function useChat({
       const materialized = messages.find(
         (m) => m.role === "assistant" && m.runId === runId && canReleaseLiveSlot(m),
       );
-      if (!materialized) {
-        emitStreamingTelemetry("agent.materialized_release_pending", {
-          runId,
-          elapsedMs: Date.now() - startedAt,
-        });
-        agent.acknowledgeMaterializedRun(runId);
-        return;
-      }
-      agent.acknowledgeMaterializedRun(runId);
+      if (materialized) return;
+      emitStreamingTelemetry("agent.materialized_release_pending", {
+        runId,
+        elapsedMs: Date.now() - startedAt,
+      });
     }, 45_000);
     return () => window.clearTimeout(timer);
   }, [agent.activeRunId, agent.progress.finished, agent, messages]);

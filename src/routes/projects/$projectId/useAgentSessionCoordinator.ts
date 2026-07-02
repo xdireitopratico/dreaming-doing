@@ -10,7 +10,6 @@ import {
   peekPendingAgentRun,
 } from "@/lib/agent-auto-run";
 import type { useAgentRun } from "@/hooks/useAgentRun";
-import { supabase } from "@/integrations/supabase/client";
 type AgentRun = ReturnType<typeof useAgentRun>;
 
 type TasteQuota = {
@@ -32,23 +31,6 @@ type UseAgentSessionCoordinatorParams = {
   ) => Promise<boolean>;
 };
 
-async function fetchLiveRunForConversation(
-  projectId: string,
-  conversationId: string,
-): Promise<string | null> {
-  const { data: run } = await supabase
-    .from("agent_runs")
-    .select("id")
-    .eq("project_id", projectId)
-    .eq("conversation_id", conversationId)
-    .in("status", ["running", "pending"])
-    .order("started_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  return run?.id ?? null;
-}
-
 /**
  * Coordinator: sync fila no mount, resync DB↔UI e auto-run pós-dashboard.
  */
@@ -58,7 +40,8 @@ export function useAgentSessionCoordinator({
   agent,
   runAgent,
 }: UseAgentSessionCoordinatorParams) {
-  const { syncPendingCount, beginPendingTurn, watch, progress, activeRunId, isPendingRun } = agent;
+  const { syncPendingCount, beginPendingTurn, progress, activeRunId, isPendingRun, attachLiveRun } =
+    agent;
   const autoRunStartedRef = useRef(false);
 
   useEffect(() => {
@@ -78,13 +61,10 @@ export function useAgentSessionCoordinator({
 
     const tryAttach = async (): Promise<boolean> => {
       if (!alive) return false;
-      const runId = await fetchLiveRunForConversation(projectId, conversation.id);
+      if (activeRunId) return true;
+      const runId = await attachLiveRun(projectId, conversation.id, { resetProgress: false });
       if (!alive) return false;
       if (!runId) return false;
-      if (activeRunId === runId && !progress.finished) return true;
-      if (!activeRunId || progress.finished) {
-        await watch(projectId, conversation.id, runId);
-      }
       return true;
     };
 
@@ -93,18 +73,17 @@ export function useAgentSessionCoordinator({
     return () => {
       alive = false;
     };
-  }, [projectId, conversation?.id, watch, activeRunId, progress.finished, isPendingRun]);
+  }, [projectId, conversation?.id, attachLiveRun, activeRunId, progress.finished, isPendingRun]);
 
   useEffect(() => {
     if (!conversation?.id) return;
     if (!progress.finished) return;
     if ((progress.pendingQueueCount ?? 0) <= 0) return;
+    if (activeRunId) return;
 
     const attachQueuedRun = async () => {
-      const runId = await fetchLiveRunForConversation(projectId, conversation.id);
+      const runId = await attachLiveRun(projectId, conversation.id, { resetProgress: false });
       if (!runId) return;
-      if (activeRunId === runId && !progress.finished) return;
-      await watch(projectId, conversation.id, runId);
       void syncPendingCount(projectId, conversation.id);
     };
 
@@ -115,7 +94,7 @@ export function useAgentSessionCoordinator({
     progress.finished,
     progress.pendingQueueCount,
     activeRunId,
-    watch,
+    attachLiveRun,
     syncPendingCount,
   ]);
 

@@ -8,7 +8,6 @@ import {
 } from "@/lib/agent-progress";
 import { clientStaleStreamMs } from "@/lib/agent-stale-thresholds";
 import { logEditorTelemetryEvent } from "@/lib/editor-telemetry";
-import { shouldRetainLiveRunSlot } from "@/lib/live-run-overlay";
 import { emitStreamingTelemetry } from "@/lib/streaming-telemetry";
 import { TERMINAL_STATUSES } from "@/hooks/agent-run/agent-run-connect";
 import { freezeWorkingDuration, type AgentStreamRow } from "@/hooks/agent-run/agent-run-stream";
@@ -34,7 +33,7 @@ export type RunSubscriptionDeps = {
   setActiveRunStartedAtMs: Dispatch<SetStateAction<number | null>>;
   setQueueBlockingReason: Dispatch<SetStateAction<string | null>>;
   enqueueStreamRow: (row: AgentStreamRow) => boolean;
-  releaseLiveRunSlot: (runId: string) => void;
+  freezeLiveRunSession: (runId: string) => void;
 };
 
 export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
@@ -115,12 +114,9 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
     deps.setActiveRunStartedAtMs(null);
     void teardownChannels();
     deps.setConnected(false);
-    deps.setProgress((p) => {
-      if (!shouldRetainLiveRunSlot(p) && deps.runIdRef.current) {
-        deps.releaseLiveRunSlot(deps.runIdRef.current);
-      }
-      return p;
-    });
+    if (deps.runIdRef.current === runId) {
+      deps.freezeLiveRunSession(runId);
+    }
     deps.closedRunIdRef.current = runId;
   };
 
@@ -197,12 +193,9 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
         deps.setProgress((p) => applyAgentProgressEvent(p, finishEvent));
         void teardownChannels();
         deps.setConnected(false);
-        deps.setProgress((p) => {
-          if (!shouldRetainLiveRunSlot(p) && deps.runIdRef.current === runId) {
-            deps.releaseLiveRunSlot(runId);
-          }
-          return p;
-        });
+        if (deps.runIdRef.current === runId) {
+          deps.freezeLiveRunSession(runId);
+        }
         deps.closedRunIdRef.current = runId;
         return true;
       }
@@ -255,12 +248,9 @@ export function createRunSubscriptionHandlers(deps: RunSubscriptionDeps) {
             deps.closedRunIdRef.current = runId;
             void teardownChannels();
             deps.setConnected(false);
-            deps.setProgress((p) => {
-              if (!shouldRetainLiveRunSlot(p) && deps.runIdRef.current === runId) {
-                deps.releaseLiveRunSlot(runId);
-              }
-              return p;
-            });
+            if (deps.runIdRef.current === runId) {
+              deps.freezeLiveRunSession(runId);
+            }
           }
         },
       )

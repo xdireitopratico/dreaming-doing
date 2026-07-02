@@ -18,7 +18,7 @@ export type RunActionHandlersDeps = {
   setConnected: Dispatch<SetStateAction<boolean>>;
   setActiveRunId: Dispatch<SetStateAction<string | null>>;
   teardownChannels: () => void;
-  freezeRunProgress: (runId: string) => void;
+  finalizeLiveRunSession: (runId: string) => void;
 };
 
 export function createRunActionHandlers(deps: RunActionHandlersDeps) {
@@ -58,15 +58,19 @@ export function createRunActionHandlers(deps: RunActionHandlersDeps) {
       }
     }
 
-    deps.runIdRef.current = null;
-    deps.setActiveRunId(null);
+    if (runId) deps.finalizeLiveRunSession(runId);
+    else deps.setActiveRunId(null);
     deps.teardownChannels();
   };
 
   const disconnect = () => {
-    if (deps.runIdRef.current) deps.closedRunIdRef.current = deps.runIdRef.current;
-    deps.runIdRef.current = null;
-    deps.setActiveRunId(null);
+    const runId = deps.runIdRef.current;
+    if (runId) {
+      deps.closedRunIdRef.current = runId;
+      deps.finalizeLiveRunSession(runId);
+    } else {
+      deps.setActiveRunId(null);
+    }
     deps.teardownChannels();
     deps.setProgress((p) => ({ ...p, finished: true }));
   };
@@ -133,14 +137,7 @@ export function createRunActionHandlers(deps: RunActionHandlersDeps) {
   };
 
   const acknowledgeMaterializedRun = (runId: string) => {
-    deps.freezeRunProgress(runId);
-    deps.setActiveRunId((cur) => {
-      if (cur === runId) {
-        deps.runIdRef.current = null;
-        return null;
-      }
-      return cur;
-    });
+    deps.finalizeLiveRunSession(runId);
   };
 
   return {

@@ -38,18 +38,23 @@ export function createFrozenProgressHandlers(deps: FrozenProgressDeps) {
     deps.bumpFrozenProgressTick();
   };
 
-  const releaseLiveRunSlot = (runId: string) => {
+  const freezeLiveRunSession = (runId: string) => {
     freezeRunProgress(runId);
     deps.closedRunIdRef.current = runId;
     deps.runIdRef.current = null;
-    deps.setActiveRunId(null);
     deps.setActiveRunStartedAtMs(null);
+  };
+
+  const finalizeLiveRunSession = (runId: string) => {
+    freezeLiveRunSession(runId);
+    deps.setActiveRunId((current) => (current === runId ? null : current));
   };
 
   return {
     freezeRunProgress,
     getFrozenRunProgress,
     clearFrozenRunProgress,
-    releaseLiveRunSlot,
+    freezeLiveRunSession,
+    finalizeLiveRunSession,
   };
 }

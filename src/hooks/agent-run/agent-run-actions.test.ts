@@ -31,7 +31,7 @@ describe("createRunActionHandlers", () => {
       setConnected: () => {},
       setActiveRunId: () => {},
       teardownChannels: () => {},
-      freezeRunProgress: () => {},
+      finalizeLiveRunSession: () => {},
     });
 
     handlers.clearPendingPlan();
@@ -41,5 +41,26 @@ describe("createRunActionHandlers", () => {
     expect(progress.awaitingKind).toBeNull();
     expect(progress.phase).toBeNull();
     expect(progress.statusHint).toBeNull();
+  });
+
+  it("acknowledgeMaterializedRun encerra a sessao live apenas apos materializacao", () => {
+    let finalizedRunId: string | null = null;
+
+    const handlers = createRunActionHandlers({
+      runIdRef: { current: "run-1" },
+      closedRunIdRef: { current: null },
+      lastSeqRef: { current: 0 },
+      setProgress: () => {},
+      setConnected: () => {},
+      setActiveRunId: () => {},
+      teardownChannels: () => {},
+      finalizeLiveRunSession: (runId) => {
+        finalizedRunId = runId;
+      },
+    });
+
+    handlers.acknowledgeMaterializedRun("run-1");
+
+    expect(finalizedRunId).toBe("run-1");
   });
 });
