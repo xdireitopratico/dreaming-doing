@@ -458,7 +458,7 @@ export async function executeAgentRun(
     costUsd: result.costUsd ?? undefined,
   });
 
-  if (!result.ok && !result.canceled && !isAwaiting) {
+  if ((!result.ok || result.canceled) && !isAwaiting) {
     await ensureTerminalRunMessage(supabase, {
       runId,
       conversationId,
