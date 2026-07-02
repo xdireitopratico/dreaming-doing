@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { AgentProgress } from "@/lib/agent-progress";
 import { initialAgentProgress } from "@/lib/agent-progress";
 import type { ChatMessage } from "@/lib/chat-types";
+import { shouldRestoreLiveRun } from "@/lib/agent-snapshot-restore";
 import { setStreamingTelemetryContext } from "@/lib/streaming-telemetry";
 import type { PendingQueueItem } from "@/components/chat/ChatQueueDock";
 import {
@@ -30,7 +31,7 @@ export type SessionHandlersDeps = {
 };
 
 export function createSessionHandlers(deps: SessionHandlersDeps) {
-  const findLatestLiveRun = async (projectId: string, conversationId: string) => {
+  const loadLatestLiveRun = async (projectId: string, conversationId: string) => {
     const { data: run } = await supabase
       .from("agent_runs")
       .select("id, status, heartbeat_at, started_at, canceled_at")
@@ -41,15 +42,30 @@ export function createSessionHandlers(deps: SessionHandlersDeps) {
       .limit(1)
       .maybeSingle();
 
-    return run
-      ? {
-          id: run.id as string,
-          status: run.status as string | null,
-          heartbeat_at: run.heartbeat_at as string | null,
-          started_at: run.started_at as string | null,
-          canceled_at: run.canceled_at as string | null,
-        }
-      : null;
+    if (!run) {
+      return { run: null, lastStreamAt: null };
+    }
+
+    const typedRun = {
+      id: run.id as string,
+      status: run.status as string | null,
+      heartbeat_at: run.heartbeat_at as string | null,
+      started_at: run.started_at as string | null,
+      canceled_at: run.canceled_at as string | null,
+    };
+
+    const { data: lastStream } = await supabase
+      .from("agent_stream_events")
+      .select("created_at")
+      .eq("run_id", typedRun.id)
+      .order("seq", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    return {
+      run: typedRun,
+      lastStreamAt: (lastStream?.created_at as string | null) ?? null,
+    };
   };
 
   const attachLiveRun = async (
@@ -57,8 +73,19 @@ export function createSessionHandlers(deps: SessionHandlersDeps) {
     conversationId: string,
     opts?: { resetProgress?: boolean },
   ) => {
-    const run = await findLatestLiveRun(projectId, conversationId);
+    const { run, lastStreamAt } = await loadLatestLiveRun(projectId, conversationId);
     if (!run?.id) return null;
+    if (
+      !shouldRestoreLiveRun({
+        status: run.status,
+        canceledAt: run.canceled_at,
+        heartbeatAt: run.heartbeat_at,
+        startedAt: run.started_at,
+        lastStreamAt,
+      })
+    ) {
+      return null;
+    }
 
     const isCurrentRun = deps.runIdRef.current === run.id;
     await deps.subscribeToRun(run.id, {
@@ -96,19 +123,7 @@ export function createSessionHandlers(deps: SessionHandlersDeps) {
   ) => {
     if (deps.runIdRef.current) return;
 
-    const run = await findLatestLiveRun(projectId, conversationId);
-
-    let lastStreamAt: string | null = null;
-    if (run) {
-      const { data: lastStream } = await supabase
-        .from("agent_stream_events")
-        .select("created_at")
-        .eq("run_id", run.id)
-        .order("seq", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      lastStreamAt = (lastStream?.created_at as string | null) ?? null;
-    }
+    const { run, lastStreamAt } = await loadLatestLiveRun(projectId, conversationId);
 
     const livePlan = planLiveRunRestore(
       run,
