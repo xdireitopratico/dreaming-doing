@@ -11,6 +11,12 @@ import {
   resolveLLMConfig,
   type LLMConfig,
 } from "./design-dna-extraction.ts";
+import { resolveExtractionCapabilities } from "./resolve-extraction-capabilities.ts";
+import { loadUserE2bApiKey } from "../../../supabase/functions/_shared/user-e2b.ts";
+import {
+  persistLibraryEntry,
+  resolveJobTerminalStatus,
+} from "./persist-library-entry.ts";
 import { connectToSandbox, waitForEnvdReady, runInSandbox } from "./e2b-client";
 import { createAgentContext } from "./browser-agent-state";
 import { runBrowserAgent, createDefaultCdpTools } from "./browser-agent-runner";
@@ -135,6 +141,7 @@ export async function executeDesignDnaJob(
   const results: Record<string, unknown>[] = [];
   const errors: Record<string, unknown>[] = [];
   let blockedCount = 0;
+  let libraryPersistedCount = 0;
   if (resume && checkpoint) {
     startIndex = (checkpoint.currentUrlIndex as number) ?? 0;
     if (Array.isArray(checkpoint.results)) {
@@ -146,6 +153,9 @@ export async function executeDesignDnaJob(
     if (typeof checkpoint.blockedCount === "number") {
       blockedCount = checkpoint.blockedCount;
     }
+    if (typeof checkpoint.libraryPersistedCount === "number") {
+      libraryPersistedCount = checkpoint.libraryPersistedCount;
+    }
   }
 
   const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "";
@@ -153,6 +163,39 @@ export async function executeDesignDnaJob(
   const serviceClient = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+
+  // Gate G1 (defense in depth): fail closed se pré-requisitos ausentes
+  if (userId) {
+    const capabilities = await resolveExtractionCapabilities(serviceClient, userId, depth);
+    if (!capabilities.ok) {
+      const errorRecord = {
+        scope: "job",
+        error: capabilities.message,
+        code: capabilities.code,
+        missing: capabilities.missing,
+      };
+      await appendJobEvent(supabase, jobId, "capability_error", errorRecord);
+      await supabase
+        .from("design_dna_jobs")
+        .update({
+          status: "failed",
+          error: capabilities.message,
+          errors: [errorRecord],
+          finished_at: new Date().toISOString(),
+        })
+        .eq("id", jobId);
+      return {
+        ok: false,
+        status: "failed",
+        jobId,
+        resumable: false,
+        canceled: false,
+        error: capabilities.message,
+        urlsCompleted: 0,
+        durationMs: Date.now() - startMs,
+      };
+    }
+  }
 
   const { data: job } = await supabase
       .from("design_dna_jobs")
@@ -170,46 +213,13 @@ export async function executeDesignDnaJob(
   let sandboxAccessToken: string | null = null;
 
   if (isDeep) {
-    const { data: connectors } = await serviceClient
-      .from("connectors")
-      .select("token_encrypted")
-      .eq("owner_id", userId)
-      .eq("kind", "e2b")
-      .order("updated_at", { ascending: false })
-      .limit(5);
-
-    let e2bApiKey = "";
-    for (const row of connectors ?? []) {
-      const raw = (row.token_encrypted as string) ?? "";
-      const trimmed = raw.trim();
-      if (!trimmed) continue;
-      if (trimmed.startsWith("[")) {
-        try {
-          const parsed = JSON.parse(trimmed);
-          if (Array.isArray(parsed)) {
-            const first = parsed.find(
-              (x: unknown) => typeof x === "string" && (x as string).trim().length > 8,
-            );
-            if (first) {
-              e2bApiKey = (first as string).trim();
-              break;
-            }
-          }
-        } catch {
-          /* single token */
-        }
-      }
-      if (trimmed.length > 8) {
-        e2bApiKey = trimmed;
-        break;
-      }
-    }
-
+    const e2bApiKey = userId ? await loadUserE2bApiKey(serviceClient, userId) : "";
     if (!e2bApiKey) {
-      const msg = "Configure sua chave E2B em API Keys (/api)";
-      const errorRecord = { scope: "job", error: msg, code: "missing_e2b_key" };
+      const msg =
+        "Sandbox E2B não configurado. Configure em API Models (/api-models) → Tools → E2B.";
+      const errorRecord = { scope: "job", error: msg, code: "missing_e2b" };
       errors.push(errorRecord);
-      await appendJobEvent(supabase, jobId, "url_error", errorRecord);
+      await appendJobEvent(supabase, jobId, "capability_error", errorRecord);
       await supabase
         .from("design_dna_jobs")
         .update({
@@ -255,7 +265,13 @@ export async function executeDesignDnaJob(
   for (let i = startIndex; i < urls.length; i++) {
     const budgetElapsed = Date.now() - startMs;
     if (budgetElapsed > LOOP_BUDGET_MS * 0.8) {
-      await saveJobCheckpoint(supabase, jobId, { currentUrlIndex: i, results, errors, blockedCount });
+      await saveJobCheckpoint(supabase, jobId, {
+        currentUrlIndex: i,
+        results,
+        errors,
+        blockedCount,
+        libraryPersistedCount,
+      });
       return {
         ok: false,
         status: results.length > 0 ? "completed" : "failed",
@@ -430,75 +446,36 @@ export async function executeDesignDnaJob(
         });
       }
 
-      if (dnaResult.dna) {
-        const dna = dnaResult.dna as Record<string, unknown>;
-        
-        if (dnaResult.blockedReason) {
+      const persistResult = await persistLibraryEntry(
+        supabase,
+        jobId,
+        {
+          url,
+          urlIndex: i,
+          depth,
+          ingestKind,
+          userId,
+          categories: categories as string[],
+        },
+        dnaResult,
+      );
+
+      let urlPersisted = false;
+      if (persistResult.ok) {
+        results.push(persistResult.dna);
+        libraryPersistedCount += 1;
+        urlPersisted = true;
+      } else {
+        if (persistResult.code === "blocked") {
           blockedCount += 1;
-          const blockedRec = { url, index: i, error: dnaResult.blockedReason, kind: "blocked" };
-          errors.push(blockedRec);
-          await appendJobEvent(supabase, jobId, "url_blocked", blockedRec);
         }
-        
-        // Valida qualidade mínima — quality_score vem calibrado pelo DNA validator (Refero)
-        const qualityScore = Number(dna.quality_score ?? 0);
-        if (qualityScore < 4) {
-          const msg = `DNA quality score ${qualityScore}/10 below minimum threshold (4/10)`;
-          errors.push({ url, index: i, error: msg, kind: "quality_threshold" });
-          await appendJobEvent(supabase, jobId, "quality_error", { url, qualityScore, reason: msg });
-          continue;
-        }
-
-        // Valida campos obrigatórios
-        const requiredFields = ['layout', 'color', 'typography'];
-        const missingFields = requiredFields.filter(field => !dna[field]);
-        if (missingFields.length > 0) {
-          const msg = `DNA missing required fields: ${missingFields.join(', ')}`;
-          errors.push({ url, index: i, error: msg, kind: "missing_fields" });
-          await appendJobEvent(supabase, jobId, "validation_error", { url, missingFields });
-          continue;
-        }
-
-        results.push(dna);
-
-        const { error: insertError } = await supabase.from("design_system_library").upsert({
-          name: (dna.name as string) || url,
-          source_url: url,
-          ingest_kind: ingestKind,
-          category: (dna.category as string) || "full_page",
-          extracted_by: userId,
-          quality_score: Math.max(0, Math.min(10, Number(dna.quality_score ?? (depth === "deep" ? 7 : 5)))),
-          quality_source: (dna.quality_source as string) || (depth === "deep" ? "deep_extraction" : "shallow_extraction"),
-          validated: false,
-          raw_markdown: dnaResult.rawMarkdown,
-          clean_markdown: dnaResult.cleanMarkdown,
-          raw_html: dnaResult.rawHtml,
-          clean_html: dnaResult.cleanHtml,
-          content_hygiene: dnaResult.contentHygiene,
-          screenshot_url: dnaResult.screenshotUrl,
-          screenshot_base64: dnaResult.screenshotBase64 ?? null,
-          provider_trace: dnaResult.providerTrace,
-          confidence: dnaResult.confidence,
-          blocked_reason: dnaResult.blockedReason,
-          design_dna: {
-            layout: dna.layout ?? null,
-            color: dna.color ?? null,
-            typography: dna.typography ?? null,
-            motion: dna.motion ?? null,
-            interaction: dna.interaction ?? null,
-            component: dna.component ?? null,
-            implementation_notes: dna.implementation_notes ?? null,
-          },
-          serves_domains: (dna.serves_domains as string[]) || [],
-          compatible_languages: (dna.compatible_languages as string[]) || [],
-          compatible_moods: (dna.compatible_moods as string[]) || [],
-          tags: [categories.join(",")],
-          notes: dnaResult.notes.join(" | ") || null,
-        }, { onConflict: "source_url,ingest_kind" });
-        if (insertError) {
-          errors.push({ url, index: i, error: insertError.message, kind: "library_upsert" });
-          console.warn(`[design-dna] Failed to persist library entry for ${url}: ${insertError.message}`);
-        }
+        errors.push({
+          url,
+          index: i,
+          error: persistResult.message,
+          kind: persistResult.code,
+          ...(persistResult.details ?? {}),
+        });
       }
 
       // Emite screenshots como eventos separados (para timeline real-time)
@@ -524,9 +501,10 @@ export async function executeDesignDnaJob(
 
       await appendJobEvent(supabase, jobId, "url_extracted", {
         url,
-        ok: true,
+        ok: urlPersisted,
         index: i,
         resultsCount: results.length,
+        libraryPersistedCount,
         confidence: dnaResult.confidence,
         providerTrace: dnaResult.providerTrace,
       });
@@ -546,35 +524,46 @@ export async function executeDesignDnaJob(
     }
   }
 
-  const completedCount = results.length;
-  const status = blockedCount > 0 && blockedCount >= urls.length
-    ? "blocked"
-    : completedCount === 0 && errors.length > 0
-      ? "failed"
-      : errors.length > 0 || blockedCount > 0
-        ? "partial"
-        : "completed";
+  const terminal = resolveJobTerminalStatus({
+    urlsTotal: urls.length,
+    libraryPersistedCount,
+    errors,
+    blockedCount,
+  });
 
   currentMeta.current_url_index = urls.length;
-  currentMeta.urls_completed = completedCount;
+  currentMeta.urls_completed = results.length;
+  currentMeta.library_persisted_count = libraryPersistedCount;
   currentMeta.blocked_urls = blockedCount;
   currentMeta.progress = 100;
+
+  await appendJobEvent(supabase, jobId, "job_terminal", {
+    status: terminal.status,
+    libraryPersistedCount,
+    errorsCount: errors.length,
+    blockedCount,
+    jobError: terminal.jobError ?? null,
+  });
+
   await supabase
     .from("design_dna_jobs")
-    .update({ results, errors, meta: currentMeta })
+    .update({
+      results,
+      errors,
+      meta: currentMeta,
+      error: terminal.jobError ?? null,
+    })
     .eq("id", jobId);
 
-  const firstError = errors.find((e) => typeof e.error === "string" && (e as Record<string, unknown>).error)
-    ?.error as string | undefined;
-
   return {
-    ok: status === "completed",
-    status,
+    ok: terminal.ok,
+    status: terminal.status,
     jobId,
     resumable: false,
     canceled: false,
-    error: firstError ?? (status === "blocked" ? "Todos os sites retornaram blocked" : undefined),
-    urlsCompleted: completedCount,
+    error: terminal.jobError,
+    urlsCompleted: libraryPersistedCount,
+    libraryPersistedCount,
     durationMs: Date.now() - startMs,
   };
 }
