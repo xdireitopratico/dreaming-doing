@@ -75,8 +75,6 @@ if [[ "$SKIP_SMOKE" -eq 0 ]]; then
   echo "→ check:agent-metrics (7d, blocking)"
   npm run check:agent-metrics
 
-  echo "→ check:shadow-parity"
-  npm run check:shadow-parity
 fi
 
 echo "✓ Agent platform deploy gate passed"

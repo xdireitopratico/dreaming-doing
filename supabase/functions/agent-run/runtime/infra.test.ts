@@ -1,11 +1,12 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
-  loopBudgetExceeded,
   maybeEmitSilenceHeartbeat,
+  platformLimitExceeded,
   SILENCE_HEARTBEAT_MS,
 } from "./infra.ts";
 import type { RunInfraDeps } from "./infra.ts";
 import { LoopPhase } from "../types.ts";
+import { INNGEST_FINISH_MS, PLATFORM_YIELD_BUFFER_MS } from "./platform-deadline.ts";
 
 function mockInfraDeps(overrides?: Partial<RunInfraDeps>): RunInfraDeps & {
   events: Array<{ type: string; data: unknown }>;
@@ -15,8 +16,7 @@ function mockInfraDeps(overrides?: Partial<RunInfraDeps>): RunInfraDeps & {
   return {
     sb: {},
     runId: "run-1",
-    runStartTime: Date.now() - 10_000,
-    loopBudgetMs: 5_000,
+    invocationStartedAt: Date.now() - 10_000,
     getLastActivityAt: () => lastActivityAt,
     setLastActivityAt: (ms) => {
       lastActivityAt = ms;
@@ -30,27 +30,24 @@ function mockInfraDeps(overrides?: Partial<RunInfraDeps>): RunInfraDeps & {
     emit: (type, data) => events.push({ type, data }),
     getPhase: () => LoopPhase.GATHER_CONTEXT,
     saveCheckpoint: async () => {},
-    persistCheckpointChat: async () => {},
     getBuildSession: () => null,
     events,
     ...overrides,
   };
 }
 
-Deno.test("loopBudgetExceeded — true após janela", () => {
+Deno.test("platformLimitExceeded — false dentro da janela", () => {
   const deps = mockInfraDeps({
-    runStartTime: Date.now() - 10_000,
-    loopBudgetMs: 5_000,
+    invocationStartedAt: Date.now() - 1_000,
   });
-  assertEquals(loopBudgetExceeded(deps), true);
+  assertEquals(platformLimitExceeded(deps), false);
 });
 
-Deno.test("loopBudgetExceeded — false dentro da janela", () => {
+Deno.test("platformLimitExceeded — true perto do teto Inngest", () => {
   const deps = mockInfraDeps({
-    runStartTime: Date.now() - 1_000,
-    loopBudgetMs: 60_000,
+    invocationStartedAt: Date.now() - (INNGEST_FINISH_MS - PLATFORM_YIELD_BUFFER_MS + 1),
   });
-  assertEquals(loopBudgetExceeded(deps), false);
+  assertEquals(platformLimitExceeded(deps), true);
 });
 
 Deno.test("maybeEmitSilenceHeartbeat — emite após 90s de silêncio", () => {

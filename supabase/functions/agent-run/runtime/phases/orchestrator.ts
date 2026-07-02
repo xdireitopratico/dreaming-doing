@@ -18,6 +18,7 @@ import {
 } from "./gate-replies.ts";
 import type { ProposedPlan } from "../../types.ts";
 import { GATHER_PHASE_MESSAGE } from "../phase-messages.ts";
+import type { OperationPauseResult, PauseReason } from "../infra.ts";
 
 export type OrchestratorDeps = GateReplyDeps & {
   resumeRun: boolean;
@@ -35,13 +36,13 @@ export type OrchestratorDeps = GateReplyDeps & {
   notifyLoopStatus: (ctx: LoopUpdateContext) => void;
   applyAutoModelForComplexity: (complexity: number) => void;
   configuredModel: () => LLMProvider;
-  loopBudgetExceeded: () => boolean;
-  returnResumableWithUserMessage: (
-    steps: number,
-    toolsUsed: Set<string>,
-    options?: { buildFix?: boolean; errorMessage?: string },
-    prose?: string,
-  ) => Promise<PlanTurnRunResult>;
+  platformLimitExceeded: () => boolean;
+  pauseOperationForUser: (input: {
+    reason: PauseReason;
+    message: string;
+    steps: number;
+    toolsUsed: Set<string>;
+  }) => Promise<OperationPauseResult>;
   gatherContext: () => Promise<void>;
   saveCheckpoint: (phase: LoopPhaseEnum) => Promise<void>;
   chatMode: boolean;
@@ -109,15 +110,9 @@ export async function runAgentOrchestrator(
       deps.emit("phase", { phase: "resume", message: "" });
     }
 
-    if (deps.loopBudgetExceeded()) {
-      return deps.returnResumableWithUserMessage(0, deps.toolsUsed, undefined, "Retomando após análise inicial — continuo em seguida.");
-    }
     deps.emit("phase", { phase: "gather", message: GATHER_PHASE_MESSAGE });
     deps.emit("explore", { message: GATHER_PHASE_MESSAGE, phase: "gather" });
     await deps.gatherContext();
-    if (deps.loopBudgetExceeded()) {
-      return deps.returnResumableWithUserMessage(0, deps.toolsUsed, undefined, "Retomando após coleta de contexto — continuo em seguida.");
-    }
     await deps.saveCheckpoint(LoopPhaseEnum.GATHER_CONTEXT);
 
     const isApprovedOrSkip = deps.approvedPlanBuild || deps.skipConversationalGate;
@@ -126,10 +121,6 @@ export async function runAgentOrchestrator(
     const classification: ClassificationResult = isApprovedOrSkip
       ? buildApprovedClassification(deps.complexityScore, userPrompt)
       : deriveClassificationFromPrompt(userPrompt, deps.planMode);
-
-    if (deps.loopBudgetExceeded()) {
-      return deps.returnResumableWithUserMessage(0, deps.toolsUsed, undefined, "Retomando após classificação — continuo em seguida.");
-    }
 
     deps.setComplexityScore(classification.complexity);
     deps.state.intent = {

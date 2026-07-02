@@ -15,7 +15,7 @@ export type DesignPreflightDeps = {
   touchedPaths: Set<string>;
   state: AgentState;
   reg: ToolRegistry;
-  loopBudgetExceeded: () => boolean;
+  platformLimitExceeded: () => boolean;
   gatherContext: () => Promise<void>;
   touchHeartbeat: () => Promise<void>;
   emit: (type: string, data: unknown) => void;
@@ -33,7 +33,7 @@ export async function runDesignPreflightIfNeeded(
 ): Promise<DesignPreflightOutcome | null> {
   if (deps.planMode || deps.smokeRun || !needsDesignPreflight(deps.projectTemplate)) return null;
   if (deps.resumeRun && deps.touchedPaths.size > 0) return null;
-  if (deps.loopBudgetExceeded()) return null;
+  if (deps.platformLimitExceeded()) return null;
 
   if (!deps.state.context?.files?.length) {
     await deps.gatherContext();

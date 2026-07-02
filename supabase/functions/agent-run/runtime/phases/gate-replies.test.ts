@@ -55,21 +55,13 @@ Deno.test("runShowExistingPlanGate — null quando não é pedido de plano", asy
   assertEquals(result, null);
 });
 
-Deno.test("runInventoryGate — resposta vazia retorna chunk resumível", async () => {
+Deno.test("runInventoryGate — resposta vazia emite mensagem terminal (sem chunk resumível)", async () => {
   let chatCalls = 0;
   const deps = mockGateDeps({
     context: {
       projectConfig: "cfg",
       manifest: "manifest",
     } as never,
-    returnResumableWithUserMessage: async (_steps, _toolsUsed, _options, prose) => ({
-      ok: false,
-      error: "Retomando automaticamente em novo chunk…",
-      steps: 0,
-      resumable: true,
-      toolsUsed: [],
-      summary: prose,
-    }),
   });
   const model = {
     chat: async () => {
@@ -82,8 +74,13 @@ Deno.test("runInventoryGate — resposta vazia retorna chunk resumível", async 
 
   assertEquals(chatCalls, 2);
   assertEquals(result.ok, false);
-  assertEquals(result.resumable, true);
-  assertEquals(result.summary, "Não foi possível resumir o estado do projeto. Retomando automaticamente.");
+  assertEquals(result.resumable, undefined);
+  assertEquals(result.error, "Não foi possível resumir o estado do projeto.");
+  assertEquals(deps.persisted.length, 1);
+  assertEquals(
+    deps.events.some((e) => e.type === "assistant_text" && (e.data as { final?: boolean }).final === true),
+    true,
+  );
 });
 
 function mockGateDeps(overrides?: Partial<GateReplyDeps>): GateReplyDeps & {
@@ -112,14 +109,6 @@ function mockGateDeps(overrides?: Partial<GateReplyDeps>): GateReplyDeps & {
     originalUserRequest: "",
     planMode: false,
     emit: (type, data) => events.push({ type, data }),
-    returnResumableWithUserMessage: async (_steps, _toolsUsed, _options, prose) => ({
-      ok: false,
-      error: "Retomando automaticamente em novo chunk…",
-      steps: 0,
-      resumable: true,
-      toolsUsed: [],
-      summary: prose,
-    }),
     configuredModel: () => {
       throw new Error("not used");
     },

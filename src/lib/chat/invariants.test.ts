@@ -81,6 +81,7 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
     expect(turn.thinking?.status).toBe("active");
     expect(turn.miniCard).not.toBeNull();
     expect(turn.miniCard?.header).not.toBe("Working");
+    expect(turn.miniCard?.liveLine).not.toBe("Working");
     expect(turn.narration).toBe("Vou investigar o estado atual.");
     expect(turn.streamText).toBeNull();
     assertAssistantTurnInvariant(turn);
@@ -177,7 +178,7 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
     assertAssistantTurnInvariant(turn);
   });
 
-  it("Estado C img9: Running command, sem chips", () => {
+  it("Estado C img9: shell_exec ativo projeta linha viva, sem chips", () => {
     const progress = {
       ...initialAgentProgress,
       phase: "execute" as const,
@@ -195,7 +196,8 @@ describe("mapAssistantTurn — contrato Lovable imutável", () => {
       sessionProgress: progress,
     });
 
-    expect(turn.miniCard?.header).toBe("Running command");
+    expect(turn.miniCard?.header).toBe("Executando deploy…");
+    expect(turn.miniCard?.liveLine).toBe("Executando deploy…");
     assertAssistantTurnInvariant(turn);
   });
 

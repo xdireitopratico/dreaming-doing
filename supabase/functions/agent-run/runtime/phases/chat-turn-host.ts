@@ -33,7 +33,7 @@ export async function runChatModeAgentTurnForHost(
     messages: host.state.messages,
     streamState: host.planStreamState,
     emit: finishDeps.emit,
-    returnResumableWithUserMessage: host.bindings.returnResumableWithUserMessage,
+    pauseOperationForUser: host.bindings.pauseOperationForUser,
     onActivity: host.onActivity,
   };
 

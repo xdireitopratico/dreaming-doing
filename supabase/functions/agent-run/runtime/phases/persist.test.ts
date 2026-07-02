@@ -72,7 +72,6 @@ function mockPersistDeps(overrides?: Partial<AgentPersistDeps>): AgentPersistDep
     },
     getBuildSession: () => null,
     emit: () => {},
-    loopBudgetMs: 600_000,
     upserts,
     inserts,
     updates,

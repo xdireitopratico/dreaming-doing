@@ -35,8 +35,7 @@ import { emitLoopFsmTransition } from "./runtime/loop-fsm.ts";
 import { notifyLoopStatusFromHost } from "./runtime/loop-notify.ts";
 import { RuntimeEmitter, type StreamCallback } from "./runtime/emitter.ts";
 import { createLoopBindings, type AgentLoopHost, type LoopBindings } from "./runtime/deps-factory.ts";
-import { isRunCanceled, loopBudgetExceeded as loopBudgetExceededInfra } from "./runtime/infra.ts";
-import { readLoopBudgetMsFromRuntime } from "./runtime/loop-config.ts";
+import { isRunCanceled, platformLimitExceeded } from "./runtime/infra.ts";
 import { runLlmChatForHost, type LlmChatHost } from "./runtime/llm-chat.ts";
 import { runDesignPreflightIfNeeded as runDesignPreflightIfNeededPhase } from "./runtime/phases/design-preflight-phase.ts";
 import { attemptGracefulClosingForHost } from "./runtime/phases/graceful-closing-host.ts";
@@ -56,8 +55,6 @@ import {
   createCanonicalBuildSession,
 } from "./runtime/build-session.ts";
 import { logger } from "../_shared/logger.ts";
-
-const LOOP_BUDGET_MS = readLoopBudgetMsFromRuntime();
 
 export type { AgentLoopRunResult } from "./runtime/loop-result.ts";
 
@@ -182,6 +179,18 @@ export class AgentLoop {
 
     this.thinkingStreamStartedAt = null;
     this.touchedPaths = new Set();
+    const opSnap = options?.operationSnapshot;
+    if (opSnap) {
+      for (const p of opSnap.touchedPaths) {
+        if (p) this.touchedPaths.add(p);
+      }
+      this.mutable.directiveEmitted = opSnap.directiveEmitted;
+      this.mutable.validationGeneration = opSnap.validationGeneration;
+      this.mutable.operationStartedAt = opSnap.operationStartedAt;
+      if (opSnap.buildSession) {
+        this.mutable.buildSession = opSnap.buildSession;
+      }
+    }
     this.buildFixResume = options?.buildFixResume ?? false;
     this.smokeRun = options?.smokeRun ?? false;
     if (options?.hasCheckpoint) {
@@ -213,8 +222,10 @@ export class AgentLoop {
       this.preferences?.contextWindow ?? undefined,
       (type, data) => this.emitter.emit(type, data),
     );
-    this.bindings = createLoopBindings(this.loopHost(), LOOP_BUDGET_MS);
-    this.mutable.buildSession = createCanonicalBuildSession(this.runId, this.approvedPlanBuild);
+    this.bindings = createLoopBindings(this.loopHost(), this.runStartTime);
+    if (!this.mutable.buildSession) {
+      this.mutable.buildSession = createCanonicalBuildSession(this.runId, this.approvedPlanBuild);
+    }
   }
 
   private loopHost(): AgentLoopHost {
@@ -296,11 +307,8 @@ export class AgentLoop {
     return this.llm;
   }
 
-  private loopBudgetExceeded(): boolean {
-    return loopBudgetExceededInfra({
-      runStartTime: this.runStartTime,
-      loopBudgetMs: LOOP_BUDGET_MS,
-    });
+  private platformLimitExceeded(): boolean {
+    return platformLimitExceeded({ invocationStartedAt: this.runStartTime });
   }
 
   private requiresFinalBuildGate(): boolean {
@@ -317,7 +325,7 @@ export class AgentLoop {
       touchedPaths: this.touchedPaths,
       state: this.state,
       reg: this.reg,
-      loopBudgetExceeded: () => this.loopBudgetExceeded(),
+      platformLimitExceeded: () => this.platformLimitExceeded(),
       gatherContext: () => this.gatherContext(),
       touchHeartbeat: () => this.bindings.touchHeartbeat(),
       emit: (type, data) => this.emit(type, data),
@@ -406,7 +414,9 @@ export class AgentLoop {
       this.compression.requestCompact();
     }
     this.mutable.consecutiveNoContentReadSteps = 0;
-    this.mutable.buildSession = createCanonicalBuildSession(this.runId, this.approvedPlanBuild);
+    if (!this.resumeRun && !this.mutable.buildSession) {
+      this.mutable.buildSession = createCanonicalBuildSession(this.runId, this.approvedPlanBuild);
+    }
     logger.event("agent.loop_started", {
       runId: this.runId ?? undefined,
       approvedPlanBuild: this.approvedPlanBuild,
@@ -450,7 +460,7 @@ export class AgentLoop {
       emitTransition: (eventType: string, data?: unknown) => this.emitTransition(eventType, data),
       notifyLoopStatus: (ctx: LoopUpdateContext) => this.notifyLoopStatus(ctx),
       configuredModel: () => this.configuredModel(),
-      loopBudgetExceeded: () => this.loopBudgetExceeded(),
+      platformLimitExceeded: () => this.platformLimitExceeded(),
       gatherContext: () => this.gatherContext(),
       runChatModeAgentTurn: (model: LLMProvider) => this.runChatModeAgentTurn(model),
       runPlanModeAgentTurn: (model: LLMProvider) => this.runPlanModeAgentTurn(model),

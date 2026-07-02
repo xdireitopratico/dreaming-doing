@@ -2,8 +2,6 @@ import { createClient } from "@supabase/supabase-js";
 import type { AgentRunRequest, ExecuteResponse } from "../functions/_shared.ts";
 import { getSupabaseAdmin } from "../functions/supabase-admin.ts";
 
-const INNGEST_LOOP_BUDGET_MS = "270000";
-
 type AgentPreferencesPayload = {
   mode?: "auto" | "robin" | "rob" | "fixed";
   poolProvider?: "nvidia" | "groq";
@@ -38,7 +36,6 @@ export async function runAgentLoop(
   payload: AgentRunRequest & { resume?: boolean },
 ): Promise<ExecuteResponse> {
   process.env.INNGEST_EXECUTOR = "1";
-  process.env.AGENT_LOOP_BUDGET_MS = INNGEST_LOOP_BUDGET_MS;
 
   const { executeAgentRun } = await loadExecutor();
 

@@ -1,5 +1,14 @@
 import type { AgentState } from "./types.ts";
 import { LoopPhase } from "./types.ts";
+import type { CanonicalBuildSession } from "./runtime/build-session.ts";
+
+export type OperationSnapshot = {
+  touchedPaths: string[];
+  directiveEmitted: boolean;
+  buildSession: CanonicalBuildSession | null;
+  validationGeneration: number;
+  operationStartedAt: string;
+};
 
 export type CheckpointExtra = {
   complexityScore: number;
@@ -10,15 +19,53 @@ export type LoadedCheckpoint = {
   phase: LoopPhase;
   state: AgentState;
   extra: CheckpointExtra;
+  operation: OperationSnapshot;
 };
 
 function isLoopPhase(v: unknown): v is LoopPhase {
   return typeof v === "string" && Object.values(LoopPhase).includes(v as LoopPhase);
 }
 
+function parseBuildSession(raw: unknown): CanonicalBuildSession | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.runId !== "string" || typeof o.phase !== "string") return null;
+  return raw as CanonicalBuildSession;
+}
+
+export function defaultOperationSnapshot(
+  overrides?: Partial<OperationSnapshot>,
+): OperationSnapshot {
+  return {
+    touchedPaths: overrides?.touchedPaths ?? [],
+    directiveEmitted: overrides?.directiveEmitted ?? false,
+    buildSession: overrides?.buildSession ?? null,
+    validationGeneration: overrides?.validationGeneration ?? 0,
+    operationStartedAt: overrides?.operationStartedAt ?? new Date().toISOString(),
+  };
+}
+
+export function parseOperationSnapshot(raw: Record<string, unknown>): OperationSnapshot {
+  const touchedPaths = Array.isArray(raw.touchedPaths)
+    ? raw.touchedPaths.filter((p): p is string => typeof p === "string")
+    : [];
+  return defaultOperationSnapshot({
+    touchedPaths,
+    directiveEmitted: raw.directiveEmitted === true,
+    buildSession: parseBuildSession(raw.buildSession),
+    validationGeneration: typeof raw.validationGeneration === "number"
+      ? raw.validationGeneration
+      : 0,
+    operationStartedAt: typeof raw.operationStartedAt === "string"
+      ? raw.operationStartedAt
+      : new Date().toISOString(),
+  });
+}
+
 export function serializeCheckpointPayload(
   state: AgentState,
   extra: CheckpointExtra,
+  operation: OperationSnapshot,
 ): Record<string, unknown> {
   return {
     projectId: state.projectId,
@@ -36,6 +83,11 @@ export function serializeCheckpointPayload(
     totalSteps: state.totalSteps,
     complexityScore: extra.complexityScore,
     maxStepsLimit: extra.maxStepsLimit,
+    touchedPaths: operation.touchedPaths,
+    directiveEmitted: operation.directiveEmitted,
+    buildSession: operation.buildSession,
+    validationGeneration: operation.validationGeneration,
+    operationStartedAt: operation.operationStartedAt,
   };
 }
 
@@ -91,6 +143,7 @@ export function deserializeCheckpointState(raw: Record<string, unknown>): Loaded
     phase,
     state,
     extra: { complexityScore, maxStepsLimit },
+    operation: parseOperationSnapshot(raw),
   };
 }
 

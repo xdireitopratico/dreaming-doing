@@ -17,14 +17,11 @@ import {
   formatClarifyMessage,
   extractClarifyQuestions,
   hasMixedMetaAndExecution,
-  mergeWriteModeToolDefinitions,
   splitMetaToolCalls,
 } from "../../tools/meta.ts";
 import { isAndroidNativePath, isBuildCommand } from "../loop-config.ts";
 import type { PlanTurnRunResult, PlanTurnEmit } from "./plan-turn.ts";
 import {
-  areReadPathsSatisfied,
-  assertDesignReadsDone,
   buildStructuredToolContent,
   computeFilePreDiff,
   computeForceTools,
@@ -35,12 +32,17 @@ import {
   isUiPatchCall,
   normalizeDesignReadPath,
   recordDesignReadPath,
-  resolveBuildToolPhase,
   shouldEnforceNoToolCalls,
   shouldSuggestStackFork,
   updateReadOnlyTracker,
-  type BuildToolPhase,
 } from "./execute-helpers.ts";
+import {
+  evaluateReadGate,
+  evaluateTurnGuidePreTurn,
+  evaluateZeroWritesExit,
+  ZERO_WRITES_RESUME_MESSAGE,
+} from "../turn-guide.ts";
+import { attemptOpeningProse } from "../turn-opening.ts";
 import type {
   AgentState,
   ChatMessage,
@@ -76,7 +78,13 @@ import {
   ensureUserMessage,
   emitTerminalUserMessage,
 } from "../terminal-user-message.ts";
-import type { ResumableExitOptions } from "../infra.ts";
+import type { PauseReason } from "../infra.ts";
+import {
+  formatBuildFeedback,
+  resolveValidationMode,
+  touchedPathsIncludeSrc,
+} from "../validation-policy.ts";
+import { classifyLlmLoopRetrial } from "../retrial-policy.ts";
 
 export type BuildExecuteDeps = {
   robinActive: boolean;
@@ -101,17 +109,15 @@ export type BuildExecuteDeps = {
   setToolsInvoked: (value: boolean) => void;
   getConsecutiveNoContentReadSteps: () => number;
   setConsecutiveNoContentReadSteps: (value: number) => void;
-  getBuildToolPhase: () => BuildToolPhase;
-  setBuildToolPhase: (phase: BuildToolPhase) => void;
   getReadGateBlockCount: () => number;
   setReadGateBlockCount: (count: number) => void;
-  getForceWriteAttempted: () => boolean;
-  setForceWriteAttempted: (value: boolean) => void;
   getLlmResponseWasStreamed: () => boolean;
   getLastExecutePhaseMessage: () => string | null;
   setLastExecutePhaseMessage: (value: string | null) => void;
   getBuildSession: () => CanonicalBuildSession | null;
   setBuildSession: (session: CanonicalBuildSession | null) => void;
+  getDirectiveEmitted: () => boolean;
+  setDirectiveEmitted: (value: boolean) => void;
   touchedPaths: Set<string>;
   executionModel: LLMProvider;
   reg: ToolRegistry;
@@ -123,13 +129,13 @@ export type BuildExecuteDeps = {
   narrationPhase?: NarrationPhase;
   narrationBuffer: string;
   emit: PlanTurnEmit;
-  loopBudgetExceeded: () => boolean;
-  returnResumableWithUserMessage: (
-    steps: number,
-    toolsUsed: Set<string>,
-    options?: ResumableExitOptions,
-    prose?: string,
-  ) => Promise<PlanTurnRunResult>;
+  platformLimitExceeded: () => boolean;
+  pauseOperationForUser: (input: {
+    reason: PauseReason;
+    message: string;
+    steps: number;
+    toolsUsed: Set<string>;
+  }) => Promise<PlanTurnRunResult>;
   runDesignPreflightIfNeeded: () =>
     Promise<{
       status: "passed" | "recoverable_fail" | "terminal_fail";
@@ -218,30 +224,8 @@ function applyNoToolCallsEnforcement(
   return false;
 }
 
-const FORCE_WRITE_USER_MESSAGE =
-  "Leitura suficiente. Implemente agora com fs_write ou fs_edit.";
-const ZERO_WRITES_RESUME_MESSAGE =
-  "Ainda não materializei arquivos — use Continuar para forçar implementação.";
-
 function needsZeroWritesProtection(deps: BuildExecuteDeps): boolean {
   return deps.approvedPlanBuild && deps.touchedPaths.size === 0;
-}
-
-function prepareForceWriteTurn(deps: BuildExecuteDeps): boolean {
-  if (!needsZeroWritesProtection(deps)) return false;
-  if (deps.getForceWriteAttempted()) return false;
-  deps.setForceWriteAttempted(true);
-  deps.setBuildToolPhase("write");
-  deps.setConsecutiveNoContentReadSteps(0);
-  deps.state.messages.push({
-    role: "user",
-    content: FORCE_WRITE_USER_MESSAGE,
-  });
-  logger.event("agent.build_force_write_turn", {
-    loopStep: deps.state.currentStepIndex,
-    readOnlyBatches: deps.getConsecutiveNoContentReadSteps(),
-  });
-  return true;
 }
 
 async function zeroWritesResumableExit(
@@ -252,13 +236,22 @@ async function zeroWritesResumableExit(
   logger.event("agent.build_zero_writes_exit", {
     context,
     loopStep,
-    phase: deps.getBuildToolPhase(),
     readOnlyBatches: deps.getConsecutiveNoContentReadSteps(),
   });
   await deps.saveCheckpoint(LoopPhaseEnum.ERROR, true);
-  return deps.returnResumableWithUserMessage(loopStep, deps.toolsUsed, {
-    errorMessage: ZERO_WRITES_RESUME_MESSAGE,
+  return deps.pauseOperationForUser({
+    reason: "step_limit",
+    message: ZERO_WRITES_RESUME_MESSAGE,
+    steps: loopStep,
+    toolsUsed: deps.toolsUsed,
   });
+}
+
+function projectHasSrcTree(deps: BuildExecuteDeps): boolean {
+  if (deps.getContextFiles().some((f) => f.path.replace(/^\//, "").startsWith("src/"))) {
+    return true;
+  }
+  return touchedPathsIncludeSrc(deps.touchedPaths);
 }
 
 async function guardedTerminalExit(
@@ -269,11 +262,15 @@ async function guardedTerminalExit(
   if (!needsZeroWritesProtection(deps)) {
     return exit();
   }
-  if (!deps.getForceWriteAttempted()) {
-    prepareForceWriteTurn(deps);
-    return null;
+  const zeroWrites = evaluateZeroWritesExit({
+    approvedPlanBuild: deps.approvedPlanBuild,
+    touchedPathsCount: deps.touchedPaths.size,
+    loopStep,
+  });
+  if (zeroWrites.action === "pause_zero_writes") {
+    return zeroWritesResumableExit(deps, loopStep, "terminal_zero_writes");
   }
-  return zeroWritesResumableExit(deps, loopStep, "terminal_after_force_write");
+  return null;
 }
 
 /** Produz fechamento final garantido via choke point central — NUNCA retorna vazio. */
@@ -407,6 +404,8 @@ export async function runBuildExecutePhase(
   let loopStep = initialStep;
   let finalGateOk = false;
   let agentTextComplete = false;
+  let lastValidationStep = 0;
+  let llmLoopAttempts = 0;
 
   logger.event("agent.build_execute_entered", {
     initialStep,
@@ -493,13 +492,18 @@ export async function runBuildExecutePhase(
   while (!finalGateOk) {
     agentTextComplete = false;
     while (loopStep < deps.maxStepsLimit) {
-      if (deps.loopBudgetExceeded()) {
+      if (deps.platformLimitExceeded()) {
         const prose = await resolveClosureText({
           messages: deps.state.messages,
           touchedPaths: [...deps.touchedPaths],
           userRequest: deps.originalUserRequest,
         }).catch(() => "");
-        return deps.returnResumableWithUserMessage(loopStep, deps.toolsUsed, undefined, prose || undefined);
+        return deps.pauseOperationForUser({
+          reason: "platform_limit",
+          message: prose || "Limite de tempo da plataforma — continue quando estiver pronto.",
+          steps: loopStep,
+          toolsUsed: deps.toolsUsed,
+        });
       }
 
       if (await deps.isCanceled()) {
@@ -547,18 +551,14 @@ export async function runBuildExecutePhase(
         deps.emit("phase", { phase: "execute", message: "" });
       }
 
-      const readPathsSatisfiedEarly = areReadPathsSatisfied(
-        deps.approvedPlanDesign?.read_paths,
-        deps.designReadPathsDone,
-      );
-      const buildToolPhaseEarly = resolveBuildToolPhase({
-        touchedPathsCount: deps.touchedPaths.size,
-        readPathsSatisfied: readPathsSatisfiedEarly,
+      const preTurnGuide = evaluateTurnGuidePreTurn({
         consecutiveReadOnlyBatches: deps.getConsecutiveNoContentReadSteps(),
-        loopStep,
-        approvedPlanBuild: deps.approvedPlanBuild,
-        hasDesignDirective: !!deps.approvedPlanDesign,
+        touchedPathsCount: deps.touchedPaths.size,
       });
+      if (preTurnGuide.action === "nudge_stall") {
+        deps.emit("explore", { message: preTurnGuide.message });
+      }
+
       deps.compression.emitUsage(deps.state.messages);
 
       if (deps.compression.shouldRunCompact(deps.state.messages)) {
@@ -590,12 +590,12 @@ export async function runBuildExecutePhase(
         buildFixResume: deps.buildFixResume,
         design: deps.approvedPlanDesign,
       });
-      // Serializa o directive pro inspector (ACT III do simulacro) -- so no 1o passo do build.
-      if (loopStep === 1 && deps.approvedPlanDesign) {
+      if (loopStep === 1 && deps.approvedPlanDesign && !deps.getDirectiveEmitted()) {
         const d = deps.approvedPlanDesign;
         const gesture = typeof d.moment === "string" ? d.moment : "(sem gesto)";
         const techniques = Array.isArray(d.techniques) ? d.techniques : [];
         deps.emit("directive", { brief: deps.originalUserRequest, gesture, techniques });
+        deps.setDirectiveEmitted(true);
       }
       const actionableIntent = isActionableIntent(deps.state.intent?.type);
       const forceTools = computeForceTools({
@@ -613,34 +613,6 @@ export async function runBuildExecutePhase(
         approvedPlanBuild: deps.approvedPlanBuild,
       });
 
-      const readPathsSatisfied = areReadPathsSatisfied(
-        deps.approvedPlanDesign?.read_paths,
-        deps.designReadPathsDone,
-      );
-      const buildToolPhase = resolveBuildToolPhase({
-        touchedPathsCount: deps.touchedPaths.size,
-        readPathsSatisfied,
-        consecutiveReadOnlyBatches: deps.getConsecutiveNoContentReadSteps(),
-        loopStep,
-        approvedPlanBuild: deps.approvedPlanBuild,
-        hasDesignDirective: !!deps.approvedPlanDesign,
-      });
-      const prevBuildToolPhase = deps.getBuildToolPhase();
-      deps.setBuildToolPhase(buildToolPhase);
-      if (buildToolPhase === "write" && prevBuildToolPhase === "discovery") {
-        deps.emit("phase", { phase: "execute", message: "Implementando…" });
-        deps.state.messages.push({
-          role: "user",
-          content: FORCE_WRITE_USER_MESSAGE,
-        });
-      }
-
-      const writeModeTools =
-        buildToolPhase === "write"
-          ? mergeWriteModeToolDefinitions(deps.reg.getDefinitions())
-          : undefined;
-      const effectiveForceTools = buildToolPhase === "write" ? true : forceTools;
-
       let response: ChatResponse | null = null;
       try {
         deps.maybeEmitSilenceHeartbeat();
@@ -649,8 +621,8 @@ export async function runBuildExecutePhase(
           deps.executionModel,
           executeInstruction,
           compressed,
-          effectiveForceTools,
-          writeModeTools,
+          forceTools,
+          deps.reg.getDefinitions(),
         );
       } catch (err: unknown) {
         const friendly = friendlyLlmError(err, deps.robinActive);
@@ -666,7 +638,14 @@ export async function runBuildExecutePhase(
           loopStep--;
           continue;
         }
-        if (shouldFailFastLlmError(err)) {
+        const retrialLayer = classifyLlmLoopRetrial({
+          err,
+          loopAttempts: llmLoopAttempts,
+          maxLoopAttempts: EXECUTE_MAX_LLM_RETRIES,
+          timedOut,
+          timeoutRetriedThisStep,
+        });
+        if (retrialLayer === "terminal") {
           const failMsg = `Erro: ${friendly}`;
           const fastExit = await guardedTerminalExit(deps, loopStep, () =>
             emitClosingAndPersist(deps, loopStep, {
@@ -679,23 +658,32 @@ export async function runBuildExecutePhase(
           if (fastExit === null) continue;
           return fastExit;
         }
-        const retries = await deps.bumpLlmRetries();
-        if (retries >= EXECUTE_MAX_LLM_RETRIES) {
-          if (prepareForceWriteTurn(deps)) continue;
-          if (needsZeroWritesProtection(deps)) {
-            return zeroWritesResumableExit(deps, loopStep, "llm_retries_exhausted");
-          }
-          const failMsg = `Erro: ${friendly}`;
+        if (retrialLayer === "in_loop") {
+          llmLoopAttempts++;
+          await deps.bumpLlmRetries();
           deps.notifyLoopStatus({ kind: "model_error", errorDetail: friendly });
-          return deps.returnResumableWithUserMessage(loopStep, deps.toolsUsed, {
-            errorMessage: failMsg,
-            pauseForUser: true,
+          loopStep--;
+          deps.state.messages.push({
+            role: "user",
+            content: friendly,
           });
+          continue;
         }
+        const zeroWrites = evaluateZeroWritesExit({
+          approvedPlanBuild: deps.approvedPlanBuild,
+          touchedPathsCount: deps.touchedPaths.size,
+          loopStep,
+        });
+        if (zeroWrites.action === "pause_zero_writes") {
+          return zeroWritesResumableExit(deps, loopStep, "llm_retries_exhausted");
+        }
+        const failMsg = `Erro: ${friendly}`;
         deps.notifyLoopStatus({ kind: "model_error", errorDetail: friendly });
-        return deps.returnResumableWithUserMessage(loopStep, deps.toolsUsed, {
-          errorMessage: friendly,
-          pauseForUser: true,
+        return deps.pauseOperationForUser({
+          reason: "llm_exhausted",
+          message: failMsg,
+          steps: loopStep,
+          toolsUsed: deps.toolsUsed,
         });
       }
 
@@ -719,7 +707,6 @@ export async function runBuildExecutePhase(
         deps.getConsecutiveNoContentReadSteps(),
         response,
         assistantText,
-        buildToolPhase,
         hadThinkingActivity,
       );
       deps.setConsecutiveNoContentReadSteps(readOnlyUpdate.consecutive);
@@ -874,7 +861,7 @@ export async function runBuildExecutePhase(
       if (!response.tool_calls || response.tool_calls.length === 0) {
         if (
           shouldEnforceNoToolCalls({
-            forceTools: effectiveForceTools,
+            forceTools,
             narrationOnlyStep,
             llmResponseWasStreamed: deps.getLlmResponseWasStreamed(),
             approvedPlanBuild: deps.approvedPlanBuild,
@@ -916,6 +903,15 @@ export async function runBuildExecutePhase(
 
       if (assistantText) {
         deps.emitAgentProse(assistantText, deps.state.currentStepIndex);
+      } else if (!deps.narrationPhase?.openingEmitted) {
+        const opening = await attemptOpeningProse({
+          messages: deps.state.messages,
+          model: deps.executionModel,
+          userRequest: deps.originalUserRequest,
+        });
+        if (opening) {
+          deps.ensureOpeningBeforeWork(opening);
+        }
       }
 
       deps.emit("phase", {
@@ -931,33 +927,31 @@ export async function runBuildExecutePhase(
 
       const liveMsgId = await deps.persistAssistantStep(response);
 
-      let readGate = assertDesignReadsDone({
+      const readGateDecision = evaluateReadGate({
         readPaths: deps.approvedPlanDesign?.read_paths,
         readsDone: deps.designReadPathsDone,
         patchCalls: response.tool_calls,
+        readGateBlockCount: deps.getReadGateBlockCount(),
       });
-      if (!readGate.ok) {
-        const blockCount = deps.getReadGateBlockCount() + 1;
-        deps.setReadGateBlockCount(blockCount);
-        if (blockCount >= 2) {
-          for (const p of readGate.missing) {
-            deps.designReadPathsDone.add(normalizeDesignReadPath(p));
-          }
-          logger.event("design.read_gate_relaxed", {
-            missing: readGate.missing,
-            blockCount,
-          });
-          readGate = { ok: true, missing: [], message: "" };
+      if (readGateDecision.action === "read_gate_relaxed") {
+        const relaxedBlockCount = deps.getReadGateBlockCount() + 1;
+        for (const p of readGateDecision.missing) {
+          deps.designReadPathsDone.add(normalizeDesignReadPath(p));
         }
-      }
-      if (!readGate.ok) {
+        deps.setReadGateBlockCount(0);
+        logger.event("design.read_gate_relaxed", {
+          missing: readGateDecision.missing,
+          blockCount: relaxedBlockCount,
+        });
+      } else if (readGateDecision.action === "block_read_gate") {
+        deps.setReadGateBlockCount(deps.getReadGateBlockCount() + 1);
         deps.state.executionLog = appendExecutionLogEntry(
           deps.state.executionLog,
-          designTelemetryEntry("read_paths_gate", false, readGate.message),
+          designTelemetryEntry("read_paths_gate", false, readGateDecision.message),
         );
         deps.state.messages.push({
           role: "user",
-          content: readGate.message,
+          content: readGateDecision.message,
         });
         if (liveMsgId) {
           await deps.updateAssistantStep(liveMsgId, response, [], loopStep);
@@ -1040,10 +1034,6 @@ export async function runBuildExecutePhase(
           }
         }
 
-        if ((call.name === "fs_write" || call.name === "fs_edit") && result.ok) {
-          const pathArg = (call.arguments.path as string) ?? call.name;
-          deps.emit("preview_sync", { path: pathArg, reason: "fs_change" });
-        }
         return { ...result, toolCallId: call.id };
       });
 
@@ -1062,10 +1052,6 @@ export async function runBuildExecutePhase(
           arguments: {
             command: `cd /home/user && git add -A && git commit -m "${commitMsg}" 2>&1 || true`,
           },
-        });
-        deps.emit("preview_sync", {
-          path: modifiedPaths[0],
-          reason: "fs_success",
         });
       }
 
@@ -1168,10 +1154,30 @@ export async function runBuildExecutePhase(
       }
 
       const modifiedFiles = modifiedFilePaths.length > 0;
-      if (modifiedFiles && buildAttempts < EXECUTE_MAX_RETRIES) {
+      const validationMode = resolveValidationMode({
+        touchedPaths: deps.touchedPaths,
+        hasSrcTree: projectHasSrcTree(deps),
+        loopStep,
+        isFinalGate: false,
+        lastValidationStep,
+      });
+      if (modifiedFiles && buildAttempts < EXECUTE_MAX_RETRIES && validationMode === "light") {
+        deps.emit("phase", { phase: "validate", message: "Conferindo tipos…" });
+        const lightObservation = await deps.observer.observeLight(() => deps.platformLimitExceeded());
+        lastValidationStep = loopStep;
+        if (!lightObservation.passed) {
+          buildAttempts++;
+          deps.state.messages.push({
+            role: "user",
+            content: formatBuildFeedback(lightObservation.feedback, lightObservation.checks),
+          });
+          continue;
+        }
+        buildAttempts = 0;
+      } else if (modifiedFiles && buildAttempts < EXECUTE_MAX_RETRIES && validationMode === "full") {
         deps.state.phase = LoopPhaseEnum.VALIDATE_STEP;
         deps.notifyLoopStatus({ kind: "build_check" });
-        deps.emit("phase", { phase: "observe", message: "" });
+        deps.emit("phase", { phase: "validate", message: "Conferindo build…" });
         const session = deps.getBuildSession();
         if (session) {
           deps.setBuildSession(
@@ -1181,7 +1187,8 @@ export async function runBuildExecutePhase(
           );
         }
         await deps.saveCheckpoint(LoopPhaseEnum.VALIDATE_STEP);
-        const observation = await deps.observer.observe(() => deps.loopBudgetExceeded());
+        const observation = await deps.observer.observe(() => deps.platformLimitExceeded());
+        lastValidationStep = loopStep;
         const sessionAfterObserve = deps.getBuildSession();
         if (sessionAfterObserve) {
           deps.setBuildSession(
@@ -1209,20 +1216,14 @@ export async function runBuildExecutePhase(
               }),
             );
           }
-          deps.emit("validate_fail", {
-            attempt: buildAttempts,
-            checks: observation.checks.filter((c) => !c.ok).map((c) => c.name),
-            feedback: observation.feedback?.slice(0, 500),
-          });
           deps.state.messages.push({
             role: "user",
-            content: `BUILD FALHOU:\n${observation.feedback?.slice(0, 2000) ?? ""}\nCorrija com fs_edit.`,
+            content: formatBuildFeedback(observation.feedback, observation.checks),
           });
           continue;
         }
         buildAttempts = 0;
         deps.notifyLoopStatus({ kind: "build_ok" });
-        deps.emit("validate_ok", { message: "Build OK" });
         logger.event("agent.build_validate_passed", {
           loopStep,
           modifiedFiles,
@@ -1249,12 +1250,29 @@ export async function runBuildExecutePhase(
 
       if (loopStep >= deps.maxStepsLimit && !agentTextComplete) {
         await deps.saveCheckpoint(LoopPhaseEnum.DECIDE_NEXT, true);
-        return deps.returnResumableWithUserMessage(loopStep, deps.toolsUsed, {
-          buildFix: deps.requiresFinalBuildGate(),
+        return deps.pauseOperationForUser({
+          reason: "step_limit",
+          message: deps.requiresFinalBuildGate()
+            ? "Limite de passos atingido com build pendente — continue quando estiver pronto."
+            : "Limite de passos atingido — continue quando estiver pronto.",
+          steps: loopStep,
+          toolsUsed: deps.toolsUsed,
         });
       }
 
     if (!deps.requiresFinalBuildGate()) {
+      finalGateOk = true;
+      continue;
+    }
+
+    const finalValidationMode = resolveValidationMode({
+      touchedPaths: deps.touchedPaths,
+      hasSrcTree: projectHasSrcTree(deps),
+      loopStep,
+      isFinalGate: true,
+      lastValidationStep,
+    });
+    if (finalValidationMode === "off") {
       finalGateOk = true;
       continue;
     }
@@ -1270,7 +1288,8 @@ export async function runBuildExecutePhase(
       );
     }
     await deps.saveCheckpoint(LoopPhaseEnum.VALIDATE_STEP);
-    const finalObservation = await deps.observer.observe(() => deps.loopBudgetExceeded());
+    const finalObservation = await deps.observer.observe(() => deps.platformLimitExceeded());
+    lastValidationStep = loopStep;
     const sessionAfterFinalObserve = deps.getBuildSession();
     if (sessionAfterFinalObserve) {
       deps.setBuildSession(
@@ -1279,7 +1298,6 @@ export async function runBuildExecutePhase(
     }
     if (finalObservation.passed) {
       deps.notifyLoopStatus({ kind: "build_ok" });
-      deps.emit("validate_ok", { message: "Build OK (gate final)" });
       logger.event("agent.build_final_gate_passed", {
         loopStep,
         finalGateAttempts,
@@ -1309,12 +1327,6 @@ export async function runBuildExecutePhase(
         }),
       );
     }
-    deps.emit("validate_fail", {
-      attempt: finalGateAttempts,
-      checks: finalObservation.checks.filter((c) => !c.ok).map((c) => c.name),
-      feedback: finalObservation.feedback?.slice(0, 500),
-      finalGate: true,
-    });
 
     if (finalGateAttempts > EXECUTE_MAX_RETRIES) {
       const failMsg =
@@ -1334,14 +1346,18 @@ export async function runBuildExecutePhase(
       return gateExit;
     }
 
-    if (deps.loopBudgetExceeded()) {
-      return deps.returnResumableWithUserMessage(loopStep, deps.toolsUsed, { buildFix: true });
+    if (deps.platformLimitExceeded()) {
+      return deps.pauseOperationForUser({
+        reason: "platform_limit",
+        message: "Limite de tempo da plataforma com build pendente — continue quando estiver pronto.",
+        steps: loopStep,
+        toolsUsed: deps.toolsUsed,
+      });
     }
 
     deps.state.messages.push({
       role: "user",
-      content:
-        `BUILD FALHOU:\n${finalObservation.feedback?.slice(0, 2000) ?? ""}\nCorrija com fs_edit.`,
+      content: formatBuildFeedback(finalObservation.feedback, finalObservation.checks),
     });
     deps.notifyLoopStatus({ kind: "build_fix" });
   }

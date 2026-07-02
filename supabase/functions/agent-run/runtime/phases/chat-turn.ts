@@ -11,6 +11,7 @@ import {
   type PlanTurnRunResult,
 } from "./plan-turn.ts";
 import type { ChatMessage, LLMProvider } from "../../types.ts";
+import type { OperationPauseResult, PauseReason } from "../infra.ts";
 
 export type ChatTurnDeps = PlanTurnFinishDeps & {
   robinActive: boolean;
@@ -18,19 +19,12 @@ export type ChatTurnDeps = PlanTurnFinishDeps & {
   messages: ChatMessage[];
   streamState: PlanModeStreamState;
   emit: PlanTurnEmit;
-  returnResumableWithUserMessage: (
-    steps: number,
-    toolsUsed: Set<string>,
-    options?: { buildFix?: boolean; errorMessage?: string },
-    prose?: string,
-  ) => Promise<{
-    ok: false;
-    error: string;
+  pauseOperationForUser: (input: {
+    reason: PauseReason;
+    message: string;
     steps: number;
-    resumable: true;
-    buildFix?: boolean;
-    toolsUsed: string[];
-  }>;
+    toolsUsed: Set<string>;
+  }) => Promise<OperationPauseResult>;
   onActivity: () => void;
 };
 
@@ -56,10 +50,12 @@ async function returnRecoverableChatChunk(
   error?: string,
 ): Promise<PlanTurnRunResult> {
   const message = summary.trim() || "Erro no modo Chat.";
-  const err = (error ?? message).trim() || message;
-  // Use wrapper (or fallback) to centralize prose+persistFinal for AC1.
-  const chunk = await deps.returnResumableWithUserMessage(0, new Set<string>(), { errorMessage: err }, message);
-  return { ...chunk, summary: message, error: err };
+  return deps.pauseOperationForUser({
+    reason: "llm_error",
+    message,
+    steps: 0,
+    toolsUsed: new Set<string>(),
+  });
 }
 
 function createSilentChatProgressHandler(

@@ -36,6 +36,7 @@ import type {
 } from "../../types.ts";
 import { LoopPhase } from "../../types.ts";
 import { enrichProposedPlanDesign } from "../../plan-design-enrich.ts";
+import type { OperationPauseResult, PauseReason } from "../infra.ts";
 
 export const MAX_PLAN_EXPLORE = 10;
 
@@ -225,17 +226,12 @@ async function returnRecoverablePlanChunk(input: {
     role: "user",
     content: input.prompt ?? text,
   });
-  // Use wrapper: it emits the prose + persistFinal (central AC1), then returns chunk.
-  const chunk = await input.deps.returnResumableWithUserMessage(input.step, input.toolsUsed, undefined, text);
-  return {
-    ok: false,
-    summary: text,
-    steps: chunk.steps,
-    resumable: true,
-    toolsUsed: chunk.toolsUsed,
-    error: chunk.error,
-    buildFix: chunk.buildFix,
-  };
+  return input.deps.pauseOperationForUser({
+    reason: "llm_error",
+    message: text,
+    steps: input.step,
+    toolsUsed: input.toolsUsed,
+  });
 }
 
 export type PlanModeStreamState = {
@@ -394,20 +390,13 @@ export type PlanTurnDeps = PlanTurnFinishDeps & {
   toolDefinitions: ToolDefinition[];
   streamState: PlanModeStreamState;
   compressMessages: (messages: ChatMessage[]) => Promise<ChatMessage[]>;
-  loopBudgetExceeded: () => boolean;
-  returnResumableWithUserMessage: (
-    steps: number,
-    toolsUsed: Set<string>,
-    options?: { buildFix?: boolean; errorMessage?: string },
-    prose?: string,
-  ) => Promise<{
-    ok: false;
-    error: string;
+  platformLimitExceeded: () => boolean;
+  pauseOperationForUser: (input: {
+    reason: PauseReason;
+    message: string;
     steps: number;
-    resumable: true;
-    buildFix?: boolean;
-    toolsUsed: string[];
-  }>;
+    toolsUsed: Set<string>;
+  }) => Promise<OperationPauseResult>;
   saveCheckpoint: (phase: LoopPhase) => Promise<void>;
   attemptGracefulClosing: (reason: "plan_stuck") => Promise<string | null>;
   executeTool: (call: ToolCall) => Promise<ToolResult>;
@@ -453,8 +442,13 @@ export async function runPlanModeAgentTurn(
   const mustUseCreatePlan = isExplicitPlanProposalRequest(deps.originalUserRequest ?? "");
 
   for (let step = 0; step < MAX_PLAN_EXPLORE; step++) {
-    if (deps.loopBudgetExceeded()) {
-      return deps.returnResumableWithUserMessage(step, toolsUsed);
+    if (deps.platformLimitExceeded()) {
+      return deps.pauseOperationForUser({
+        reason: "platform_limit",
+        message: "Limite de tempo da plataforma — continue o plano quando estiver pronto.",
+        steps: step,
+        toolsUsed,
+      });
     }
 
     const compressed = await deps.compressMessages(deps.state.messages);

@@ -28,7 +28,6 @@ import { loadCheckpoint } from "./checkpoint.ts";
 import { appendStreamEvent } from "../_shared/agent-stream.ts";
 import { isServiceRoleRequest } from "../_shared/service-auth.ts";
 import { extractOriginalUserRequest, resolveAllocateSandbox } from "./run-context.ts";
-import { enqueueAgentJobOnDispatch } from "../_shared/agent-jobs.ts";
 import { resolveInngestEventKey, resolveInngestEventUrl } from "../_shared/inngest-event-url.ts";
 import { transitionRun } from "../_shared/run-lifecycle.ts";
 import type { AgentRunStatus } from "../_shared/agent-contract-events.ts";
@@ -267,12 +266,6 @@ Deno.serve(async (req) => {
             500,
           );
         }
-
-        await enqueueAgentJobOnDispatch(supabase, runId, {
-          planMode: false,
-          planSourceRunId: planSourceRunId ?? null,
-          eventName: "agent/build.requested",
-        });
 
         await appendStreamEvent(supabase, runId, "start", {
           type: "start",
@@ -996,18 +989,6 @@ Deno.serve(async (req) => {
         });
         return json({ error: "Falha ao iniciar agente (Inngest)" }, 500);
       }
-
-      await enqueueAgentJobOnDispatch(
-        supabase,
-        agentRunId!,
-        {
-          planMode,
-          chatMode,
-          resume: resumeRun,
-          eventName,
-        },
-        { skipIfQueued: resumeRun },
-      );
 
       // Emit initial stream event so any reconnecting client sees the start.
       await appendStreamEvent(supabase, agentRunId!, "start", {

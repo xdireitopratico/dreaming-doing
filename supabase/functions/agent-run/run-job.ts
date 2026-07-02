@@ -30,7 +30,7 @@ import { registerSkillsTools } from "./tools/skills.ts";
 import { restoreExecutionLogFromRows } from "./executionLogMeta.ts";
 import { loadCheckpoint } from "./checkpoint.ts";
 import { buildSandboxEnv } from "./sandbox-env.ts";
-import { readLoopBudgetMsFromRuntime } from "./runtime/loop-config.ts";
+import { remainingPlatformMs } from "./runtime/platform-deadline.ts";
 import { buildDesignDirectiveBlock } from "./design-directive.ts";
 import {
   autoResolveDesignField,
@@ -211,7 +211,6 @@ export async function executeAgentJob(
   costUsd?: number;
 }> {
   const runStartTime = Date.now();
-  const loopBudgetMs = readLoopBudgetMsFromRuntime();
   const {
     projectId,
     conversationId,
@@ -437,7 +436,7 @@ export async function executeAgentJob(
     sandboxToken: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? undefined,
     connectorKeys,
     emit: (type, data) => onEvent(type, data as Record<string, unknown>),
-    getRemainingBudgetMs: () => loopBudgetMs - (Date.now() - runStartTime),
+    getRemainingBudgetMs: () => remainingPlatformMs(runStartTime),
   });
 
   const buildState = (): AgentState => {
@@ -566,6 +565,7 @@ export async function executeAgentJob(
           buildFixResume: preMeta.buildFix === true,
           smokeRun: isSmokeRun,
           compactRequested,
+          operationSnapshot: loadedCheckpoint?.operation,
         },
   });
 
@@ -594,21 +594,10 @@ export async function executeAgentJob(
     });
     throw e;
   }
-  // C2 fix: NÃO mata sandbox se a run é resumable. Antes, o caminho
-  // resumable (loop budget estourou) matava o sandbox, e o próximo
-  // chunk tinha que recriar do zero (perdendo node_modules, npm install
-  // de novo = 60-120s).
-  // Agora: só mata se a run terminou definitivamente (ok ou fail/canceled).
   const hasOutput = (result.toolsUsed ?? []).some((t) =>
     ["fs_write", "fs_edit", "shell_exec"].includes(t),
   );
-  const isResumable = !!result.resumable;
-  if (isResumable) {
-    // Preserva sandbox para o próximo chunk.
-    await sandbox.destroy().catch((err) => {
-      console.warn("[run-job] sandbox destroy failed:", (err as Error).message);
-    }); // libera in-memory ref mas mantém o sandbox E2B
-  } else if (!result.ok || !hasOutput) {
+  if (!result.ok || !hasOutput) {
     await sandbox.kill().catch((err) => {
       console.warn("[run-job] sandbox kill failed:", (err as Error).message);
     });

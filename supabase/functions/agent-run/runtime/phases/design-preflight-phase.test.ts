@@ -72,7 +72,7 @@ Deno.test("runDesignPreflightIfNeeded — falha terminal não injeta pseudo-turn
         return { ok: true, output: { stdout: "", stderr: "" } };
       },
     } as unknown as ToolRegistry,
-    loopBudgetExceeded: () => false,
+    platformLimitExceeded: () => false,
     gatherContext: async () => {},
     touchHeartbeat: async () => {},
     emit: (type, data) => events.push({ type, data }),

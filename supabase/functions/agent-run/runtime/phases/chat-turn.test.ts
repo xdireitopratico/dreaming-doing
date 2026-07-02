@@ -3,6 +3,7 @@ import { DIRECT_CHAT_SYSTEM } from "../../conversational.ts";
 import { createChatModeTokenHandler } from "./plan-turn.ts";
 import { runChatModeAgentTurn } from "./chat-turn.ts";
 import type { ChatTurnDeps } from "./chat-turn.ts";
+import type { PauseReason } from "../infra.ts";
 import type { LLMProvider } from "../../types.ts";
 
 Deno.test("DIRECT_CHAT_SYSTEM exportado para chat-turn", () => {
@@ -29,7 +30,7 @@ Deno.test("createChatModeTokenHandler emite assistant_text visível (sem thinkin
   assertEquals(streamState.llmResponseWasStreamed, true);
 });
 
-Deno.test("runChatModeAgentTurn — resposta vazia retorna chunk resumível", async () => {
+Deno.test("runChatModeAgentTurn — resposta vazia pausa aguardando usuário", async () => {
   const deps = mockChatTurnDeps();
   const model = {
     chat: async () => ({ content: "" }),
@@ -38,15 +39,16 @@ Deno.test("runChatModeAgentTurn — resposta vazia retorna chunk resumível", as
   const result = await runChatModeAgentTurn(deps, model);
 
   assertEquals(result.ok, false);
-  assertEquals(result.resumable, true);
-  assertEquals(result.summary, "Resposta vazia do modelo.");
-  assertEquals(deps.returnResumableCalls, 1);
+  assertEquals(result.awaiting, true);
+  assertEquals(result.resumable, false);
+  assertEquals(result.error, "Resposta vazia do modelo.");
+  assertEquals(deps.pauseOperationCalls, 1);
 });
 
 function mockChatTurnDeps(): ChatTurnDeps & {
-  returnResumableCalls: number;
+  pauseOperationCalls: number;
 } {
-  let returnResumableCalls = 0;
+  let pauseOperationCalls = 0;
   return {
     runId: "run-1",
     projectId: "proj-1",
@@ -63,20 +65,26 @@ function mockChatTurnDeps(): ChatTurnDeps & {
     originalUserRequest: "oi",
     messages: [{ role: "user", content: "oi" }],
     streamState: { llmResponseWasStreamed: false, thinkingStreamStartedAt: null },
-    get returnResumableCalls() {
-      return returnResumableCalls;
+    get pauseOperationCalls() {
+      return pauseOperationCalls;
     },
-    returnResumableWithUserMessage: async (_steps: number, _toolsUsed: Set<string>, _opt?: unknown, prose?: string) => {
-      returnResumableCalls += 1;
+    pauseOperationForUser: async (input: {
+      reason: PauseReason;
+      message: string;
+      steps: number;
+      toolsUsed: Set<string>;
+    }) => {
+      pauseOperationCalls += 1;
       return {
         ok: false,
-        error: "Retomando automaticamente em novo chunk…",
-        steps: 0,
-        resumable: true,
-        toolsUsed: [],
-        summary: prose,
+        error: input.message,
+        steps: input.steps,
+        resumable: false,
+        awaiting: true,
+        awaitingUser: { type: input.reason, message: input.message },
+        toolsUsed: [...input.toolsUsed],
       };
     },
     onActivity: () => {},
-  } as unknown as ChatTurnDeps & { returnResumableCalls: number };
+  } as unknown as ChatTurnDeps & { pauseOperationCalls: number };
 }

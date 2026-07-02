@@ -1,34 +1,28 @@
-// runtime/infra.ts — Heartbeat, budget e resumable chunks (Fase 2.2)
+// runtime/infra.ts — Heartbeat, platform deadline e pausa honesta (execution sanity)
 import type { ChatMessage, LoopPhase } from "../types.ts";
 import type { CanonicalBuildSession } from "./build-session.ts";
-import { ensureUserMessage } from "./terminal-user-message.ts";
+import { transitionRun } from "../../_shared/run-lifecycle.ts";
+import { platformDeadlineExceeded } from "./platform-deadline.ts";
 
 export const MAX_LLM_RETRIES = 3;
 export const SILENCE_HEARTBEAT_MS = 90_000;
 
-export type ResumableChunkResult = {
+export type PauseReason = "llm_exhausted" | "platform_limit" | "step_limit" | "llm_error";
+
+export type OperationPauseResult = {
   ok: false;
   error: string;
   steps: number;
-  resumable: boolean;
-  awaiting?: boolean;
-  awaitingUser?: Record<string, unknown>;
-  buildFix?: boolean;
+  resumable: false;
+  awaiting: true;
+  awaitingUser: { type: PauseReason; message: string };
   toolsUsed: string[];
-};
-
-export type ResumableExitOptions = {
-  buildFix?: boolean;
-  errorMessage?: string;
-  /** Pausa para o usuário clicar Continuar — não auto-enfileira próximo chunk. */
-  pauseForUser?: boolean;
 };
 
 export type RunInfraDeps = {
   sb: any;
   runId: string | null;
-  runStartTime: number;
-  loopBudgetMs: number;
+  invocationStartedAt: number;
   getLastActivityAt: () => number;
   setLastActivityAt: (ms: number) => void;
   getMaxStepsLimit: () => number;
@@ -40,14 +34,14 @@ export type RunInfraDeps = {
   emit: (type: string, data: unknown) => void;
   getPhase: () => LoopPhase;
   saveCheckpoint: (phase: LoopPhase, force?: boolean) => Promise<void>;
-  persistCheckpointChat: (steps: number, buildFix?: boolean) => Promise<void>;
   getBuildSession: () => CanonicalBuildSession | null;
+  persistFinal?: (summary: string, opts?: { lastFinishOk?: boolean; finished?: boolean }) => Promise<void>;
 };
 
-export function loopBudgetExceeded(
-  deps: Pick<RunInfraDeps, "runStartTime" | "loopBudgetMs">,
+export function platformLimitExceeded(
+  deps: Pick<RunInfraDeps, "invocationStartedAt">,
 ): boolean {
-  return Date.now() - deps.runStartTime > deps.loopBudgetMs;
+  return platformDeadlineExceeded(deps.invocationStartedAt);
 }
 
 export async function touchHeartbeat(deps: RunInfraDeps): Promise<void> {
@@ -115,23 +109,6 @@ export function maybeEmitSilenceHeartbeat(deps: RunInfraDeps): void {
   });
 }
 
-export function emitDeliveryCheckpoint(deps: RunInfraDeps, step: number): void {
-  const deliveryFiles = [...deps.touchedPaths];
-  const narration = deps.narrationTrim();
-  deps.emit("delivery_checkpoint", {
-    step,
-    totalSteps: deps.getMaxStepsLimit(),
-    deliveryFiles,
-    narration: narration.slice(0, 4000),
-    resumable: true,
-    silent: true,
-    message:
-      deliveryFiles.length > 0
-        ? `${deliveryFiles.length} arquivo(s) prontos — continuo em seguida`
-        : "Continuo em seguida",
-  });
-}
-
 export async function isRunCanceled(sb: any, runId: string | null): Promise<boolean> {
   if (!runId) return false;
   const { data } = await sb
@@ -142,72 +119,45 @@ export async function isRunCanceled(sb: any, runId: string | null): Promise<bool
   return !!data?.canceled_at;
 }
 
-export async function returnResumableChunk(
+/** Pausa honesta: awaiting_user + checkpoint — sem auto-enfileirar Inngest. */
+export async function pauseOperationForUser(
   deps: RunInfraDeps,
-  steps: number,
-  toolsUsed: Set<string>,
-  options?: ResumableExitOptions,
-): Promise<ResumableChunkResult> {
+  input: {
+    reason: PauseReason;
+    message: string;
+    steps: number;
+    toolsUsed: Set<string>;
+  },
+): Promise<OperationPauseResult> {
   await deps.saveCheckpoint(deps.getPhase(), true);
-  emitDeliveryCheckpoint(deps, steps);
   await touchHeartbeat(deps);
-  deps.emit("explore", {
-    message: deps.narrationBuffer || "",
+
+  if (deps.runId) {
+    await transitionRun(deps.sb, deps.runId, "awaiting_user", {
+      meta: { awaitingUser: { type: input.reason, message: input.message } },
+      heartbeat_at: new Date().toISOString(),
+    });
+  }
+
+  deps.emit("run_paused", {
+    reason: input.reason,
+    message: input.message,
   });
-  await deps.persistCheckpointChat(steps, options?.buildFix);
+  deps.emit("assistant_text", { text: input.message, final: true, append: false });
+
+  if (deps.persistFinal) {
+    await deps.persistFinal(input.message, { lastFinishOk: false, finished: false });
+  }
+
+  deps.emit("finish", { ok: false, awaiting: true, resumable: false });
+
   return {
     ok: false,
-    error: "Retomando automaticamente em novo chunk…",
-    steps,
-    resumable: true,
-    buildFix: options?.buildFix === true,
-    toolsUsed: [...toolsUsed],
+    error: input.message,
+    steps: input.steps,
+    resumable: false,
+    awaiting: true,
+    awaitingUser: { type: input.reason, message: input.message },
+    toolsUsed: [...input.toolsUsed],
   };
-}
-
-/**
- * Wrapper (choke point): always emit user prose + persistFinal (with finished:false for resumable semantics),
- * then delegate to returnResumableChunk. Callers in phases MUST use this instead of bare returnResumableChunk.
- */
-export async function returnResumableWithUserMessage(
-  infraDeps: RunInfraDeps,
-  persistFinalFn: ((summary: string, opts?: any) => Promise<void>) | undefined,
-  steps: number,
-  toolsUsed: Set<string>,
-  options?: ResumableExitOptions,
-  explicitProse?: string,
-): Promise<ResumableChunkResult> {
-  const prose = (explicitProse && explicitProse.trim()) || ensureUserMessage(
-    infraDeps.getMessages(),
-    [...infraDeps.touchedPaths],
-    infraDeps.originalUserRequest,
-    options?.errorMessage,
-  );
-  infraDeps.emit("assistant_text", { text: prose, final: true, append: false });
-  if (persistFinalFn) {
-    await persistFinalFn(prose, { lastFinishOk: false, finished: false });
-  }
-
-  if (options?.pauseForUser) {
-    const errMsg = options.errorMessage ?? prose;
-    await infraDeps.saveCheckpoint(infraDeps.getPhase(), true);
-    await touchHeartbeat(infraDeps);
-    infraDeps.emit("run_paused", {
-      type: "run_paused",
-      reason: "llm_error",
-      message: errMsg,
-      resumable: true,
-    });
-    return {
-      ok: false,
-      error: errMsg,
-      steps,
-      resumable: false,
-      awaiting: true,
-      awaitingUser: { type: "llm_resume", message: errMsg },
-      toolsUsed: [...toolsUsed],
-    };
-  }
-
-  return returnResumableChunk(infraDeps, steps, toolsUsed, options);
 }

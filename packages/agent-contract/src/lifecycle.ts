@@ -56,45 +56,4 @@ export function partitionRunExtras(extras: Record<string, unknown>): {
   return { columns, metaDelta };
 }
 
-export type AgentJobStatus = "queued" | "leased" | "completed" | "failed" | "canceled";
 
-const JOB_ALLOWED: Record<AgentJobStatus, readonly AgentJobStatus[]> = {
-  queued: ["leased", "canceled"],
-  leased: ["completed", "failed", "queued", "canceled"],
-  completed: [],
-  failed: [],
-  canceled: [],
-};
-
-export function canTransitionJobStatus(from: AgentJobStatus, to: AgentJobStatus): boolean {
-  if (from === to) return true;
-  if (from === "completed" || from === "failed" || from === "canceled") return false;
-  return (JOB_ALLOWED[from] ?? []).includes(to);
-}
-
-export const AGENT_RUNTIME_V2_SHADOW_ENV = "AGENT_RUNTIME_V2";
-
-export type AgentRuntimeV2Mode = "off" | "shadow" | "worker";
-
-/** off | shadow (observability + fallback) | worker (1 job/chunk, sem fallback). */
-export function parseAgentRuntimeV2Mode(envValue?: string | null): AgentRuntimeV2Mode {
-  const v = (envValue ?? "").trim().toLowerCase();
-  if (v === "worker") return "worker";
-  if (v === "1" || v === "true" || v === "shadow") return "shadow";
-  return "off";
-}
-
-/** Fila agent_jobs ativa (shadow ou worker). */
-export function isAgentJobsEnabled(envValue?: string | null): boolean {
-  return parseAgentRuntimeV2Mode(envValue) !== "off";
-}
-
-/** Shadow/worker legacy alias — grava agent_jobs. */
-export function isAgentRuntimeV2ShadowEnabled(envValue?: string | null): boolean {
-  return isAgentJobsEnabled(envValue);
-}
-
-/** Worker real: executor exige lease; sem upsert fallback. */
-export function isAgentRuntimeV2WorkerEnabled(envValue?: string | null): boolean {
-  return parseAgentRuntimeV2Mode(envValue) === "worker";
-}

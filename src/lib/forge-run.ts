@@ -9,6 +9,7 @@ import {
   type ForgeTimelineItem,
   type TimelineItemType,
 } from "@/lib/timeline-builder";
+import { projectActionLedgerLine } from "@/lib/chat/action-ledger";
 
 
 export type MiniCardStatus = "thinking" | "working" | "done" | "failed";
@@ -535,16 +536,25 @@ export function buildMiniCardHeader(
     liveBriefings: string[];
     sessionTitle: string;
     planDriven?: boolean;
+    forgeTimeline?: ForgeTimelineItem[];
   },
 ): { header: string; subtitle: string } {
   const edited = opts.editedFile?.trim();
   const subtitle = opts.liveBriefings[0] ?? opts.sessionTitle;
+  const liveAction = projectActionLedgerLine({
+    progress,
+    forgeTimeline: opts.forgeTimeline,
+    jobActive: running,
+  });
 
   if (edited && (running || !progress.finished)) {
     return { header: `Edited ${edited}`, subtitle };
   }
-  if (hasActiveShellTool(progress) && running) {
+  if (hasActiveShellTool(progress) && running && !liveAction) {
     return { header: "Running command", subtitle };
+  }
+  if (hasActiveShellTool(progress) && running && liveAction) {
+    return { header: liveAction, subtitle };
   }
   const lifecycle = resolveAgentLifecycle({
     progress,
@@ -563,7 +573,11 @@ export function buildMiniCardHeader(
   if (progress.finished && edited) {
     return { header: `Edited ${edited}`, subtitle: opts.sessionTitle };
   }
+  if (progress.finished && liveAction) {
+    return { header: liveAction, subtitle: opts.sessionTitle };
+  }
   if (running) {
+    if (liveAction) return { header: liveAction, subtitle };
     // Estado «Pensando…» fica na linha do chat — card só com conteúdo factual.
     return { header: "", subtitle };
   }
@@ -631,37 +645,13 @@ export function collectMiniCardLiveLine(
   timeline: ForgeTimelineItem[],
   jobActive: boolean,
 ): string {
-  // Job finalizado — snapshot terminal honesto.
-  if (!jobActive) {
-    if (progress.lastFinishOk === false) return "Finalizado com falha";
-    if (progress.diffs.length > 0) return `${progress.diffs.length} arquivo(s) alterado(s)`;
-    if (progress.deliveryFiles?.length) return `${progress.deliveryFiles.length} arquivo(s) entregue(s)`;
-    return "Concluído";
-  }
-
-  // 1) Tool pendente (em execução) — prioridade máxima.
-  const pendingTool = [...progress.tools].reverse().find((t) => t.ok === undefined);
-  if (pendingTool) {
-    const path = pathFromArgs(pendingTool.args);
-    const line = normalizeMiniCardBriefing(
-      toolBriefing(pendingTool.name, path),
-    );
-    if (line) return line;
-  }
-
-  // 2) Tarefa atômica ativa declarada pelo LLM.
-  const activeTask = (progress.tasks ?? []).find((t) => t.status === "active");
-  if (activeTask) return activeTask.label;
-
-  // 3) Último item factual da timeline.
-  for (const item of [...timeline].reverse()) {
-    const brief = timelineItemBriefing(item);
-    if (brief) {
-      const normalized = normalizeMiniCardBriefing(brief);
-      if (normalized) return normalized;
-    }
-  }
-
+  const projected = projectActionLedgerLine({
+    progress,
+    forgeTimeline: timeline,
+    jobActive,
+  });
+  if (projected) return projected;
+  if (!jobActive) return "Concluído";
   return "Trabalhando…";
 }
 
@@ -744,6 +734,7 @@ export function buildAgentRunView(
     liveBriefings: normalizedBriefings,
     sessionTitle,
     planDriven: !!jobPlan?.steps?.length,
+    forgeTimeline,
   });
 
   // Fase 2.2 — extrai o último tool executado (reverso do forgeTimeline) para

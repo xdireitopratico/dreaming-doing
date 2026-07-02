@@ -2,8 +2,6 @@
 
 import type { CanonicalBuildSession } from "./build-session.ts";
 
-export type BuildToolPhase = "discovery" | "write";
-
 export type AgentLoopMutableState = {
   lastCheckpointStep: number;
   approvedPlanStepIndex: number;
@@ -11,14 +9,15 @@ export type AgentLoopMutableState = {
   forceToolsNext: boolean;
   toolsInvoked: boolean;
   consecutiveNoContentReadSteps: number;
-  buildToolPhase: BuildToolPhase;
   readGateBlockCount: number;
-  forceWriteAttempted: boolean;
   llmResponseWasStreamed: boolean;
   lastExecutePhaseMessage: string | null;
   lastRunMessageId: string | null;
   lastActivityAt: number;
   buildSession: CanonicalBuildSession | null;
+  directiveEmitted: boolean;
+  validationGeneration: number;
+  operationStartedAt: string;
 };
 
 export function createAgentLoopMutableState(
@@ -31,13 +30,14 @@ export function createAgentLoopMutableState(
     forceToolsNext: init?.forceToolsNext ?? false,
     toolsInvoked: init?.toolsInvoked ?? false,
     consecutiveNoContentReadSteps: init?.consecutiveNoContentReadSteps ?? 0,
-    buildToolPhase: init?.buildToolPhase ?? "discovery",
     readGateBlockCount: init?.readGateBlockCount ?? 0,
-    forceWriteAttempted: init?.forceWriteAttempted ?? false,
     llmResponseWasStreamed: init?.llmResponseWasStreamed ?? false,
     lastExecutePhaseMessage: init?.lastExecutePhaseMessage ?? null,
     lastRunMessageId: init?.lastRunMessageId ?? null,
     lastActivityAt: init?.lastActivityAt ?? Date.now(),
     buildSession: init?.buildSession ?? null,
+    directiveEmitted: init?.directiveEmitted ?? false,
+    validationGeneration: init?.validationGeneration ?? 0,
+    operationStartedAt: init?.operationStartedAt ?? new Date().toISOString(),
   };
 }

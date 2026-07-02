@@ -34,6 +34,7 @@ export type ExecuteResponse = {
   mode: "plan" | "build" | "chat";
   resumable: boolean;
   canceled: boolean;
+  awaiting?: boolean;
   error?: string;
   plan?: string;
   stepsCompleted: number;
@@ -67,104 +68,22 @@ export function getSupabaseAdmin(): SupabaseClient {
   return adminClient;
 }
 
-/** Chunks Inngest por invocação — cada um com budget ~270s; alinhado a resumeAttempts: 3. */
+/** @deprecated Design DNA still uses multi-chunk resume; agent handlers use a single execute per event. */
 export const MAX_LOOP_RESUME_STEPS = 3;
-
-/** Alinhado com supabase/functions/_shared/agent-chunk-limits.ts */
-export const MAX_CHUNK_GENERATIONS = 12;
-export const MAX_RUN_WALL_MS = 45 * 60 * 1000;
-
-export type ChunkExhaustReason = "chunk_cap" | "wall_clock";
-
-export function chunkCapErrorMessage(reason?: ChunkExhaustReason): string {
-  if (reason === "wall_clock") {
-    return "Execução atingiu o tempo máximo (~45 min). Envie outra mensagem para continuar.";
-  }
-  return "Execução atingiu o limite de retomadas automáticas. Clique em Continuar ou envie nova mensagem.";
-}
-
-export function evaluateChunkResumptionExhausted(
-  meta: Record<string, unknown>,
-  startedAt: string | null | undefined,
-  nowMs = Date.now(),
-): { exhausted: boolean; reason?: ChunkExhaustReason; chunkGeneration: number } {
-  const chunkGeneration = typeof meta.chunkGeneration === "number" ? meta.chunkGeneration : 0;
-  if (chunkGeneration > MAX_CHUNK_GENERATIONS) {
-    return { exhausted: true, reason: "chunk_cap", chunkGeneration };
-  }
-  if (startedAt) {
-    const wallMs = nowMs - new Date(startedAt).getTime();
-    if (wallMs > MAX_RUN_WALL_MS) {
-      return { exhausted: true, reason: "wall_clock", chunkGeneration };
-    }
-  }
-  return { exhausted: false, chunkGeneration };
-}
-
-export async function getRunChunkContext(runId: string): Promise<{
-  meta: Record<string, unknown>;
-  startedAt: string | null;
-}> {
-  const { data } = await getSupabaseAdmin()
-    .from("agent_runs")
-    .select("meta, started_at")
-    .eq("id", runId)
-    .maybeSingle();
-  return {
-    meta: (data?.meta ?? {}) as Record<string, unknown>,
-    startedAt: (data?.started_at as string | null) ?? null,
-  };
-}
-
-export type ChunkResumeDecision =
-  | { action: "redispatch" }
-  | {
-      action: "exhausted";
-      error: string;
-      chunkGeneration: number;
-      reason?: ChunkExhaustReason;
-    };
-
-export async function resolveChunkResumeDecision(runId: string): Promise<ChunkResumeDecision> {
-  const { meta, startedAt } = await getRunChunkContext(runId);
-  const limits = evaluateChunkResumptionExhausted(meta, startedAt);
-  if (!limits.exhausted) {
-    return { action: "redispatch" };
-  }
-  return {
-    action: "exhausted",
-    error: chunkCapErrorMessage(limits.reason),
-    chunkGeneration: limits.chunkGeneration,
-    reason: limits.reason,
-  };
-}
 
 type InngestStep = {
   run: <T>(id: string, fn: () => Promise<T> | T) => Promise<T>;
 };
 
-/** Executa o loop no handler Inngest; retoma no máximo 3 vezes se o budget expirar (v1) ou 1× (v2 shadow). */
+/** Executa o loop uma vez por evento Inngest (sem auto-chunk redispatch). */
 export async function runAgentLoopWithResume(
   step: InngestStep,
   payload: AgentRunRequest,
 ): Promise<ExecuteResponse> {
-  const { maxLoopResumeStepsForRuntime } = await import("./agent-jobs.ts");
   const { runAgentLoop } = await import("../executor/run-agent-loop.ts");
-  const maxSteps = maxLoopResumeStepsForRuntime();
-  let lastResult: ExecuteResponse | null = null;
-
-  for (let i = 0; i < maxSteps; i++) {
-    const result = await step.run(`execute-loop-${i}`, async () => {
-      return await runAgentLoop({ ...payload, resume: i > 0 });
-    });
-    lastResult = result;
-    if (result.ok || result.canceled || !result.resumable) break;
-  }
-
-  if (!lastResult) {
-    throw new Error(`No result produced for run ${payload.runId}`);
-  }
-  return lastResult;
+  return await step.run("execute-loop-0", async () => {
+    return await runAgentLoop(payload);
+  });
 }
 
 export async function getRunStatus(runId: string): Promise<AgentRunStatus | null> {

@@ -54,19 +54,6 @@ export type GateReplyDeps = {
   originalUserRequest: string;
   planMode: boolean;
   emit: PlanTurnEmit;
-  returnResumableWithUserMessage: (
-    steps: number,
-    toolsUsed: Set<string>,
-    options?: { buildFix?: boolean; errorMessage?: string },
-    prose?: string,
-  ) => Promise<{
-    ok: false;
-    error: string;
-    steps: number;
-    resumable: true;
-    buildFix?: boolean;
-    toolsUsed: string[];
-  }>;
   configuredModel: () => LLMProvider;
   persistFinal: (
     summary: string,
@@ -113,10 +100,17 @@ export async function runInventoryGate(
   }
 
   if (!inv) {
-    const message = "Não foi possível resumir o estado do projeto. Retomando automaticamente.";
-    // Central wrapper ensures prose + persistFinal then resumable (AC1).
-    const chunk = await deps.returnResumableWithUserMessage(0, new Set<string>(), undefined, message);
-    return { ...chunk, summary: message, error: "Não foi possível resumir o estado do projeto." };
+    const message = "Não foi possível resumir o estado do projeto.";
+    deps.emit("assistant_text", { text: message, final: true });
+    await deps.persistFinal(message, { lastFinishOk: false });
+    await deps.clearCheckpoint();
+    deps.emit("finish", { ok: false });
+    return {
+      ok: false,
+      error: message,
+      steps: 0,
+      toolsUsed: [],
+    };
   }
   deps.emit("assistant_text", { text: inv, final: true });
   await deps.persistFinal(inv);

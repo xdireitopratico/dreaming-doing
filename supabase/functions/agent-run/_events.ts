@@ -137,7 +137,6 @@ export type AgentStreamEventData =
   | { type: "robin_wait"; message?: string }
   | { type: "connection_retry"; message?: string }
   | { type: "heartbeat"; message?: string; silentMs?: number }
-  | { type: "timeout_warning"; message?: string; silentMs?: number }
   | { type: "build_log"; command: string; lines?: string[]; output?: string; ok?: boolean }
   | {
       type: "stack_fork_suggested";
@@ -146,22 +145,12 @@ export type AgentStreamEventData =
       message: string;
     }
   | {
-      type: "delivery_checkpoint";
-      narration?: string;
-      deliveryFiles?: string[];
-      silent?: boolean;
-      step?: number;
-      totalSteps?: number;
-      resumable?: boolean;
-      message?: string;
+      type: "directive";
+      brief: string;
+      gesture: string;
+      techniques: string[];
     }
-  | {
-      type: "classify";
-      model?: string;
-      complexity?: string;
-      summary?: string;
-      restored?: boolean;
-    }
+  | { type: "run_paused"; reason: string; message: string }
   | {
       type: "skills";
       active?: string[];
@@ -194,18 +183,6 @@ export type AgentStreamEventData =
       after: string;
       op: "write" | "edit";
     }
-  | { type: "preview_sync" }
-  | { type: "validate_ok"; checks?: Array<{ name: string; ok: boolean }>; message?: string }
-  | {
-      type: "validate_fail";
-      checks?: Array<{ name: string; ok: boolean }>;
-      message?: string;
-      feedback?: string;
-      preflight?: boolean;
-      finalGate?: boolean;
-      errors?: unknown;
-    }
-  | { type: "gate_decision"; awaiting: boolean; phase?: string; reason?: string }
   | {
       type: "done";
       summary?: string;
@@ -246,9 +223,6 @@ export type AgentStreamEventData =
       qualified?: boolean;
       steps?: number;
       summary?: string | null;
-      chunkCap?: boolean;
-      resumableExhausted?: boolean;
-      resumeAttempts?: number;
       duplicate?: boolean;
       totalInputTokens?: number;
       totalOutputTokens?: number;
@@ -256,23 +230,13 @@ export type AgentStreamEventData =
       costUsd?: number;
     }
   | { type: "ui_action"; action: string; reason?: string; [k: string]: unknown }
-  | {
-      type: "fsm_transition";
-      stateName?: string;
-      event?: string;
-      ok?: boolean;
-      error?: string;
-      from?: string;
-      to?: string;
-    }
   | { type: "stuck"; message?: string; reason?: string }
   | {
       type: "typecheck_fail";
       errors?: unknown;
       files?: string[];
       message?: string;
-    }
-  | { type: "chunk_resume"; attempt: number; maxAttempts: number; reason?: string };
+    };
 
 // ─── Envelope do stream ────────────────────────────────────────────────────
 export interface AgentStreamEvent {
@@ -310,30 +274,41 @@ export const AGENT_STREAM_EVENT_TYPES: ReadonlyArray<AgentStreamEventType> = [
   "robin_wait",
   "connection_retry",
   "heartbeat",
-  "timeout_warning",
   "build_log",
   "stack_fork_suggested",
-  "delivery_checkpoint",
-  "classify",
+  "directive",
+  "run_paused",
   "skills",
   "tool_start",
   "tool_done",
   "file_diff",
-  "preview_sync",
-  "validate_ok",
-  "validate_fail",
-  "gate_decision",
   "done",
   "plan_proposed",
   "error",
   "finish",
   "ui_action",
-  "fsm_transition",
   "stuck",
   "typecheck_fail",
-  "chunk_resume",
 ];
+
+/** Tipos proibidos no stream público (execution sanity v2 §6.2) — não emitir nem reintroduzir. */
+export const FORBIDDEN_STREAM_EVENT_TYPES = [
+  "gate",
+  "preview_sync",
+  "validate_fail",
+  "validate_ok",
+  "timeout_warning",
+  "chunk_resume",
+  "delivery_checkpoint",
+  "delivery_checkpoint_silent",
+  "checkpoint_resume",
+  "fsm_transition",
+  "classify",
+  "gate_decision",
+] as const;
 
 // ─── Eventos removidos do contrato (deprecated) ────────────────────────────
 // `resume` — sem emissor no backend; handler removido do reducer em Session 2.0.
 // `memory` — sem emissor no backend; handler removido do reducer em Session 2.0.
+// §6.2 execution sanity: timeout_warning, delivery_checkpoint, classify, preview_sync,
+// validate_fail/ok, gate_decision, fsm_transition, chunk_resume — ver FORBIDDEN_STREAM_EVENT_TYPES.

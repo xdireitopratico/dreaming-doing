@@ -14,23 +14,19 @@ export function isRichProgress(types) {
       t.startsWith("tool_") ||
       t === "fsm_transition" ||
       t === "explore" ||
-      t === "chunk_resume",
+      t === "run_paused",
   );
 }
 
 /**
  * Terminal honesto:
- * - chunk_resume: handoff resumable (run pode seguir running)
+ * - run_paused + awaiting_user: pausa honesta (usuário Continuar)
  * - completed/awaiting_user: exige finish ou done + progresso rico
  * - failed: exige finish (erro explícito no poll loop cobre o resto)
  * - running/pending sozinhos: nunca passam
  */
 export function isTerminalHonest(types, status) {
   if (!Array.isArray(types) || types.length === 0) return false;
-
-  if (types.includes("chunk_resume")) {
-    return true;
-  }
 
   if (status === "running" || status === "pending") {
     return false;

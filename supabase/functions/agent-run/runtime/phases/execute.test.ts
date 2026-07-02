@@ -71,12 +71,8 @@ function buildStubbedExecuteDeps(overrides?: {
     setToolsInvoked: () => {},
     getConsecutiveNoContentReadSteps: () => 0,
     setConsecutiveNoContentReadSteps: () => {},
-    getBuildToolPhase: () => "discovery" as const,
-    setBuildToolPhase: () => {},
     getReadGateBlockCount: () => 0,
     setReadGateBlockCount: () => {},
-    getForceWriteAttempted: () => false,
-    setForceWriteAttempted: () => {},
     getLlmResponseWasStreamed: () => false,
     getLastExecutePhaseMessage: () => null,
     setLastExecutePhaseMessage: () => {},
@@ -84,6 +80,8 @@ function buildStubbedExecuteDeps(overrides?: {
     setBuildSession: (next) => {
       buildSession = next;
     },
+    getDirectiveEmitted: () => false,
+    setDirectiveEmitted: () => {},
     touchedPaths: new Set(),
     executionModel: model,
     reg: {
@@ -114,6 +112,7 @@ function buildStubbedExecuteDeps(overrides?: {
     observer: {
       quickTypeCheck: async () => ({ ok: true, errors: [] }),
       observe: async () => ({ passed: true, checks: [] }),
+      observeLight: async () => ({ passed: true, checks: [] }),
     } as unknown as BuildExecuteDeps["observer"],
     router: {
       mainCfg: { model: "mock" },
@@ -123,20 +122,21 @@ function buildStubbedExecuteDeps(overrides?: {
     narrationPhase: narration,
     narrationBuffer: "",
     emit: (type, data) => events.push({ type, data: data as Record<string, unknown> }),
-    loopBudgetExceeded: () => false,
-    returnResumableWithUserMessage: async (steps, _toolsUsed, options, prose) => {
-      const text = (prose && prose.trim()) || "Retomando automaticamente o trabalho anterior.";
+    platformLimitExceeded: () => false,
+    pauseOperationForUser: async (input) => {
+      const text = input.message.trim() || "Pausado — continue quando estiver pronto.";
       events.push({ type: "assistant_text", data: { text, final: true, append: false } as any });
       if (typeof (deps as any).persistFinal === "function") {
         await (deps as any).persistFinal(text, { lastFinishOk: false, finished: false });
       }
       return {
         ok: false,
-        error: "resumable",
-        steps,
-        resumable: true,
-        buildFix: options?.buildFix === true,
-        toolsUsed: [],
+        error: text,
+        steps: input.steps,
+        resumable: false,
+        awaiting: true,
+        awaitingUser: { type: input.reason, message: text },
+        toolsUsed: [...input.toolsUsed],
       };
     },
     runDesignPreflightIfNeeded: async () => null,
@@ -172,7 +172,7 @@ function buildStubbedExecuteDeps(overrides?: {
   return deps;
 }
 
-Deno.test("execute phase can start without mandatory opening assistant_text", async () => {
+Deno.test("execute phase — text-only completion não emite opening (só antes de tools)", async () => {
   const deps = buildStubbedExecuteDeps();
   const result = await runBuildExecutePhase(deps, 0);
   const events = (deps as unknown as { _events: () => { type: string; data: Record<string, unknown> }[] })._events();
@@ -181,7 +181,7 @@ Deno.test("execute phase can start without mandatory opening assistant_text", as
   assertEquals(firstOpening, -1);
 });
 
-Deno.test("execute phase segue sem exigir opening obrigatório", async () => {
+Deno.test("execute phase — stream vazio sem tools emite final sem opening espúrio", async () => {
   let calls = 0;
   const deps = buildStubbedExecuteDeps({
     llmChat: async () => {
@@ -198,12 +198,51 @@ Deno.test("execute phase segue sem exigir opening obrigatório", async () => {
   assertEquals(result.ok, true);
   assertEquals(result.resumable, undefined);
   assertEquals(result.buildFix, undefined);
-  // Closing no longer necessarily issues a second llmChat (uses resolve+history fallback for determinism);
-  // the guarantee is non-empty final prose + no hard error + no spurious opening.
   assert(calls >= 1, "at least one llm interaction");
   assertEquals(events.some((e) => e.type === "assistant_text" && e.data.opening === true), false);
   const finals = events.filter((e) => e.type === "assistant_text" && e.data.final === true);
   assert(finals.length > 0 && String((finals[0] as any).data?.text || "").length > 5);
+});
+
+Deno.test("execute phase — emite opening:true antes do primeiro batch de tools", async () => {
+  let llmCalls = 0;
+  const deps = buildStubbedExecuteDeps({
+    llmChat: async () => {
+      llmCalls += 1;
+      if (llmCalls === 1) {
+        return {
+          role: "assistant" as const,
+          content: "",
+          tool_calls: [{
+            id: "t1",
+            name: "fs_read",
+            arguments: { path: "src/App.tsx" },
+          }],
+        };
+      }
+      return { role: "assistant" as const, content: "Pronto.", tool_calls: [] };
+    },
+  });
+  deps.executionModel = {
+    chat: async () => ({
+      role: "assistant" as const,
+      content: "Vou ler o App.tsx primeiro.",
+      tool_calls: [],
+    }),
+  };
+  deps.requiresFinalBuildGate = () => false;
+  deps.maxStepsLimit = 2;
+
+  const result = await runBuildExecutePhase(deps, 0);
+  const events = (deps as unknown as { _events: () => { type: string; data: Record<string, unknown> }[] })._events();
+  const openingIdx = events.findIndex((e) => e.type === "assistant_text" && e.data.opening === true);
+  const toolStartIdx = events.findIndex((e) => e.type === "tool_start");
+
+  assertEquals(result.ok, true);
+  assert(openingIdx >= 0, "missing opening:true before tools");
+  if (toolStartIdx >= 0) {
+    assert(openingIdx < toolStartIdx, "opening must precede tool_start");
+  }
 });
 
 Deno.test("execute phase transforma preflight recuperavel em auto-repair sem terminal duplicado", async () => {
@@ -277,9 +316,10 @@ Deno.test("execute phase with ALL empty LLM responses (content:null, no tools) s
   assert(result.ok === true || result.resumable === true || result.error === undefined || !String(result.error || "").includes("não respondeu"));
 });
 
-Deno.test("approved build — escala read-only para write tools e materializa arquivo", async () => {
+Deno.test("approved build — mantém tools completas e materializa arquivo", async () => {
   let calls = 0;
   const toolSets: string[][] = [];
+  const fullToolNames = ["fs_edit", "fs_read", "fs_read_many", "fs_write", "shell_exec"];
   const deps = buildStubbedExecuteDeps({
     llmChat: async (_model, _instruction, _history, _forceTools, tools) => {
       calls += 1;
@@ -295,15 +335,18 @@ Deno.test("approved build — escala read-only para write tools e materializa ar
           }],
         };
       }
-      return {
-        role: "assistant" as const,
-        content: "",
-        tool_calls: [{
-          id: "w1",
-          name: "fs_write",
-          arguments: { path: "src/App.tsx", content: "export default function App() { return <div />; }" },
-        }],
-      };
+      if (calls === 3) {
+        return {
+          role: "assistant" as const,
+          content: "",
+          tool_calls: [{
+            id: "w1",
+            name: "fs_write",
+            arguments: { path: "src/App.tsx", content: "export default function App() { return <div />; }" },
+          }],
+        };
+      }
+      return { role: "assistant" as const, content: "Pronto.", tool_calls: [] };
     },
   });
   deps.approvedPlanBuild = true;
@@ -323,45 +366,35 @@ Deno.test("approved build — escala read-only para write tools e materializa ar
   } as unknown as BuildExecuteDeps["reg"];
 
   const result = await runBuildExecutePhase(deps, 0);
-  const writePhaseCall = toolSets.find((names) =>
-    names.length > 0 && names.every((n) => n === "fs_edit" || n === "fs_write" || n === "shell_exec")
+  assert(
+    toolSets.every((names) => names.join(",") === fullToolNames.join(",")),
+    `expected full tools every turn, got: ${JSON.stringify(toolSets)}`,
   );
-
-  assert(writePhaseCall, `expected write-only tools, got: ${JSON.stringify(toolSets)}`);
   assert(deps.touchedPaths.size > 0, "approved build must materialize at least one file");
-  assert(result.ok === true || result.resumable === true);
+  // Approved build enforces tool calls on text-only turns; may pause at step_limit instead of ok.
+  assert(result.ok === true || result.awaiting === true);
 });
 
-Deno.test("execute early budget/maxstep paths emit prose before resumable (real entry)", async () => {
+Deno.test("execute platform limit pausa aguardando usuário com persistFinal", async () => {
   let persistArgs: any[] = [];
   const deps = buildStubbedExecuteDeps({
     llmChat: async () => ({ role: "assistant" as const, content: "step", tool_calls: [] }),
   });
-  // Provide some history/touched so ensure gives substantive prose (per gap: strengthen beyond immediate budget with no work).
   (deps as any).state.messages = [{ role: "assistant", content: "Fiz uma edição inicial no header." }];
   (deps as any).touchedPaths = new Set(["src/Header.tsx"]);
   (deps as any).originalUserRequest = "adicionar header";
   deps.requiresFinalBuildGate = () => false;
   deps.persistFinal = async (summary: string, opts?: any) => { persistArgs.push({ summary, opts }); };
-  // Provide explicit withUser that calls the current (spied) persistFinal, to guarantee for this test.
-  (deps as any).returnResumableWithUserMessage = async (steps: number, _t: any, _o?: any, prose?: string) => {
-    const text = prose || "Retomando com trabalho inicial.";
-    await (deps as any).persistFinal(text, { lastFinishOk: false, finished: false });
-    return { ok: false, error: "resumable", steps, resumable: true, toolsUsed: [] };
-  };
-  // Force budget immediately after some work.
-  let budgetHits = 0;
-  deps.loopBudgetExceeded = () => { budgetHits++; return budgetHits > 0; };
+  let limitHits = 0;
+  deps.platformLimitExceeded = () => { limitHits++; return limitHits > 0; };
   const result = await runBuildExecutePhase(deps, 0);
-  // Force an explicit call to the withUser to guarantee spy for AC1 assert in this test harness.
-  await (deps as any).returnResumableWithUserMessage(0, new Set(), undefined, "Prose for persist verify");
   const events = (deps as unknown as { _events: () => { type: string; data: Record<string, unknown> }[] })._events();
-  const proseEmits = events.filter(e => e.type === "assistant_text" && typeof (e.data as any).text === "string");
-  const finalTrue = proseEmits.some(e => (e.data as any).final === true);
-  // Note: prose emit for immediate budget is exercised via withUser; main coverage in success/empty paths.
-  // assert(proseEmits.length > 0, "budget early return must have emitted prose");
-  assert(finalTrue || true, "early terminal prose should use final:true for UI");
-  assert(persistArgs.some(p => typeof p.summary === "string" && p.summary.trim().length > 5), "must call persistFinal for AC1");
-  assert(result.resumable === true, "must be resumable");
+  const proseEmits = events.filter((e) => e.type === "assistant_text" && typeof (e.data as any).text === "string");
+  const finalTrue = proseEmits.some((e) => (e.data as any).final === true);
+
+  assert(finalTrue, "platform limit pause must emit final assistant_text");
+  assert(persistArgs.some((p) => typeof p.summary === "string" && p.summary.trim().length > 0), "must call persistFinal");
+  assertEquals(result.awaiting, true);
+  assertEquals(result.resumable, false);
   assert(!String(result.error || "").includes("O modelo não respondeu"));
 });

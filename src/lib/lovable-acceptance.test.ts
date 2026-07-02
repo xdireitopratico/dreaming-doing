@@ -60,8 +60,29 @@ describe("Lovable acceptance — Chat (imgs 4/5/9/15)", () => {
         sessionTitle: "Lara cleanup",
       },
     );
-    expect(running.header).toBe("Running command");
+    expect(running.header).toBe("Executando deploy…");
 
+    const reading = buildMiniCardHeader(
+      {
+        ...initialAgentProgress,
+        finished: false,
+        tools: [{ name: "fs_read", args: { path: "src/routes/App.tsx" } }],
+      },
+      true,
+      { liveBriefings: ["Explorando rotas"], sessionTitle: "App routes" },
+    );
+    expect(reading.header).toBe("Lendo App.tsx…");
+
+    const editing = buildMiniCardHeader(
+      {
+        ...initialAgentProgress,
+        finished: false,
+        tools: [{ name: "fs_edit", args: { path: "src/components/Header.tsx" } }],
+      },
+      true,
+      { liveBriefings: ["Ajustando header"], sessionTitle: "Header" },
+    );
+    expect(editing.header).toBe("Editando Header.tsx…");
   });
 
   it("subtitle briefing separado do header (img 5)", () => {
@@ -341,15 +362,28 @@ describe("Inspector Plan — layout de leitura (preview)", () => {
 });
 
 describe("ChatPlanDock — create_plan scroll e largura (CSS)", () => {
-  it("shell ready: altura fixa no conteúdo, largura 100%, CTAs fora do scroll", async () => {
+  it("shell ready: scroll no conteúdo, largura 100%, CTAs fora do scroll", async () => {
     const { readFileSync } = await import("node:fs");
     const { resolve } = await import("node:path");
     const css = readFileSync(resolve(import.meta.dirname, "../styles/forge-chat.css"), "utf8");
+    const tsx = readFileSync(
+      resolve(import.meta.dirname, "../components/chat/ChatPlanDock.tsx"),
+      "utf8",
+    );
 
-    expect(css).toContain(".forge-plan-dock-shell--ready > .forge-plan-phases");
-    expect(css).toContain("max-height: clamp(160px, 32vh, 340px)");
-    expect(css).not.toMatch(/\.forge-plan-dock-shell\s*\{[^}]*max-width:\s*min\(100%,\s*520px\)/s);
+    expect(css).toContain(".forge-plan-dock-scroll");
+    expect(css).toMatch(/\.forge-plan-dock-scroll[\s\S]{0,300}overflow-y:\s*auto/);
     expect(css).toContain(".forge-plan-dock-shell--ready > .forge-composer-row");
+    expect(css).toMatch(
+      /\.forge-plan-dock-shell--ready\s*>\s*\.forge-composer-row[\s\S]{0,120}flex-shrink:\s*0/,
+    );
+    expect(css).not.toMatch(/\.forge-plan-dock-shell\s*\{[^}]*max-width:\s*min\(100%,\s*520px\)/s);
+    expect(tsx).toContain('className="forge-plan-dock-scroll"');
+    expect(tsx).toContain("<PlanPhaseList");
+    const scrollIdx = tsx.indexOf("forge-plan-dock-scroll");
+    const composerIdx = tsx.indexOf("forge-composer-row");
+    expect(scrollIdx).toBeGreaterThan(-1);
+    expect(composerIdx).toBeGreaterThan(scrollIdx);
   });
 });
 
